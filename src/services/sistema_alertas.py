@@ -811,6 +811,15 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             border-radius: 12px !important;
           }
 
+        
+          /* Global filter row: remove big container look */
+          .fu-bar { background: transparent !important; border: none !important; padding: 0 !important; }
+          .fu-sep { height: 1px; background: rgba(255,255,255,0.06); margin: 10px 0 8px 0; border-radius: 999px; }
+
+          /* Slider: less noisy numbers */
+          div[data-testid="stSlider"] { padding-top: 0px; }
+          div[data-testid="stSlider"] [data-baseweb="slider"] { padding-top: 0px; }
+
         </style>
         """,
         unsafe_allow_html=True,
@@ -847,7 +856,6 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         st.session_state["__reset_valor_range"] = False
         st.session_state["alertas_global_valor"] = (vmin, vmax)
 
-    st.markdown("<div class='fu-bar'>", unsafe_allow_html=True)
     colg1, colg2, colg3, colg4 = st.columns([4,4,3.5,1.5])
     with colg1:
         dept_global = st.multiselect(
@@ -856,6 +864,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             default=[],
             key="alertas_global_dept",
             label_visibility="collapsed",
+            placeholder="Todos",
         )
     with colg2:
         forn_global = st.multiselect(
@@ -874,6 +883,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 value=(float(vmin), float(vmax)),
                 step=max(1.0, float((vmax - vmin) / 100.0)) if vmax > vmin else 1.0,
                 key="alertas_global_valor",
+                format="R$ %.0f",
                 label_visibility="collapsed",
             )
             st.markdown(f"<div style='text-align:right;font-size:12px;opacity:.75;margin-top:4px;'>R$ {faixa_valor[0]:,.0f} — R$ {faixa_valor[1]:,.0f}</div>".replace(',', 'X').replace('.', ',').replace('X','.'), unsafe_allow_html=True)
@@ -886,8 +896,6 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:4px;text-align:right;'>Ações</div>", unsafe_allow_html=True)
             if st.button("🧹 Limpar", key="alertas_global_clear", use_container_width=True):
                 st.session_state["__clear_global_filters"] = True
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
     def _filtrar_pedidos(lista: list[dict]) -> list[dict]:
         if not lista:
