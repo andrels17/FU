@@ -629,37 +629,59 @@ def main():
 
     _industrial_sidebar_css()
 
-    # ===== Sidebar topo + menus (SEM botão sair/creditos aqui) =====
+    
+    # ===== Sidebar topo + menus =====
     with st.sidebar:
 
-        nome = st.session_state.usuario.get("nome", "Usuário")
-        perfil = str(st.session_state.usuario.get("perfil", "")).title() or "—"
+        usuario = st.session_state.usuario
+        nome = usuario.get("nome", "Usuário")
+        perfil = usuario.get("perfil", "user").lower()
+        avatar = usuario.get("avatar_url")
 
-        st.markdown(
-            textwrap.dedent(f"""<div class="fu-card">
-  <p class="fu-user-label">👷 Sistema de Follow-Up</p>
-  <div class="fu-bar"></div>
-  <p class="fu-user-name">{nome}</p>
-  <p class="fu-user-role">{perfil}</p>
+        from datetime import datetime
+        hora = datetime.now().hour
+        if hora < 12:
+            saudacao = "Bom dia"
+        elif hora < 18:
+            saudacao = "Boa tarde"
+        else:
+            saudacao = "Boa noite"
 
-  <div class="fu-kpi-row">
-    <div class="fu-kpi">
-      <p class="fu-kpi-title">⚠️ Atrasados</p>
-      <p class="fu-kpi-value">{atrasados}</p>
-    </div>
-    <div class="fu-kpi">
-      <p class="fu-kpi-title">🚨 Críticos</p>
-      <p class="fu-kpi-value">{criticos}</p>
-    </div>
-    <div class="fu-kpi">
-      <p class="fu-kpi-title">⏰ Vencendo</p>
-      <p class="fu-kpi-value">{vencendo}</p>
-    </div>
-  </div>
-</div>
-"""),
-            unsafe_allow_html=True,
-        )
+        if perfil == "admin":
+            badge_cor = "#ef4444"
+        elif perfil == "buyer":
+            badge_cor = "#3b82f6"
+        else:
+            badge_cor = "#10b981"
+
+        st.markdown("### 👤 Usuário")
+
+        if avatar:
+            st.image(avatar, width=80)
+        else:
+            st.markdown(f'''
+                <div style="
+                    width:80px;height:80px;
+                    border-radius:50%;
+                    background:linear-gradient(135deg,#f59e0b,#3b82f6);
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:32px;font-weight:bold;color:white;margin:0 auto;">
+                    {nome[0].upper()}
+                </div>
+            ''', unsafe_allow_html=True)
+
+        st.markdown(f"**{saudacao}, {nome}!**")
+        st.markdown(f'''
+            <span style="background:{badge_cor};padding:4px 10px;
+            border-radius:12px;font-size:12px;color:white;">
+            {perfil.upper()}</span>
+        ''', unsafe_allow_html=True)
+
+        with st.expander("⚙️ Conta"):
+            if st.button("👤 Meu Perfil", use_container_width=True):
+                st.session_state.current_page = "Meu Perfil"
+                st.rerun()
+
         # 🔎 Busca rápida (navegação)
         busca = st.text_input(
             "🔎 Busca rápida",
