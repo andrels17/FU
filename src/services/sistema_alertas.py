@@ -545,11 +545,9 @@ def _ir_para_ficha_material_do_alerta(pedido: dict) -> None:
         st.session_state["modo_ficha_material"] = True
 
         # Se seu app usa navegação por st.session_state.pagina, tentamos direcionar.
-        if "pagina" in st.session_state:
-            # Ajuste este rótulo se no seu app o nome for diferente.
-            st.session_state["pagina"] = "Ficha de Material"
+        st.session_state["pagina"] = "Ficha de Material"
 
-        st.rerun()
+        return
     except Exception as e:
         st.warning(f"⚠️ Não foi possível abrir a ficha do material: {e}")
 
@@ -950,8 +948,11 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
             st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos atrasados")
 
-            if pedidos_filtrados:
-                for i, pedido in enumerate(pedidos_filtrados):
+            pagina_itens, _total_itens, _total_paginas, _per_page = _paginate(pedidos_filtrados, "tab_atrasados", per_page_default=10)
+            st.caption(f"📄 Página {int(st.session_state.get('tab_atrasados_page', 1))}/{_total_paginas} — exibindo {len(pagina_itens)} de {len(pedidos_filtrados)}")
+
+            if pagina_itens:
+                for i, pedido in enumerate(pagina_itens):
                     criar_card_pedido(pedido, "atrasado", formatar_moeda_br, idx=i)
             else:
                 st.info("📭 Nenhum pedido atrasado corresponde aos filtros selecionados")
@@ -1007,8 +1008,11 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
             st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos vencendo")
 
-            if pedidos_filtrados:
-                for i, pedido in enumerate(pedidos_filtrados):
+            pagina_itens, _total_itens, _total_paginas, _per_page = _paginate(pedidos_filtrados, "tab_vencendo", per_page_default=10)
+            st.caption(f"📄 Página {int(st.session_state.get('tab_vencendo_page', 1))}/{_total_paginas} — exibindo {len(pagina_itens)} de {len(pedidos_filtrados)}")
+
+            if pagina_itens:
+                for i, pedido in enumerate(pagina_itens):
                     criar_card_pedido(pedido, "vencendo", formatar_moeda_br, idx=i)
             else:
                 st.info("📭 Nenhum pedido vencendo corresponde aos filtros selecionados")
@@ -1078,6 +1082,9 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             
             # Mostrar contador
             st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos críticos")
+
+            pagina_itens, _total_itens, _total_paginas, _per_page = _paginate(pedidos_filtrados, "tab_criticos", per_page_default=10)
+            st.caption(f"📄 Página {int(st.session_state.get('tab_criticos_page', 1))}/{_total_paginas} — exibindo {len(pagina_itens)} de {len(pedidos_filtrados)}")
             
             if pedidos_filtrados:
                 st.warning("⚠️ Pedidos de alto valor com previsão de entrega próxima")
