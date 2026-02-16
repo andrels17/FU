@@ -8,6 +8,33 @@ import math
 
 
 # ============================
+# Status de alerta (persistência em sessão)
+# ============================
+def _ensure_alert_status_store() -> None:
+    if "alert_status" not in st.session_state:
+        st.session_state["alert_status"] = {}  # {alert_id: status}
+
+def get_alert_status(alert_id: str) -> str:
+    _ensure_alert_status_store()
+    return str(st.session_state["alert_status"].get(str(alert_id), "Novo"))
+
+def set_alert_status(alert_id: str, status: str) -> None:
+    _ensure_alert_status_store()
+    st.session_state["alert_status"][str(alert_id)] = str(status)
+
+def badge_alert_status(status: str) -> str:
+    s = (status or "Novo").lower().strip()
+    if s.startswith("res"):
+        bg = "rgba(16,185,129,0.18)"; bd="rgba(16,185,129,0.35)"; fg="#10b981"; label = "Resolvido"
+    elif s.startswith("em"):
+        bg = "rgba(245,158,11,0.18)"; bd="rgba(245,158,11,0.35)"; fg="#f59e0b"; label = "Em andamento"
+    else:
+        bg = "rgba(147,197,253,0.18)"; bd="rgba(147,197,253,0.35)"; fg="#93c5fd"; label = "Novo"
+    return f"""<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:{bg};border:1px solid {bd};color:{fg};font-weight:800;font-size:12px;">{label}</span>"""
+
+
+
+# ============================
 # Configurações de Alertas
 # ============================
 ALERT_CONFIG = {
