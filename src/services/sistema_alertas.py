@@ -545,7 +545,13 @@ def _ir_para_ficha_material_do_alerta(pedido: dict) -> None:
         st.session_state["modo_ficha_material"] = True
 
         # Se seu app usa navegação por st.session_state.pagina, tentamos direcionar.
-        st.session_state["pagina"] = "Ficha de Material"
+
+        # Navegação no app (fonte de verdade): current_page
+        st.session_state["current_page"] = "Ficha de Material"
+        # Mantém o rádio sincronizado no próximo rerun
+        st.session_state["_force_menu_sync"] = True
+        # Se existir menu_gestao, ajuda a refletir seleção
+        st.session_state["menu_gestao"] = "Ficha de Material"
 
         return
     except Exception as e:
@@ -566,40 +572,74 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
 
     def _paginate(itens: list, key_prefix: str, per_page_default: int = 10):
-        """Paginação simples para listas."""
+        """Paginação compacta com navegação (prev/next) e indicador de página."""
         if not itens:
             return [], 0, 0, per_page_default
 
+        per_page_opts = [10, 20, 30, 50]
         per_page = st.selectbox(
             "Itens por página",
-            options=[10, 20, 30, 50],
-            index=[10, 20, 30, 50].index(per_page_default) if per_page_default in [10, 20, 30, 50] else 0,
+            options=per_page_opts,
+            index=per_page_opts.index(per_page_default) if per_page_default in per_page_opts else 0,
             key=f"{key_prefix}_per_page",
+            label_visibility="collapsed",
         )
+
         total = len(itens)
         total_pages = max(1, int(math.ceil(total / per_page)))
-        page = int(st.session_state.get(f"{key_prefix}_page", 1))
+
+        page_key = f"{key_prefix}_page"
+        page = int(st.session_state.get(page_key, 1))
         page = max(1, min(total_pages, page))
 
-        nav1, nav2, nav3 = st.columns([1, 2, 1])
-        with nav1:
-            if st.button("⬅️", key=f"{key_prefix}_prev", disabled=(page <= 1)):
-                page -= 1
-        with nav3:
-            if st.button("➡️", key=f"{key_prefix}_next", disabled=(page >= total_pages)):
-                page += 1
-        with nav2:
-            page = st.number_input(
-                "Página",
-                min_value=1,
-                max_value=total_pages,
-                value=page,
-                step=1,
-                key=f"{key_prefix}_page_input",
-                label_visibility="collapsed",
+        # Barra compacta
+        nav_l, nav_m, nav_r = st.columns([2, 6, 2])
+
+        with nav_l:
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if st.button("◀", key=f"{key_prefix}_prev", disabled=(page <= 1), use_container_width=True):
+                    page -= 1
+            with c2:
+                if st.button("▶", key=f"{key_prefix}_next", disabled=(page >= total_pages), use_container_width=True):
+                    page += 1
+
+        with nav_m:
+            st.markdown(
+                f"""
+                <div style="
+                    text-align:center;
+                    padding: 6px 10px;
+                    border-radius: 999px;
+                    background: rgba(255,255,255,0.05);
+                    border: 1px solid rgba(255,255,255,0.10);
+                    font-weight: 800;
+                    opacity: 0.92;
+                ">
+                    Página {page} de {total_pages}
+                    <span style="opacity:0.75; font-weight:700;"> • </span>
+                    <span style="opacity:0.78; font-weight:700;">{total} itens</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-        st.session_state[f"{key_prefix}_page"] = int(page)
+        with nav_r:
+            st.markdown(
+                f"""
+                <div style="
+                    text-align:right;
+                    padding-top: 2px;
+                    opacity: 0.82;
+                    font-size: 12px;
+                ">
+                    Exibindo {min(total, (page-1)*per_page+1)}–{min(total, page*per_page)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.session_state[page_key] = int(page)
 
         start = (page - 1) * per_page
         end = start + per_page
@@ -633,6 +673,11 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             font-size: 12px;
             opacity: 0.85;
             margin: 6px 0 0 0;
+          }
+
+          .fu-pagebar button {
+            border-radius: 12px !important;
+            font-weight: 900 !important;
           }
         </style>
         """,
