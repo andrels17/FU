@@ -6,14 +6,12 @@ import mimetypes
 import streamlit as st
 
 try:
-    # storage3 (supabase-py) exception class
     from storage3.utils import StorageException  # type: ignore
 except Exception:  # pragma: no cover
     StorageException = Exception  # type: ignore
 
 
 def _jwt_sub(token: str | None) -> str | None:
-    """Extrai o 'sub' do JWT (sem validar assinatura)."""
     if not token or token.count(".") < 2:
         return None
     try:
@@ -25,8 +23,40 @@ def _jwt_sub(token: str | None) -> str | None:
         return None
 
 
-def _upload_avatar(supabase, bucket: str, object_path: str, data: bytes, mime: str) -> None:
-    """Upload compatível com diferentes versões do supabase/storage."""
+def _get_storage_client():
+    """Cria um client do Supabase com a sessão do usuário aplicada.
+
+    Motivo: em alguns setups, o client usado para PostgREST está autenticado,
+    mas o módulo de Storage não herda o Authorization header corretamente.
+    Aqui garantimos que o Storage enxergue auth.uid() (JWT do usuário).
+    """
+    try:
+        from supabase import create_client  # type: ignore
+    except Exception as e:
+        raise RuntimeError(f"supabase-py não está disponível: {e}") from e
+
+    url = st.secrets.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_ANON_KEY")
+    if not url or not key:
+        raise RuntimeError("Faltam SUPABASE_URL / SUPABASE_ANON_KEY em st.secrets.")
+
+    sb = create_client(url, key)
+
+    access = st.session_state.get("auth_access_token")
+    refresh = st.session_state.get("auth_refresh_token")
+
+    # aplica sessão (quando disponível)
+    if access and refresh:
+        try:
+            sb.auth.set_session(access, refresh)
+        except Exception:
+            # fallback: algumas versões usam set_session(access_token=..., refresh_token=...)
+            sb.auth.set_session(access_token=access, refresh_token=refresh)  # type: ignore
+
+    return sb
+
+
+def _upload_avatar(storage_client, bucket: str, object_path: str, data: bytes, mime: str) -> None:
     candidates = [
         {"file_options": {"content-type": mime, "upsert": "true"}},
         {"file_options": {"contentType": mime, "upsert": "true"}},
@@ -38,9 +68,9 @@ def _upload_avatar(supabase, bucket: str, object_path: str, data: bytes, mime: s
     for opt in candidates:
         try:
             if "file_options" in opt:
-                supabase.storage.from_(bucket).upload(object_path, data, file_options=opt["file_options"])
+                storage_client.storage.from_(bucket).upload(object_path, data, file_options=opt["file_options"])
             else:
-                supabase.storage.from_(bucket).upload(object_path, data, opt["positional"])
+                storage_client.storage.from_(bucket).upload(object_path, data, opt["positional"])
             return
         except TypeError as e:
             last_err = e
@@ -51,17 +81,12 @@ def _upload_avatar(supabase, bucket: str, object_path: str, data: bytes, mime: s
     raise last_err  # type: ignore
 
 
-def _signed_url(supabase, bucket: str, object_path: str, expires_in: int = 3600) -> str | None:
-    """Gera URL assinada (bucket privado).
-
-    Importante: se o arquivo ainda não existir, a API pode lançar StorageException.
-    Nesse caso retornamos None para não quebrar a tela.
-    """
+def _signed_url(storage_client, bucket: str, object_path: str, expires_in: int = 3600) -> str | None:
     try:
         try:
-            res = supabase.storage.from_(bucket).create_signed_url(object_path, expires_in)
+            res = storage_client.storage.from_(bucket).create_signed_url(object_path, expires_in)
         except TypeError:
-            res = supabase.storage.from_(bucket).create_signed_url(object_path, expires_in=expires_in)
+            res = storage_client.storage.from_(bucket).create_signed_url(object_path, expires_in=expires_in)
 
         if isinstance(res, str):
             return res
@@ -74,8 +99,14 @@ def _signed_url(supabase, bucket: str, object_path: str, expires_in: int = 3600)
         return None
 
 
-def exibir_perfil(supabase):
-    """Meu Perfil (avatar em bucket PRIVADO com URL assinada)."""
+def exibir_perfil(supabase_db):
+    """Meu Perfil (avatar em bucket PRIVADO + URL assinada)."""
+    # client dedicado pro Storage, com sessão aplicada
+    try:
+        supabase = _get_storage_client()
+    except Exception as e:
+        st.error(f"Falha ao inicializar Storage autenticado: {e}")
+        return
 
     token = st.session_state.get("auth_access_token")
     uid = _jwt_sub(token)
@@ -90,9 +121,8 @@ def exibir_perfil(supabase):
         st.error("Não foi possível identificar o usuário logado.")
         return
 
-    # Mantém session_state alinhado com o uid do token (evita RLS falhar)
-    if isinstance(st.session_state.get("usuario"), dict):
-        st.session_state.usuario["id"] = user_id
+    # mantém session_state alinhado
+    st.session_state.usuario["id"] = user_id
 
     st.title("👤 Meu Perfil")
 
@@ -124,14 +154,10 @@ def exibir_perfil(supabase):
         st.markdown(f"**Perfil:** {perfil}")
         st.caption("🔒 Avatar em bucket privado (URL assinada).")
 
-
     st.divider()
     st.subheader("🖼 Atualizar avatar")
-    st.caption("Envie PNG/JPG. O arquivo será salvo em: avatars/<user_id>/avatar.ext (privado).")
-
 
     arquivo = st.file_uploader("Escolher imagem", type=["png", "jpg", "jpeg"])
-
     if arquivo is None:
         return
 
@@ -147,11 +173,12 @@ def exibir_perfil(supabase):
         _upload_avatar(supabase, "avatars", object_path, file_bytes, mime)
     except Exception as e:
         st.error(f"Erro ao enviar para o Storage: {e}")
+        st.caption("Se continuar dando RLS, confirme que as policies usam split_part(name,'/',1)=auth.uid()::text e que o upload usa token do usuário.")
         return
 
-    # Persiste o PATH no user_profiles
+    # Persiste o PATH (melhor prática)
     try:
-        supabase.table("user_profiles").update({"avatar_path": object_path}).eq("user_id", user_id).execute()
+        supabase_db.table("user_profiles").update({"avatar_path": object_path}).eq("user_id", user_id).execute()
     except Exception as e:
         st.error(f"Avatar enviado, mas falhou ao salvar no perfil: {e}")
         return
