@@ -1,6 +1,6 @@
 import streamlit as st
 from auth_flows import handle_auth_callback
-from zoneinfo import ZoneInfo
+
 import json
 import base64
 import textwrap
@@ -9,6 +9,45 @@ st.set_page_config(
     page_title="Sistema de Follow-Up",
     layout="wide",
     page_icon="📊",
+)
+
+
+
+# --- Global responsive CSS (zoom-friendly) ---
+st.markdown(
+    """
+    <style>
+    /* Conteúdo fluido em qualquer zoom */
+    .fu-wrap{
+      width: min(1200px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    /* Sidebar mais responsiva */
+    section[data-testid="stSidebar"]{
+      width: clamp(280px, 22vw, 360px) !important;
+    }
+
+    /* Tipografia fluida (quando as classes existirem) */
+    .fu-title{ font-size: clamp(1.15rem, 1.6vw, 1.55rem) !important; }
+    .fu-sub{ font-size: clamp(.90rem, 1.1vw, .98rem) !important; }
+
+    /* Paddings elásticos */
+    .fu-hero{ padding: clamp(14px, 2vw, 22px) !important; }
+    .fu-mini{ padding: clamp(10px, 1.6vw, 14px) !important; }
+
+    /* Breakpoints */
+    @media (max-width: 1100px){
+      .fu-hero-top{ flex-direction: column; align-items: flex-start !important; }
+      .fu-chip{ margin-top: 10px; }
+    }
+    @media (max-width: 900px){
+      /* Empilha colunas em telas/zoom apertados */
+      div[data-testid="column"]{ width: 100% !important; flex: 1 1 100% !important; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 from datetime import datetime, timezone
@@ -662,8 +701,8 @@ def main():
         perfil = (usuario.get("perfil") or "user").lower()
         avatar_url = usuario.get("avatar_url")
 
-        
-        hora = datetime.now(ZoneInfo("America/Fortaleza")).hour
+        # saudação
+        hora = datetime.now().hour
         if hora < 12:
             saudacao = "Bom dia"
         elif hora < 18:
