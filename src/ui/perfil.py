@@ -3,13 +3,13 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import requests
 import streamlit as st
 
 
-def _jwt_sub(token: str | None) -> str | None:
+def _jwt_sub(token: str | None) -> str |None:
     if not token or token.count(".") < 2:
         return None
     try:
@@ -21,10 +21,22 @@ def _jwt_sub(token: str | None) -> str | None:
         return None
 
 
+def _base_url() -> str:
+    return str(st.secrets.get("SUPABASE_URL", "")).rstrip("/")
+
+
+def _anon_key() -> str:
+    return str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
+
+
+def _access_token() -> str:
+    return str(st.session_state.get("auth_access_token", "")).strip()
+
+
 def _storage_headers() -> dict:
-    url = st.secrets.get("SUPABASE_URL")
-    anon = st.secrets.get("SUPABASE_ANON_KEY")
-    token = st.session_state.get("auth_access_token")
+    url = _base_url()
+    anon = _anon_key()
+    token = _access_token()
 
     if not url or not anon:
         raise RuntimeError("Faltam SUPABASE_URL / SUPABASE_ANON_KEY em st.secrets.")
@@ -34,10 +46,36 @@ def _storage_headers() -> dict:
     return {"Authorization": f"Bearer {token}", "apikey": anon}
 
 
-def _base_url() -> str:
-    return str(st.secrets.get("SUPABASE_URL")).rstrip("/")
+def _auth_headers() -> dict:
+    anon = _anon_key()
+    if not anon:
+        raise RuntimeError("Falta SUPABASE_ANON_KEY em st.secrets.")
+    h = {"apikey": anon, "Content-Type": "application/json"}
+    tok = _access_token()
+    if tok:
+        h["Authorization"] = f"Bearer {tok}"
+    return h
 
 
+def _get_empresa_atual() -> str | None:
+    for k in ("empresa", "empresa_selecionada", "empresa_atual", "empresa_nome"):
+        v = st.session_state.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+
+    for k in ("empresa", "empresa_selecionada", "empresa_atual"):
+        v = st.session_state.get(k)
+        if isinstance(v, dict):
+            for kk in ("nome", "name", "razao_social"):
+                nv = v.get(kk)
+                if isinstance(nv, str) and nv.strip():
+                    return nv.strip()
+    return None
+
+
+# =========================
+# Storage REST (Privado)
+# =========================
 def _upload_object_rest(bucket: str, object_path: str, data: bytes, mime: str) -> None:
     base_url = _base_url()
     headers = _storage_headers()
@@ -67,8 +105,20 @@ def _delete_object_rest(bucket: str, object_path: str) -> None:
     url = f"{base_url}/storage/v1/object/{bucket}/{safe_path}"
 
     r = requests.delete(url, headers=headers, timeout=30)
+
     if r.status_code in (200, 204, 404):
         return
+
+    # Alguns ambientes devolvem 400 com JSON dizendo 404 (Object not found)
+    try:
+        payload = r.json()
+        status_code = str(payload.get("statusCode", "")).strip()
+        err = str(payload.get("error", "")).strip().lower()
+        msg = str(payload.get("message", "")).strip().lower()
+        if status_code == "404" or err == "not_found" or "object not found" in msg:
+            return
+    except Exception:
+        pass
 
     body = (r.text or "")[:800]
     raise RuntimeError(f"Storage delete falhou ({r.status_code}): {body}")
@@ -90,31 +140,98 @@ def _get_object_bytes_authenticated(bucket: str, object_path: str) -> Optional[b
         return None
 
 
-def _get_empresa_atual() -> str | None:
-    for k in ("empresa", "empresa_selecionada", "empresa_atual", "empresa_nome"):
-        v = st.session_state.get(k)
-        if isinstance(v, str) and v.strip():
-            return v.strip()
+# =========================
+# Supabase Auth REST extras
+# =========================
+def _send_password_recovery(email: str) -> None:
+    base_url = _base_url()
+    if not base_url:
+        raise RuntimeError("SUPABASE_URL não configurada.")
+    if not email or "@" not in email:
+        raise RuntimeError("Email inválido para recuperação.")
 
-    for k in ("empresa", "empresa_selecionada", "empresa_atual"):
-        v = st.session_state.get(k)
-        if isinstance(v, dict):
-            for kk in ("nome", "name", "razao_social"):
-                nv = v.get(kk)
-                if isinstance(nv, str) and nv.strip():
-                    return nv.strip()
+    url = f"{base_url}/auth/v1/recover"
+    resp = requests.post(url, headers=_auth_headers(), json={"email": email}, timeout=30)
+    if resp.status_code in (200, 204):
+        return
 
-    return None
+    body = (resp.text or "")[:800]
+    raise RuntimeError(f"Falha ao enviar recuperação ({resp.status_code}): {body}")
+
+
+def _safe_get_profile(supabase_db, user_id: str) -> Dict[str, Any]:
+    try:
+        res = (
+            supabase_db.table("user_profiles")
+            .select("user_id,email,nome,avatar_path,avatar_url")
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        if hasattr(res, "data"):
+            return res.data or {}
+        return res.get("data") or {}
+    except Exception:
+        return {}
+
+
+def _safe_stats_pedidos(supabase_db, user_id: str) -> Dict[str, int]:
+    stats: Dict[str, int] = {}
+
+    # Total
+    try:
+        r = supabase_db.table("pedidos").select("id", count="exact").eq("criado_por", user_id).execute()
+        total = getattr(r, "count", None)
+        if total is None and isinstance(r, dict):
+            total = r.get("count")
+        if total is not None:
+            stats["Meus pedidos"] = int(total)
+    except Exception:
+        pass
+
+    # Em aberto (tentativa)
+    try:
+        r = (
+            supabase_db.table("pedidos")
+            .select("id", count="exact")
+            .eq("criado_por", user_id)
+            .not_.in_("status", ["Concluído", "Finalizado", "Cancelado"])
+            .execute()
+        )
+        total = getattr(r, "count", None)
+        if total is None and isinstance(r, dict):
+            total = r.get("count")
+        if total is not None:
+            stats["Em aberto"] = int(total)
+    except Exception:
+        pass
+
+    return stats
+
+
+def _logout_clear_session():
+    for k in [
+        "auth_access_token",
+        "auth_refresh_token",
+        "auth_user_id",
+        "auth_email",
+        "usuario",
+        "token",
+        "menu_ops",
+        "menu_gestao",
+    ]:
+        if k in st.session_state:
+            del st.session_state[k]
 
 
 def exibir_perfil(supabase_db):
+    """Aba Meu Perfil (melhorada)."""
     DEBUG = str(st.secrets.get("DEBUG", "false")).lower() in ("1", "true", "yes", "y")
 
-    token = st.session_state.get("auth_access_token")
-    uid = _jwt_sub(token)
-
+    uid = _jwt_sub(st.session_state.get("auth_access_token"))
     usuario = st.session_state.get("usuario") or {}
     user_id = uid or usuario.get("id") or st.session_state.get("auth_user_id")
+
     if not user_id:
         st.error("Não foi possível identificar o usuário logado.")
         return
@@ -122,31 +239,20 @@ def exibir_perfil(supabase_db):
     if isinstance(st.session_state.get("usuario"), dict):
         st.session_state.usuario["id"] = user_id
 
-    email = usuario.get("email") or st.session_state.get("auth_email") or "—"
-    nome_sessao = usuario.get("nome") or "—"
+    profile_row = _safe_get_profile(supabase_db, user_id)
+
+    email = (profile_row.get("email") or usuario.get("email") or st.session_state.get("auth_email") or "—").strip()
+    nome_db = (profile_row.get("nome") or usuario.get("nome") or "—").strip()
     role = (usuario.get("perfil") or "user").upper()
 
-    try:
-        prof = (
-            supabase_db.table("user_profiles")
-            .select("user_id,email,nome,avatar_path,avatar_url")
-            .eq("user_id", user_id)
-            .maybe_single()
-            .execute()
-        )
-        profile_row = (prof.data or {}) if hasattr(prof, "data") else (prof.get("data") or {})
-    except Exception:
-        profile_row = {}
-
-    nome_db = profile_row.get("nome") or nome_sessao
-    avatar_path = profile_row.get("avatar_path") or usuario.get("avatar_path") or f"{user_id}/avatar.png"
-
-    st.markdown("## 👤 Meu Perfil")
     empresa = _get_empresa_atual()
 
+    avatar_path = profile_row.get("avatar_path") or usuario.get("avatar_path") or f"{user_id}/avatar.png"
     avatar_bytes = _get_object_bytes_authenticated("avatars", avatar_path) if avatar_path else None
 
+    st.markdown("## 👤 Meu Perfil")
     c1, c2 = st.columns([1, 2])
+
     with c1:
         if avatar_bytes:
             st.image(avatar_bytes, width=140)
@@ -171,14 +277,71 @@ def exibir_perfil(supabase_db):
         st.markdown(f"**Perfil:** {role}")
         if empresa:
             st.markdown(f"**Empresa:** {empresa}")
-        st.caption("🔒 Avatar em bucket privado (upload REST + leitura authenticated).")
+        st.caption("🔒 Avatar em bucket privado (REST + leitura authenticated).")
 
-    tabs = st.tabs(["📝 Perfil", "🖼 Avatar", "🔐 Segurança"])
+        col_h1, col_h2, col_h3 = st.columns([1, 1, 1])
+        with col_h1:
+            st.code(user_id, language="text")
+        with col_h2:
+            if st.button("🔄 Atualizar", key="perfil_refresh_btn", use_container_width=True):
+                st.rerun()
+        with col_h3:
+            if st.button("🚪 Sair", key="perfil_logout_btn_header", use_container_width=True):
+                _logout_clear_session()
+                st.success("Você saiu da conta.")
+                st.rerun()
 
-    # ---- Perfil ----
+    stats = _safe_stats_pedidos(supabase_db, user_id)
+    if stats:
+        cols = st.columns(min(4, len(stats)))
+        for i, (k, v) in enumerate(stats.items()):
+            cols[i % len(cols)].metric(k, v)
+
+    tabs = st.tabs(["🏠 Visão geral", "📝 Perfil", "🖼 Avatar", "🔐 Segurança"])
+
     with tabs[0]:
+        st.subheader("🏠 Visão geral")
+        st.caption("Resumo da sua conta e atalhos.")
+
+        cA, cB, cC = st.columns([1, 1, 1])
+        with cA:
+            st.info("💡 Dica: personalize seu nome e avatar para aparecerem na sidebar.")
+        with cB:
+            st.success("✅ Sessão ativa")
+            st.caption(f"User ID: `{user_id}`")
+        with cC:
+            st.warning("🏢 Empresa")
+            st.caption(empresa or "Nenhuma selecionada (se aplicável).")
+
+        st.divider()
+        st.markdown("### 📦 Exportar meus dados")
+        st.caption("Baixa um JSON com os dados básicos do seu perfil (sem informações sensíveis).")
+
+        export_obj = {
+            "user_id": user_id,
+            "email": email,
+            "nome": nome_db,
+            "perfil": role,
+            "empresa": empresa,
+            "avatar_path": avatar_path if avatar_path else None,
+        }
+        st.download_button(
+            "⬇️ Baixar JSON do perfil",
+            data=json.dumps(export_obj, ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name="meu_perfil.json",
+            mime="application/json",
+            key="perfil_download_json_btn",
+            use_container_width=True,
+        )
+
+    with tabs[1]:
         st.subheader("📝 Dados do perfil")
-        novo_nome = st.text_input("Nome", value=nome_db or "", placeholder="Seu nome completo", key="perfil_nome_input")
+        novo_nome = st.text_input(
+            "Nome",
+            value=nome_db or "",
+            placeholder="Seu nome completo",
+            key="perfil_nome_input",
+        )
 
         col_a, col_b = st.columns([1, 3])
         with col_a:
@@ -200,15 +363,15 @@ def exibir_perfil(supabase_db):
                 except Exception as e:
                     st.error(f"Falha ao salvar: {e}")
 
-    # ---- Avatar ----
-    with tabs[1]:
+    with tabs[2]:
         st.subheader("🖼 Avatar")
+        st.caption("Use PNG/JPG. O arquivo fica em `avatars/<user_id>/avatar.ext` (privado).")
 
         if "avatar_uploader_key" not in st.session_state:
             st.session_state.avatar_uploader_key = 0
 
         arquivo = st.file_uploader(
-            "Escolher imagem (PNG/JPG)",
+            "Escolher imagem",
             type=["png", "jpg", "jpeg"],
             key=f"perfil_avatar_uploader_{st.session_state.avatar_uploader_key}",
         )
@@ -234,16 +397,20 @@ def exibir_perfil(supabase_db):
             )
 
         if salvar_avatar:
+            raw = arquivo.getvalue()
+            if len(raw) > 2 * 1024 * 1024:
+                st.error("A imagem é muito grande. Limite: 2MB.")
+                st.stop()
+
             mime = arquivo.type or mimetypes.guess_type(arquivo.name)[0] or "image/png"
             ext = "png"
             if "jpeg" in mime or arquivo.name.lower().endswith((".jpg", ".jpeg")):
                 ext = "jpg"
 
             object_path = f"{user_id}/avatar.{ext}"
-            file_bytes = arquivo.getvalue()
 
             try:
-                _upload_object_rest("avatars", object_path, file_bytes, mime)
+                _upload_object_rest("avatars", object_path, raw, mime)
             except Exception as e:
                 st.error(f"Erro ao enviar para o Storage: {e}")
                 st.stop()
@@ -265,8 +432,6 @@ def exibir_perfil(supabase_db):
             try:
                 if avatar_path:
                     _delete_object_rest("avatars", avatar_path)
-                _delete_object_rest("avatars", f"{user_id}/avatar.png")
-                _delete_object_rest("avatars", f"{user_id}/avatar.jpg")
             except Exception as e:
                 st.error(f"Falha ao remover no Storage: {e}")
                 st.stop()
@@ -283,32 +448,33 @@ def exibir_perfil(supabase_db):
             st.success("✅ Avatar removido!")
             st.rerun()
 
-    # ---- Segurança ----
-    with tabs[2]:
+    with tabs[3]:
         st.subheader("🔐 Segurança")
         st.caption("Ações rápidas da conta.")
 
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            if st.button("🚪 Sair", use_container_width=True, key="perfil_logout_btn"):
-                for k in [
-                    "auth_access_token",
-                    "auth_refresh_token",
-                    "auth_user_id",
-                    "auth_email",
-                    "usuario",
-                    "token",
-                ]:
-                    if k in st.session_state:
-                        del st.session_state[k]
+        cS1, cS2 = st.columns([1, 1])
+        with cS1:
+            if st.button("📩 Enviar link de redefinição de senha", use_container_width=True, key="perfil_recover_btn"):
+                try:
+                    _send_password_recovery(email)
+                    st.success("✅ Link enviado! Verifique seu email.")
+                    st.caption("Se não chegar, verifique Spam e as Redirect URLs no Supabase Auth.")
+                except Exception as e:
+                    st.error(f"Falha ao enviar: {e}")
+
+        with cS2:
+            if st.button("🚪 Sair", use_container_width=True, key="perfil_logout_btn_security"):
+                _logout_clear_session()
                 st.success("Você saiu da conta.")
                 st.rerun()
 
-        with col2:
-            st.info("Posso adicionar aqui o botão “Enviar link de troca de senha” (depende do seu fluxo de auth).")
+        st.divider()
+        st.markdown("### ℹ️ Informações")
+        st.write(f"**User ID:** `{user_id}`")
+        st.write(f"**Email:** `{email}`")
 
     if DEBUG:
         with st.expander("🧪 Debug (interno)", expanded=False):
-            st.write("user_id:", user_id)
-            st.write("avatar_path:", avatar_path)
             st.write("empresa:", empresa)
+            st.write("avatar_path:", avatar_path)
+            st.write("has_avatar_bytes:", bool(avatar_bytes))
