@@ -24,16 +24,8 @@ def _jwt_sub(token: str | None) -> str | None:
 
 
 def _get_storage_client():
-    """Cria um client do Supabase com a sessão do usuário aplicada.
-
-    Motivo: em alguns setups, o client usado para PostgREST está autenticado,
-    mas o módulo de Storage não herda o Authorization header corretamente.
-    Aqui garantimos que o Storage enxergue auth.uid() (JWT do usuário).
-    """
-    try:
-        from supabase import create_client  # type: ignore
-    except Exception as e:
-        raise RuntimeError(f"supabase-py não está disponível: {e}") from e
+    """Cria um client Supabase com sessão do usuário aplicada (para Storage enxergar auth.uid())."""
+    from supabase import create_client  # type: ignore
 
     url = st.secrets.get("SUPABASE_URL")
     key = st.secrets.get("SUPABASE_ANON_KEY")
@@ -45,12 +37,10 @@ def _get_storage_client():
     access = st.session_state.get("auth_access_token")
     refresh = st.session_state.get("auth_refresh_token")
 
-    # aplica sessão (quando disponível)
     if access and refresh:
         try:
             sb.auth.set_session(access, refresh)
         except Exception:
-            # fallback: algumas versões usam set_session(access_token=..., refresh_token=...)
             sb.auth.set_session(access_token=access, refresh_token=refresh)  # type: ignore
 
     return sb
@@ -100,60 +90,54 @@ def _signed_url(storage_client, bucket: str, object_path: str, expires_in: int =
 
 
 def exibir_perfil(supabase_db):
+    """Meu Perfil (avatar em bucket PRIVADO + URL assinada) + debug."""
 
-    st.subheader("🧪 Debug Auth/Storage")
-
-    token = st.session_state.get("auth_access_token")
-    refresh = st.session_state.get("auth_refresh_token")
-    st.write("Tem access token?", bool(token))
-    st.write("Tem refresh token?", bool(refresh))
-    
-    # UID do JWT (sub)
-    uid_jwt = _jwt_sub(token)
-    st.write("JWT sub (uid):", uid_jwt)
-
-# UID visto pela lib (auth.get_user)
-try:
-    u = supabase.auth.get_user()
-    # algumas libs retornam dict/objeto; tenta ambos
-    user_obj = getattr(u, "user", None) or u.get("user")
-    st.write("auth.get_user id:", getattr(user_obj, "id", None) or user_obj.get("id"))
-    st.write("auth.get_user email:", getattr(user_obj, "email", None) or user_obj.get("email"))
-except Exception as e:
-    st.write("auth.get_user() ERRO:", str(e))
-
-# path que você está tentando gravar
-st.write("user_id usado no path:", user_id)
-st.write("object_path teste:", f"{user_id}/avatar.png")
-
-    """Meu Perfil (avatar em bucket PRIVADO + URL assinada)."""
-    # client dedicado pro Storage, com sessão aplicada
+    # Client dedicado pro Storage, com sessão aplicada
     try:
-        supabase = _get_storage_client()
+        supabase_storage = _get_storage_client()
     except Exception as e:
         st.error(f"Falha ao inicializar Storage autenticado: {e}")
         return
 
     token = st.session_state.get("auth_access_token")
+    refresh = st.session_state.get("auth_refresh_token")
     uid = _jwt_sub(token)
 
     usuario = st.session_state.get("usuario") or {}
     user_id = uid or usuario.get("id") or st.session_state.get("auth_user_id")
+
     email = usuario.get("email") or st.session_state.get("auth_email")
     nome = usuario.get("nome") or "—"
     perfil = (usuario.get("perfil") or "user").upper()
+
+    # ===== DEBUG =====
+    with st.expander("🧪 Debug Auth/Storage", expanded=False):
+        st.write("Tem access token?", bool(token))
+        st.write("Tem refresh token?", bool(refresh))
+        st.write("JWT sub (uid):", uid)
+        st.write("user_id usado no app:", user_id)
+        try:
+            u = supabase_storage.auth.get_user()
+            user_obj = getattr(u, "user", None) or (u.get("user") if isinstance(u, dict) else None)
+            st.write("storage.auth.get_user id:", getattr(user_obj, "id", None) if user_obj else None)
+            st.write("storage.auth.get_user email:", getattr(user_obj, "email", None) if user_obj else None)
+        except Exception as e:
+            st.write("storage.auth.get_user() ERRO:", str(e))
+        if user_id:
+            st.write("object_path exemplo:", f"{user_id}/avatar.png")
+    # ===== /DEBUG =====
 
     if not user_id:
         st.error("Não foi possível identificar o usuário logado.")
         return
 
-    # mantém session_state alinhado
-    st.session_state.usuario["id"] = user_id
+    if isinstance(st.session_state.get("usuario"), dict):
+        st.session_state.usuario["id"] = user_id
 
     st.title("👤 Meu Perfil")
 
     avatar_path = usuario.get("avatar_path") or f"{user_id}/avatar.png"
-    avatar_display_url = _signed_url(supabase, "avatars", avatar_path, expires_in=3600) if avatar_path else None
+    avatar_display_url = _signed_url(supabase_storage, "avatars", avatar_path, expires_in=3600) if avatar_path else None
 
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -196,13 +180,12 @@ st.write("object_path teste:", f"{user_id}/avatar.png")
     file_bytes = arquivo.getvalue()
 
     try:
-        _upload_avatar(supabase, "avatars", object_path, file_bytes, mime)
+        _upload_avatar(supabase_storage, "avatars", object_path, file_bytes, mime)
     except Exception as e:
         st.error(f"Erro ao enviar para o Storage: {e}")
-        st.caption("Se continuar dando RLS, confirme que as policies usam split_part(name,'/',1)=auth.uid()::text e que o upload usa token do usuário.")
+        st.caption("Se der RLS: confirme que storage.auth.get_user id == JWT sub == user_id e que policies usam split_part(name,'/',1)=auth.uid()::text.")
         return
 
-    # Persiste o PATH (melhor prática)
     try:
         supabase_db.table("user_profiles").update({"avatar_path": object_path}).eq("user_id", user_id).execute()
     except Exception as e:
