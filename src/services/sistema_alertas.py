@@ -867,6 +867,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
     colg1, colg2, colg3, colg4 = st.columns([4,4,3.5,1.5])
     with colg1:
+        st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;'>Departamento</div>", unsafe_allow_html=True)
         dept_global = st.multiselect(
             "Departamento",
             options=departamentos_opts,
@@ -876,14 +877,17 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             placeholder="Todos",
         )
     with colg2:
+        st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;'>Fornecedores</div>", unsafe_allow_html=True)
         forn_global = st.multiselect(
             "Fornecedor",
             options=fornecedores_opts,
             default=[],
             key="alertas_global_forn",
             label_visibility="collapsed",
+            placeholder="Todos",
         )
     with colg3:
+        st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;'>Filtro por Valores</div>", unsafe_allow_html=True)
         if vmax > 0:
             
             
@@ -930,7 +934,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             faixa_valor = (lo, hi)
         else:
             faixa_valor = (0.0, 0.0)
-            st.caption("Valor (global): sem dados")
+            st.info("Sem dados de valor para filtrar.")
 
 
         with colg4:
