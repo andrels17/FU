@@ -461,10 +461,11 @@ def exibir_perfil(supabase_db):
                 numero = p.get("numero") or ""
                 status = p.get("status") or ""
                 depto = p.get("departamento") or ""
+                descricao = (p.get("descricao") or "").strip()
                 criado_em = _fmt_dt_br(p.get("criado_em"))
                 valor = _fmt_money_br(p.get("valor_total"))
 
-                cA, cB, cC, cD, cE, cF = st.columns([0.9, 1.2, 1.4, 1.2, 1.2, 1.0])
+                cA, cB, cC, cD, cE, cF = st.columns([0.9, 2.6, 1.2, 1.1, 1.1, 1.0])
                 with cA:
                     if st.button("🔎 Abrir", key=f"perfil_open_{pid}", use_container_width=True):
                         # Navega para Consulta > Ações
@@ -474,8 +475,17 @@ def exibir_perfil(supabase_db):
                         st.session_state["consulta_tab_target"] = "⚡ Ações"
                         st.rerun()
                 with cB:
-                    st.markdown(f"**{numero or str(pid)[:8]}**")
-                    st.caption("Nº" if numero else "ID")
+                    # Mostra a descrição do material (quando existir) em vez do ID
+                    if descricao:
+                        short = descricao if len(descricao) <= 60 else (descricao[:57] + "…")
+                        st.markdown(f"**{short}**")
+                        if numero:
+                            st.caption(f"Material · Nº {numero}")
+                        else:
+                            st.caption("Material")
+                    else:
+                        st.markdown(f"**{numero or str(pid)[:8]}**")
+                        st.caption("Nº" if numero else "ID")
                 with cC:
                     st.markdown(_status_pill(status), unsafe_allow_html=True)
                     st.caption("Status")
