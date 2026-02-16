@@ -415,13 +415,13 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
             with cbox:
                 st.markdown(
                 f"""
-                <div style='border-left: 4px solid #dc2626; padding: 12px; margin-bottom: 10px; background-color: rgba(220, 38, 38, 0.10); border-radius: 10px;'>
-                    <p style='margin: 0; font-size: 14px; color: #dc2626; font-weight: 600;'>🔴 OC: {nr_oc_txt} &nbsp; {status_badge}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Descrição:</strong> {desc_txt}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Fornecedor:</strong> {fornecedor_txt}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Departamento:</strong> {dept}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Valor:</strong> {formatar_moeda_br(valor)}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: #dc2626; font-weight: 600;'><strong>⏰ Atrasado há {dias} dia(s)</strong></p>
+                <div class='fu-card' style='border-left: 4px solid #dc2626;'>
+                    <p class='fu-oc'>🔴 OC: {nr_oc_txt} &nbsp; {status_badge}</p>
+                    <p class='fu-desc'><b>Descrição:</b> {desc_txt}</p>
+                    <p class='fu-meta'><b>Fornecedor:</b> {fornecedor_txt}</p>
+                    <p class='fu-meta'><b>Departamento:</b> {dept}</p>
+                    <p class='fu-meta'><b>Valor:</b> {formatar_moeda_br(valor)}</p>
+                    <p class='fu-meta'><b>⏰ Atraso:</b> {dias} dia(s)</p>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -467,11 +467,11 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
             with cbox:
                 st.markdown(
                 f"""
-                <div style='border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 10px; background-color: rgba(245, 158, 11, 0.10); border-radius: 10px;'>
-                    <p style='margin: 0; font-size: 14px; color: #f59e0b; font-weight: 600;'>⏰ OC: {nr_oc_txt} &nbsp; {status_badge}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Descrição:</strong> {desc_txt}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Fornecedor:</strong> {fornecedor_txt}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Valor:</strong> {formatar_moeda_br(valor)}</p>
+                <div class='fu-card' style='border-left: 4px solid #f59e0b;'>
+                    <p class='fu-oc'>⏰ OC: {nr_oc_txt} &nbsp; {status_badge}</p>
+                    <p class='fu-desc'><b>Descrição:</b> {desc_txt}</p>
+                    <p class='fu-meta'><b>Fornecedor:</b> {fornecedor_txt}</p>
+                    <p class='fu-meta'><b>Valor:</b> {formatar_moeda_br(valor)}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Previsão:</strong> {prev}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: #f59e0b; font-weight: 600;'><strong>⏳ Vence em {dias} dia(s)</strong></p>
                 </div>
@@ -502,11 +502,11 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
             with cbox:
                 st.markdown(
                 f"""
-                <div style='border-left: 4px solid #7c3aed; padding: 12px; margin-bottom: 10px; background-color: rgba(124, 58, 237, 0.10); border-radius: 10px;'>
-                    <p style='margin: 0; font-size: 14px; color: #7c3aed; font-weight: 600;'>🚨 OC: {nr_oc_txt} &nbsp; {status_badge}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Descrição:</strong> {desc_txt}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Fornecedor:</strong> {fornecedor_txt}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Departamento:</strong> {dept}</p>
+                <div class='fu-card' style='border-left: 4px solid #7c3aed;'>
+                    <p class='fu-oc'>🚨 OC: {nr_oc_txt} &nbsp; {status_badge}</p>
+                    <p class='fu-desc'><b>Descrição:</b> {desc_txt}</p>
+                    <p class='fu-meta'><b>Fornecedor:</b> {fornecedor_txt}</p>
+                    <p class='fu-meta'><b>Departamento:</b> {dept}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Previsão:</strong> {prev}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: #7c3aed; font-weight: 600;'><strong>💰 Valor: {formatar_moeda_br(valor)}</strong></p>
                 </div>
@@ -652,8 +652,8 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 f"""
                 <div style="
                     text-align:center;
-                    padding: 6px 10px;
-                    border-radius: 999px;
+                    padding: 4px 10px;
+                    border-radius: 12px;
                     background: rgba(255,255,255,0.05);
                     border: 1px solid rgba(255,255,255,0.10);
                     font-weight: 800;
@@ -714,40 +714,64 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         return f"""<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:{bg};border:1px solid {bd};color:{fg};font-weight:800;font-size:12px;">{label}</span>"""
 
 
-    st.title("🔔 Central de Notificações e Alertas")
+    st.markdown("<div class='fu-header'><h1>🔔 Central de Notificações e Alertas</h1><div class='fu-sub'>Visão executiva + ações rápidas</div></div>", unsafe_allow_html=True)
 
     # CSS (PRECISA ficar dentro da função)
     st.markdown(
         """
         <style>
-          .fu-kpi {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.10);
+          /* === Clean Dark SaaS (menos poluição) === */
+          .block-container { padding-top: 1.2rem; padding-bottom: 2rem; }
+          div[data-testid="stVerticalBlock"] { gap: 0.8rem; }
+
+          /* Header */
+          .fu-header h1 { margin: 0; font-size: 26px; font-weight: 900; }
+          .fu-sub { opacity: .78; margin-top: 4px; font-size: 13px; }
+
+          /* Filters bar */
+          .fu-bar {
+            padding: 10px 12px;
             border-radius: 14px;
-            padding: 14px 14px;
-            margin-bottom: 6px;
-          }
-          .fu-kpi-title {
-            font-size: 13px;
-            opacity: 0.9;
-            margin: 0 0 6px 0;
-          }
-          .fu-kpi-value {
-            font-size: 30px;
-            font-weight: 800;
-            line-height: 1.1;
-            margin: 0;
-          }
-          .fu-kpi-sub {
-            font-size: 12px;
-            opacity: 0.85;
-            margin: 6px 0 0 0;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
           }
 
-          .fu-pagebar button {
-            border-radius: 12px !important;
-            font-weight: 900 !important;
+          /* KPI slim */
+          .fu-kpi {
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
           }
+          .fu-kpi-title { font-size: 12px; opacity: 0.85; margin: 0 0 6px 0; }
+          .fu-kpi-value { font-size: 24px; font-weight: 900; line-height: 1.05; margin: 0; }
+          .fu-kpi-sub { font-size: 12px; opacity: 0.75; margin: 6px 0 0 0; }
+
+          /* Toolbar */
+          .fu-toolbar {
+            padding: 8px 10px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+          }
+
+          /* Slim cards */
+          .fu-card {
+            padding: 12px 12px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            margin-bottom: 10px;
+          }
+          .fu-card p { margin: 0; }
+          .fu-line1 { display:flex; gap:10px; align-items:center; }
+          .fu-oc { font-size: 13px; font-weight: 900; }
+          .fu-desc { font-size: 13px; opacity: .92; margin-top: 6px; }
+          .fu-meta { font-size: 12px; opacity: .76; margin-top: 6px; }
+          .fu-meta b { opacity: .95; }
+
+          /* Reduce widget vertical spacing a bit */
+          div[data-testid="stSelectbox"], div[data-testid="stMultiSelect"], div[data-testid="stSlider"] { margin-bottom: -6px; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -780,34 +804,40 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     vmin = float(min(valores)) if valores else 0.0
     vmax = float(max(valores)) if valores else 0.0
 
+    st.markdown("<div class='fu-bar'>", unsafe_allow_html=True)
     colg1, colg2, colg3 = st.columns(3)
     with colg1:
         dept_global = st.multiselect(
-            "Departamento (global)",
+            "Departamento",
             options=departamentos_opts,
             default=[],
             key="alertas_global_dept",
+            label_visibility="collapsed",
         )
     with colg2:
         forn_global = st.multiselect(
-            "Fornecedor (global)",
+            "Fornecedor",
             options=fornecedores_opts,
             default=[],
             key="alertas_global_forn",
+            label_visibility="collapsed",
         )
     with colg3:
         if vmax > 0:
             faixa_valor = st.slider(
-                "Valor (global)",
+                "Valor",
                 min_value=float(vmin),
                 max_value=float(vmax),
                 value=(float(vmin), float(vmax)),
                 step=max(1.0, float((vmax - vmin) / 100.0)) if vmax > vmin else 1.0,
                 key="alertas_global_valor",
+                label_visibility="collapsed",
             )
         else:
             faixa_valor = (0.0, 0.0)
             st.caption("Valor (global): sem dados")
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     def _filtrar_pedidos(lista: list[dict]) -> list[dict]:
         if not lista:
