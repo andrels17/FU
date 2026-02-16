@@ -362,7 +362,7 @@ def exibir_painel_alertas(alertas: dict, formatar_moeda_br):
     """Alias para compatibilidade com o app.py."""
     return exibir_alertas_completo(alertas, formatar_moeda_br)
 
-def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0):
+def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, status: str = "Novo"):
     """Renderiza um card de pedido (atrasado, vencendo ou crítico)."""
     
     def safe_text(txt):
@@ -382,12 +382,12 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0):
         dept = safe_text(pedido.get("departamento", "N/A"))
         
         with st.container():
-            cbox, cbtn1, cbtn2 = st.columns([12, 2, 2])
+            csel, cbox, cbtn1, cbtn2 = st.columns([2.4, 9.6, 2, 2])
             with cbox:
                 st.markdown(
                 f"""
                 <div style='border-left: 4px solid #dc2626; padding: 12px; margin-bottom: 10px; background-color: rgba(220, 38, 38, 0.10); border-radius: 10px;'>
-                    <p style='margin: 0; font-size: 14px; color: #dc2626; font-weight: 600;'>🔴 OC: {nr_oc_txt}</p>
+                    <p style='margin: 0; font-size: 14px; color: #dc2626; font-weight: 600;'>🔴 OC: {nr_oc_txt} &nbsp; {status_badge}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Descrição:</strong> {desc_txt}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Fornecedor:</strong> {fornecedor_txt}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Departamento:</strong> {dept}</p>
@@ -398,8 +398,25 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0):
                 unsafe_allow_html=True
             )
 
-            # Ações rápidas (híbrido: operacional + executivo)
+            # Seleção + status (por item)
             base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}_{idx}"
+            with csel:
+                _chk_key = f"sel_{base_key}"
+                selecionado = st.checkbox("", key=_chk_key)
+                novo_status = st.selectbox(
+                    "",
+                    options=["Novo", "Em andamento", "Resolvido"],
+                    index=["Novo", "Em andamento", "Resolvido"].index(status) if status in ["Novo", "Em andamento", "Resolvido"] else 0,
+                    key=f"status_{base_key}",
+                    label_visibility="collapsed",
+                )
+                if novo_status != status:
+                    try:
+                        _set_status(str(pedido.get('id','')), novo_status)
+                    except Exception:
+                        pass
+
+            # Ações rápidas (híbrido: operacional + executivo)
             with cbtn1:
                 if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
                     _ir_para_ficha_material_do_alerta(pedido)
@@ -417,12 +434,12 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0):
         prev = safe_text(pedido.get("previsao", "N/A"))
         
         with st.container():
-            cbox, cbtn1, cbtn2 = st.columns([12, 2, 2])
+            csel, cbox, cbtn1, cbtn2 = st.columns([2.4, 9.6, 2, 2])
             with cbox:
                 st.markdown(
                 f"""
                 <div style='border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 10px; background-color: rgba(245, 158, 11, 0.10); border-radius: 10px;'>
-                    <p style='margin: 0; font-size: 14px; color: #f59e0b; font-weight: 600;'>⏰ OC: {nr_oc_txt}</p>
+                    <p style='margin: 0; font-size: 14px; color: #f59e0b; font-weight: 600;'>⏰ OC: {nr_oc_txt} &nbsp; {status_badge}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Descrição:</strong> {desc_txt}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Fornecedor:</strong> {fornecedor_txt}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Valor:</strong> {formatar_moeda_br(valor)}</p>
@@ -452,12 +469,12 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0):
         dept = safe_text(pedido.get("departamento", "N/A"))
         
         with st.container():
-            cbox, cbtn1, cbtn2 = st.columns([12, 2, 2])
+            csel, cbox, cbtn1, cbtn2 = st.columns([2.4, 9.6, 2, 2])
             with cbox:
                 st.markdown(
                 f"""
                 <div style='border-left: 4px solid #7c3aed; padding: 12px; margin-bottom: 10px; background-color: rgba(124, 58, 237, 0.10); border-radius: 10px;'>
-                    <p style='margin: 0; font-size: 14px; color: #7c3aed; font-weight: 600;'>🚨 OC: {nr_oc_txt}</p>
+                    <p style='margin: 0; font-size: 14px; color: #7c3aed; font-weight: 600;'>🚨 OC: {nr_oc_txt} &nbsp; {status_badge}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Descrição:</strong> {desc_txt}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Fornecedor:</strong> {fornecedor_txt}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Departamento:</strong> {dept}</p>
@@ -641,6 +658,32 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         start = (page - 1) * per_page
         end = start + per_page
         return itens[start:end], total, total_pages, per_page
+
+    # ============================
+    # Status de alerta (persistência em sessão)
+    # ============================
+    if "alert_status" not in st.session_state:
+        st.session_state["alert_status"] = {}  # {alert_id: status}
+
+    def _get_status(alert_id: str) -> str:
+        return str(st.session_state["alert_status"].get(str(alert_id), "Novo"))
+
+    def _set_status(alert_id: str, status: str) -> None:
+        st.session_state["alert_status"][str(alert_id)] = str(status)
+
+    def _badge_status(status: str) -> str:
+        s = (status or "Novo").lower().strip()
+        if s.startswith("res"):
+            bg = "rgba(16,185,129,0.18)"; bd="rgba(16,185,129,0.35)"; fg="#10b981"
+            label = "Resolvido"
+        elif s.startswith("em"):
+            bg = "rgba(245,158,11,0.18)"; bd="rgba(245,158,11,0.35)"; fg="#f59e0b"
+            label = "Em andamento"
+        else:
+            bg = "rgba(147,197,253,0.18)"; bd="rgba(147,197,253,0.35)"; fg="#93c5fd"
+            label = "Novo"
+        return f"""<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:{bg};border:1px solid {bd};color:{fg};font-weight:800;font-size:12px;">{label}</span>"""
+
 
     st.title("🔔 Central de Notificações e Alertas")
 
@@ -993,9 +1036,43 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             pagina_itens, _total_itens, _total_paginas, _per_page = _paginate(pedidos_filtrados, "tab_atrasados", per_page_default=10)
             st.caption(f"📄 Página {int(st.session_state.get('tab_atrasados_page', 1))}/{_total_paginas} — exibindo {len(pagina_itens)} de {len(pedidos_filtrados)}")
 
+            
+            # Ações em lote (na página atual)
+            bulk_c1, bulk_c2, bulk_c3, bulk_c4 = st.columns([3, 2, 2, 4])
+            with bulk_c1:
+                bulk_status = st.selectbox(
+                    "Status (lote)",
+                    options=["Novo", "Em andamento", "Resolvido"],
+                    index=0,
+                    key="tab_atrasados_bulk_status",
+                )
+            with bulk_c2:
+                marcar_pagina = st.button("✅ Selecionar página", key="tab_atrasados_sel_page", use_container_width=True)
+            with bulk_c3:
+                limpar_sel = st.button("🧹 Limpar", key="tab_atrasados_clear_sel", use_container_width=True)
+            with bulk_c4:
+                aplicar_lote = st.button("⚡ Aplicar aos selecionados", key="tab_atrasados_apply_bulk", use_container_width=True)
+
+            if marcar_pagina or limpar_sel:
+                for _i, _p in enumerate(pagina_itens):
+                    _aid = str(_p.get("id") or _p.get("nr_oc") or f"row{_i}")
+                    _nr = str(_p.get("nr_oc", "") or "")
+                    _base_key = f"atrasado_{_aid}_{_nr}_{_i}"
+                    st.session_state[f"sel_{_base_key}"] = bool(marcar_pagina)
+
+            if aplicar_lote:
+                for _i, _p in enumerate(pagina_itens):
+                    _aid = str(_p.get("id") or _p.get("nr_oc") or f"row{_i}")
+                    _nr = str(_p.get("nr_oc", "") or "")
+                    _base_key = f"atrasado_{_aid}_{_nr}_{_i}"
+                    if bool(st.session_state.get(f"sel_{_base_key}", False)):
+                        _set_status(_aid, bulk_status)
+
             if pagina_itens:
                 for i, pedido in enumerate(pagina_itens):
-                    criar_card_pedido(pedido, "atrasado", formatar_moeda_br, idx=i)
+                    aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
+                    pedido['id'] = aid
+                    criar_card_pedido(pedido, "atrasado", formatar_moeda_br, idx=i, status=_get_status(aid))
             else:
                 st.info("📭 Nenhum pedido atrasado corresponde aos filtros selecionados")
         else:
@@ -1053,9 +1130,43 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             pagina_itens, _total_itens, _total_paginas, _per_page = _paginate(pedidos_filtrados, "tab_vencendo", per_page_default=10)
             st.caption(f"📄 Página {int(st.session_state.get('tab_vencendo_page', 1))}/{_total_paginas} — exibindo {len(pagina_itens)} de {len(pedidos_filtrados)}")
 
+            
+            # Ações em lote (na página atual)
+            bulk_c1, bulk_c2, bulk_c3, bulk_c4 = st.columns([3, 2, 2, 4])
+            with bulk_c1:
+                bulk_status = st.selectbox(
+                    "Status (lote)",
+                    options=["Novo", "Em andamento", "Resolvido"],
+                    index=0,
+                    key="tab_vencendo_bulk_status",
+                )
+            with bulk_c2:
+                marcar_pagina = st.button("✅ Selecionar página", key="tab_vencendo_sel_page", use_container_width=True)
+            with bulk_c3:
+                limpar_sel = st.button("🧹 Limpar", key="tab_vencendo_clear_sel", use_container_width=True)
+            with bulk_c4:
+                aplicar_lote = st.button("⚡ Aplicar aos selecionados", key="tab_vencendo_apply_bulk", use_container_width=True)
+
+            if marcar_pagina or limpar_sel:
+                for _i, _p in enumerate(pagina_itens):
+                    _aid = str(_p.get("id") or _p.get("nr_oc") or f"row{_i}")
+                    _nr = str(_p.get("nr_oc", "") or "")
+                    _base_key = f"vencendo_{_aid}_{_nr}_{_i}"
+                    st.session_state[f"sel_{_base_key}"] = bool(marcar_pagina)
+
+            if aplicar_lote:
+                for _i, _p in enumerate(pagina_itens):
+                    _aid = str(_p.get("id") or _p.get("nr_oc") or f"row{_i}")
+                    _nr = str(_p.get("nr_oc", "") or "")
+                    _base_key = f"vencendo_{_aid}_{_nr}_{_i}"
+                    if bool(st.session_state.get(f"sel_{_base_key}", False)):
+                        _set_status(_aid, bulk_status)
+
             if pagina_itens:
                 for i, pedido in enumerate(pagina_itens):
-                    criar_card_pedido(pedido, "vencendo", formatar_moeda_br, idx=i)
+                    aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
+                    pedido['id'] = aid
+                    criar_card_pedido(pedido, "vencendo", formatar_moeda_br, idx=i, status=_get_status(aid))
             else:
                 st.info("📭 Nenhum pedido vencendo corresponde aos filtros selecionados")
         else:
@@ -1127,12 +1238,46 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
             pagina_itens, _total_itens, _total_paginas, _per_page = _paginate(pedidos_filtrados, "tab_criticos", per_page_default=10)
             st.caption(f"📄 Página {int(st.session_state.get('tab_criticos_page', 1))}/{_total_paginas} — exibindo {len(pagina_itens)} de {len(pedidos_filtrados)}")
+
             
-            if pedidos_filtrados:
+            # Ações em lote (na página atual)
+            bulk_c1, bulk_c2, bulk_c3, bulk_c4 = st.columns([3, 2, 2, 4])
+            with bulk_c1:
+                bulk_status = st.selectbox(
+                    "Status (lote)",
+                    options=["Novo", "Em andamento", "Resolvido"],
+                    index=0,
+                    key="tab_criticos_bulk_status",
+                )
+            with bulk_c2:
+                marcar_pagina = st.button("✅ Selecionar página", key="tab_criticos_sel_page", use_container_width=True)
+            with bulk_c3:
+                limpar_sel = st.button("🧹 Limpar", key="tab_criticos_clear_sel", use_container_width=True)
+            with bulk_c4:
+                aplicar_lote = st.button("⚡ Aplicar aos selecionados", key="tab_criticos_apply_bulk", use_container_width=True)
+
+            if marcar_pagina or limpar_sel:
+                for _i, _p in enumerate(pagina_itens):
+                    _aid = str(_p.get("id") or _p.get("nr_oc") or f"row{_i}")
+                    _nr = str(_p.get("nr_oc", "") or "")
+                    _base_key = f"critico_{_aid}_{_nr}_{_i}"
+                    st.session_state[f"sel_{_base_key}"] = bool(marcar_pagina)
+
+            if aplicar_lote:
+                for _i, _p in enumerate(pagina_itens):
+                    _aid = str(_p.get("id") or _p.get("nr_oc") or f"row{_i}")
+                    _nr = str(_p.get("nr_oc", "") or "")
+                    _base_key = f"critico_{_aid}_{_nr}_{_i}"
+                    if bool(st.session_state.get(f"sel_{_base_key}", False)):
+                        _set_status(_aid, bulk_status)
+            
+            if pagina_itens:
                 st.warning("⚠️ Pedidos de alto valor com previsão de entrega próxima")
                 
-                for i, pedido in enumerate(pedidos_filtrados):
-                    criar_card_pedido(pedido, "critico", formatar_moeda_br, idx=i)
+                for i, pedido in enumerate(pagina_itens):
+                    aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
+                    pedido['id'] = aid
+                    criar_card_pedido(pedido, "critico", formatar_moeda_br, idx=i, status=_get_status(aid))
             else:
                 st.info("📭 Nenhum pedido crítico corresponde aos filtros selecionados")
         else:
