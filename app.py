@@ -662,7 +662,7 @@ def main():
         perfil = (usuario.get("perfil") or "user").lower()
         avatar_url = usuario.get("avatar_url")
 
-        # saudação
+        
         hora = datetime.now(ZoneInfo("America/Fortaleza")).hour
         if hora < 12:
             saudacao = "Bom dia"
