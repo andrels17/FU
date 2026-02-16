@@ -824,6 +824,10 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
           /* Global bar inputs */
           div[data-testid="stNumberInput"] input { min-height: 36px !important; border-radius: 12px !important; }
 
+        
+          /* Global bar text inputs */
+          div[data-testid="stTextInput"] input { font-weight: 800; }
+
         </style>
         """,
         unsafe_allow_html=True,
@@ -858,8 +862,8 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     # Se o usuário pediu "Limpar", agora que temos vmin/vmax, resetamos o slider
     if st.session_state.get("__reset_valor_range"):
         st.session_state["__reset_valor_range"] = False
-        st.session_state["alertas_global_valor_min"] = float(vmin)
-        st.session_state["alertas_global_valor_max"] = float(vmax)
+        st.session_state["alertas_global_valor_min_txt"] = str(int(vmin))
+        st.session_state["alertas_global_valor_max_txt"] = str(int(vmax))
 
     colg1, colg2, colg3, colg4 = st.columns([4,4,3.5,1.5])
     with colg1:
@@ -882,41 +886,48 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     with colg3:
         if vmax > 0:
             
-            # Faixa de valor (clean): inputs de mínimo/máximo
+            
+            # Faixa de valor (BR): inputs texto (R$) para evitar visual "técnico"
+            def _fmt_br_int(x: float) -> str:
+                try:
+                    return f"{int(round(float(x))):,}".replace(",", "X").replace(".", ",").replace("X", ".")
+                except Exception:
+                    return "0"
+
+            def _parse_br_num(s: str) -> float:
+                s = (s or "").strip().lower()
+                s = s.replace("r$", "").replace(" ", "")
+                s = s.replace(".", "").replace(",", ".")
+                try:
+                    return float(s)
+                except Exception:
+                    return 0.0
+
             cmin, cmax = st.columns([1, 1])
             with cmin:
-                vmin_in = st.number_input(
-                    "Mín",
-                    min_value=float(vmin),
-                    max_value=float(vmax),
-                    value=float(st.session_state.get("alertas_global_valor_min", vmin)),
-                    step=100.0,
-                    key="alertas_global_valor_min",
+                raw_min = st.text_input(
+                    "",
+                    value=st.session_state.get("alertas_global_valor_min_txt", _fmt_br_int(vmin)),
+                    key="alertas_global_valor_min_txt",
+                    placeholder="Mín (ex: 1.000)",
                     label_visibility="collapsed",
-                    format="%.0f",
                 )
             with cmax:
-                vmax_in = st.number_input(
-                    "Máx",
-                    min_value=float(vmin),
-                    max_value=float(vmax),
-                    value=float(st.session_state.get("alertas_global_valor_max", vmax)),
-                    step=100.0,
-                    key="alertas_global_valor_max",
+                raw_max = st.text_input(
+                    "",
+                    value=st.session_state.get("alertas_global_valor_max_txt", _fmt_br_int(vmax)),
+                    key="alertas_global_valor_max_txt",
+                    placeholder="Máx (ex: 50.000)",
                     label_visibility="collapsed",
-                    format="%.0f",
                 )
 
-            # Normaliza (garante min <= max)
-            lo = float(min(vmin_in, vmax_in))
-            hi = float(max(vmin_in, vmax_in))
-            faixa_valor = (lo, hi)
+            vmin_in = _parse_br_num(raw_min)
+            vmax_in = _parse_br_num(raw_max)
 
-            st.markdown(
-                f"<div style='text-align:right;font-size:12px;opacity:.75;margin-top:4px;'>R$ {lo:,.0f} — R$ {hi:,.0f}</div>"
-                .replace(',', 'X').replace('.', ',').replace('X','.'), 
-                unsafe_allow_html=True
-            )
+            # Normaliza e limita ao intervalo real
+            lo = float(max(vmin, min(vmax, min(vmin_in, vmax_in))))
+            hi = float(max(vmin, min(vmax, max(vmin_in, vmax_in))))
+            faixa_valor = (lo, hi)
             st.markdown(f"<div style='text-align:right;font-size:12px;opacity:.75;margin-top:4px;'>R$ {faixa_valor[0]:,.0f} — R$ {faixa_valor[1]:,.0f}</div>".replace(',', 'X').replace('.', ',').replace('X','.'), unsafe_allow_html=True)
         else:
             faixa_valor = (0.0, 0.0)
@@ -924,7 +935,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
 
         with colg4:
-            st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;text-align:right;'>Ações</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;text-align:right;'>Ações<br><span style='opacity:.65;font-size:11px;'>Limpa filtros</span></div>", unsafe_allow_html=True)
             if st.button("🧹 Limpar", key="alertas_global_clear", use_container_width=True):
                 st.session_state["__clear_global_filters"] = True
 
