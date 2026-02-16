@@ -1,6 +1,6 @@
 import streamlit as st
 from auth_flows import handle_auth_callback
-
+from zoneinfo import ZoneInfo
 import json
 import base64
 import textwrap
@@ -663,7 +663,7 @@ def main():
         avatar_url = usuario.get("avatar_url")
 
         # saudação
-        hora = datetime.now().hour
+        hora = datetime.now(ZoneInfo("America/Fortaleza")).hour
         if hora < 12:
             saudacao = "Bom dia"
         elif hora < 18:
