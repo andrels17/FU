@@ -98,6 +98,18 @@ def _signed_url_rest(bucket: str, object_path: str, expires_in: int = 3600) -> O
     return f"{base_url}/{signed.lstrip('/')}"
 
 
+
+def _fetch_image_bytes(url: str) -> bytes | None:
+    """Busca a imagem no backend (evita problemas de CORS/preview no browser)."""
+    try:
+        resp = requests.get(url, timeout=20)
+        if resp.status_code == 200 and resp.content:
+            return resp.content
+        return None
+    except Exception:
+        return None
+
+
 def exibir_perfil(supabase_db):
     """Meu Perfil (bucket privado + upload REST + signed URL REST).
 
@@ -138,7 +150,11 @@ def exibir_perfil(supabase_db):
     c1, c2 = st.columns([1, 2])
     with c1:
         if avatar_display_url:
-            st.image(avatar_display_url, width=140)
+            img_bytes = _fetch_image_bytes(avatar_display_url)
+            if img_bytes:
+                st.image(img_bytes, width=140)
+            else:
+                st.caption("⚠️ Não foi possível carregar o avatar (URL assinada inválida ou expirada).")
         else:
             inicial = (nome[:1] or "U").upper()
             st.markdown(
