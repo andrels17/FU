@@ -3,13 +3,16 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import requests
 import streamlit as st
 
 
-def _jwt_sub(token: str | None) -> str |None:
+# =========================
+# Helpers Auth / Headers
+# =========================
+def _jwt_sub(token: str | None) -> str | None:
     if not token or token.count(".") < 2:
         return None
     try:
@@ -144,6 +147,7 @@ def _get_object_bytes_authenticated(bucket: str, object_path: str) -> Optional[b
 # Supabase Auth REST extras
 # =========================
 def _send_password_recovery(email: str) -> None:
+    """Envia email de recuperação de senha (Supabase Auth)."""
     base_url = _base_url()
     if not base_url:
         raise RuntimeError("SUPABASE_URL não configurada.")
@@ -159,6 +163,26 @@ def _send_password_recovery(email: str) -> None:
     raise RuntimeError(f"Falha ao enviar recuperação ({resp.status_code}): {body}")
 
 
+def _change_password(new_password: str) -> None:
+    """Troca senha do usuário logado via endpoint /auth/v1/user."""
+    base_url = _base_url()
+    if not base_url:
+        raise RuntimeError("SUPABASE_URL não configurada.")
+    if not new_password or len(new_password) < 8:
+        raise RuntimeError("A senha deve ter pelo menos 8 caracteres.")
+
+    url = f"{base_url}/auth/v1/user"
+    resp = requests.put(url, headers=_auth_headers(), json={"password": new_password}, timeout=30)
+    if resp.status_code in (200, 204):
+        return
+
+    body = (resp.text or "")[:800]
+    raise RuntimeError(f"Falha ao trocar senha ({resp.status_code}): {body}")
+
+
+# =========================
+# DB helpers (tolerantes)
+# =========================
 def _safe_get_profile(supabase_db, user_id: str) -> Dict[str, Any]:
     try:
         res = (
@@ -209,6 +233,37 @@ def _safe_stats_pedidos(supabase_db, user_id: str) -> Dict[str, int]:
     return stats
 
 
+def _safe_last_pedidos(supabase_db, user_id: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """Tenta buscar os últimos pedidos do usuário.
+
+    Faz best-effort com diferentes nomes de colunas comuns.
+    """
+    # seleção ampla; se alguma coluna não existir, pode falhar -> cai no except e tenta outra seleção
+    selections = [
+        "id,numero,status,departamento,criado_em,atualizado_em,descricao,valor_total",
+        "id,status,departamento,criado_em,descricao,valor_total",
+        "id,status,criado_em,descricao",
+        "id,criado_em",
+    ]
+
+    for sel in selections:
+        try:
+            q = supabase_db.table("pedidos").select(sel).eq("criado_por", user_id)
+            # tenta ordenar por atualizado_em, senão criado_em
+            try:
+                q = q.order("atualizado_em", desc=True)
+            except Exception:
+                q = q.order("criado_em", desc=True)
+            res = q.limit(limit).execute()
+            data = getattr(res, "data", None)
+            if data is None and isinstance(res, dict):
+                data = res.get("data")
+            return data or []
+        except Exception:
+            continue
+    return []
+
+
 def _logout_clear_session():
     for k in [
         "auth_access_token",
@@ -224,8 +279,11 @@ def _logout_clear_session():
             del st.session_state[k]
 
 
+# =========================
+# UI
+# =========================
 def exibir_perfil(supabase_db):
-    """Aba Meu Perfil (melhorada)."""
+    """Aba Meu Perfil (v3)."""
     DEBUG = str(st.secrets.get("DEBUG", "false")).lower() in ("1", "true", "yes", "y")
 
     uid = _jwt_sub(st.session_state.get("auth_access_token"))
@@ -244,12 +302,12 @@ def exibir_perfil(supabase_db):
     email = (profile_row.get("email") or usuario.get("email") or st.session_state.get("auth_email") or "—").strip()
     nome_db = (profile_row.get("nome") or usuario.get("nome") or "—").strip()
     role = (usuario.get("perfil") or "user").upper()
-
     empresa = _get_empresa_atual()
 
     avatar_path = profile_row.get("avatar_path") or usuario.get("avatar_path") or f"{user_id}/avatar.png"
     avatar_bytes = _get_object_bytes_authenticated("avatars", avatar_path) if avatar_path else None
 
+    # Header
     st.markdown("## 👤 Meu Perfil")
     c1, c2 = st.columns([1, 2])
 
@@ -291,6 +349,7 @@ def exibir_perfil(supabase_db):
                 st.success("Você saiu da conta.")
                 st.rerun()
 
+    # KPIs (se conseguir)
     stats = _safe_stats_pedidos(supabase_db, user_id)
     if stats:
         cols = st.columns(min(4, len(stats)))
@@ -299,6 +358,9 @@ def exibir_perfil(supabase_db):
 
     tabs = st.tabs(["🏠 Visão geral", "📝 Perfil", "🖼 Avatar", "🔐 Segurança"])
 
+    # =========================
+    # Tab: Visão Geral
+    # =========================
     with tabs[0]:
         st.subheader("🏠 Visão geral")
         st.caption("Resumo da sua conta e atalhos.")
@@ -312,6 +374,27 @@ def exibir_perfil(supabase_db):
         with cC:
             st.warning("🏢 Empresa")
             st.caption(empresa or "Nenhuma selecionada (se aplicável).")
+
+        st.divider()
+        st.markdown("### 🧾 Meus últimos pedidos")
+        last = _safe_last_pedidos(supabase_db, user_id, limit=5)
+        if not last:
+            st.caption("Nenhum pedido encontrado (ou não foi possível ler a tabela/colunas).")
+        else:
+            # tabela enxuta com o que existir
+            rows = []
+            for p in last:
+                rows.append(
+                    {
+                        "ID": p.get("id"),
+                        "Nº": p.get("numero", ""),
+                        "Status": p.get("status", ""),
+                        "Depto": p.get("departamento", ""),
+                        "Criado em": p.get("criado_em", ""),
+                    }
+                )
+            st.dataframe(rows, use_container_width=True, hide_index=True)
+            st.caption("Atalho: se você tiver uma página de Consulta, posso transformar o ID em link/ação para abrir direto.")
 
         st.divider()
         st.markdown("### 📦 Exportar meus dados")
@@ -334,6 +417,9 @@ def exibir_perfil(supabase_db):
             use_container_width=True,
         )
 
+    # =========================
+    # Tab: Perfil
+    # =========================
     with tabs[1]:
         st.subheader("📝 Dados do perfil")
         novo_nome = st.text_input(
@@ -363,6 +449,9 @@ def exibir_perfil(supabase_db):
                 except Exception as e:
                     st.error(f"Falha ao salvar: {e}")
 
+    # =========================
+    # Tab: Avatar
+    # =========================
     with tabs[2]:
         st.subheader("🖼 Avatar")
         st.caption("Use PNG/JPG. O arquivo fica em `avatars/<user_id>/avatar.ext` (privado).")
@@ -448,25 +537,51 @@ def exibir_perfil(supabase_db):
             st.success("✅ Avatar removido!")
             st.rerun()
 
+    # =========================
+    # Tab: Segurança
+    # =========================
     with tabs[3]:
         st.subheader("🔐 Segurança")
         st.caption("Ações rápidas da conta.")
 
-        cS1, cS2 = st.columns([1, 1])
-        with cS1:
-            if st.button("📩 Enviar link de redefinição de senha", use_container_width=True, key="perfil_recover_btn"):
-                try:
-                    _send_password_recovery(email)
-                    st.success("✅ Link enviado! Verifique seu email.")
-                    st.caption("Se não chegar, verifique Spam e as Redirect URLs no Supabase Auth.")
-                except Exception as e:
-                    st.error(f"Falha ao enviar: {e}")
+        st.markdown("### 🔁 Trocar senha (logado)")
+        cP1, cP2 = st.columns([1, 1])
+        with cP1:
+            nova = st.text_input("Nova senha", type="password", key="perfil_nova_senha")
+        with cP2:
+            confirmar = st.text_input("Confirmar nova senha", type="password", key="perfil_confirmar_senha")
 
-        with cS2:
+        col_btn1, col_btn2 = st.columns([1, 1])
+        with col_btn1:
+            if st.button("✅ Trocar senha", use_container_width=True, key="perfil_trocar_senha_btn"):
+                if not nova or len(nova) < 8:
+                    st.error("A senha deve ter pelo menos 8 caracteres.")
+                elif nova != confirmar:
+                    st.error("A confirmação não confere.")
+                else:
+                    try:
+                        _change_password(nova)
+                        st.success("✅ Senha atualizada!")
+                        st.caption("Se você usa regras de senha no Supabase, elas podem exigir complexidade.")
+                    except Exception as e:
+                        st.error(f"Falha ao trocar senha: {e}")
+
+        with col_btn2:
             if st.button("🚪 Sair", use_container_width=True, key="perfil_logout_btn_security"):
                 _logout_clear_session()
                 st.success("Você saiu da conta.")
                 st.rerun()
+
+        st.divider()
+        st.markdown("### 📩 Recuperação por email")
+        st.caption("Envia um link para redefinir senha (útil se preferir fluxo por email).")
+        if st.button("📩 Enviar link de redefinição", use_container_width=True, key="perfil_recover_btn"):
+            try:
+                _send_password_recovery(email)
+                st.success("✅ Link enviado! Verifique seu email.")
+                st.caption("Se não chegar, verifique Spam e as Redirect URLs no Supabase Auth.")
+            except Exception as e:
+                st.error(f"Falha ao enviar: {e}")
 
         st.divider()
         st.markdown("### ℹ️ Informações")
