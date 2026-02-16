@@ -30,7 +30,7 @@ def _storage_headers() -> dict:
     if not url or not anon:
         raise RuntimeError("Faltam SUPABASE_URL / SUPABASE_ANON_KEY em st.secrets.")
     if not token:
-        raise RuntimeError("Sem auth_access_token na sessão (usuário não autenticado)." কাম)
+        raise RuntimeError("Sem auth_access_token na sessão (usuário não autenticado).")
 
     return {
         "Authorization": f"Bearer {token}",
