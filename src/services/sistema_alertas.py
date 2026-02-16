@@ -1035,82 +1035,79 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                         st.dataframe(rank, use_container_width=True, hide_index=True)
             except Exception:
                 pass
-
-            departamentos = sorted(
-                list({safe_text(p.get("departamento", "N/A")) for p in pedidos_base})
-            )
-            fornecedores = sorted(
-                list({safe_text(p.get("fornecedor", "N/A")) for p in pedidos_base})
-            )
-
-            col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
-
+            col_filtro1, col_filtro2 = st.columns([3, 5])
             with col_filtro1:
                 ordem = st.selectbox(
-                    "Ordenar por:",
+                    "Ordenar",
                     [
-                        "Dias de Atraso (maior primeiro)",
-                        "Dias de Atraso (menor primeiro)",
-                        "Valor (maior primeiro)",
-                        "Valor (menor primeiro)",
+                        "Dias (maior)",
+                        "Dias (menor)",
+                        "Valor (maior)",
+                        "Valor (menor)",
                     ],
                     key="filtro_atrasados_ordem",
+                    label_visibility="collapsed",
                 )
-
             with col_filtro2:
-                dept_filtro = st.multiselect(
-                    "Filtrar por Departamento:",
-                    options=departamentos,
-                    default=[],
-                    key="filtro_atrasados_dept",
-                )
+                busca = st.text_input("Buscar (OC/descrição/fornecedor)", value="", key="filtro_atrasados_busca", label_visibility="collapsed")
 
-            with col_filtro3:
-                fornecedor_filtro = st.multiselect(
-                    "Filtrar por Fornecedor:",
-                    options=fornecedores,
-                    default=[],
-                    key="filtro_atrasados_fornecedor",
-                )
-
-            if "Dias de Atraso (maior primeiro)" in ordem:
+            if "Dias (maior)" in ordem:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("dias_atraso", 0), reverse=True)
-            elif "Dias de Atraso (menor primeiro)" in ordem:
+            elif "Dias (menor)" in ordem:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("dias_atraso", 0))
-            elif "Valor (maior primeiro)" in ordem:
+            elif "Valor (maior)" in ordem:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("valor", 0), reverse=True)
-            elif "Valor (menor primeiro)" in ordem:
+            elif "Valor (menor)" in ordem:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("valor", 0))
             else:
                 pedidos_filtrados = pedidos_base
 
-            if dept_filtro:
-                pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get("departamento", "N/A")) in dept_filtro]
-
-            if fornecedor_filtro:
-                pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get("fornecedor", "N/A")) in fornecedor_filtro]
-
+            # Busca simples (usa filtros globais já aplicados)
+            if busca:
+                b = busca.strip().lower()
+                def _hit(p):
+                    return (b in str(p.get('nr_oc','')).lower() or b in str(p.get('descricao','')).lower() or b in str(p.get('fornecedor','')).lower())
+                pedidos_filtrados = [p for p in pedidos_filtrados if _hit(p)]
             st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos atrasados")
 
-            pagina_itens, _total_itens, _total_paginas, _per_page = _paginate(pedidos_filtrados, "tab_atrasados", per_page_default=10)
-            st.caption(f"📄 Página {int(st.session_state.get('tab_atrasados_page', 1))}/{_total_paginas} — exibindo {len(pagina_itens)} de {len(pedidos_filtrados)}")
+                        # Toolbar (paginação + lote) — compacto
+            t1, t2, t3, t4, t5, t6 = st.columns([2, 2, 2, 2, 3, 5])
+            with t1:
+                per_page = st.selectbox("Por pág.", [10, 20, 30, 50], index=0, key="tab_atrasados_pp", label_visibility="collapsed")
+            with t2:
+                prev = st.button("◀", key="tab_atrasados_prev2", use_container_width=True, disabled=int(st.session_state.get("tab_atrasados_page", 1)) <= 1)
+            with t3:
+                st.markdown(f"<div style='text-align:center; padding:4px 10px; border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-weight:900;'>{int(st.session_state.get('tab_atrasados_page',1))}</div>", unsafe_allow_html=True)
+            with t4:
+                nextb = st.button("▶", key="tab_atrasados_next2", use_container_width=True)
+            with t5:
+                bulk_status = st.selectbox("Status", ["Novo", "Em andamento", "Resolvido"], key="tab_atrasados_bulk_status", label_visibility="collapsed")
+            with t6:
+                cA, cB, cC = st.columns([2,2,3])
+                with cA:
+                    marcar_pagina = st.button("Selecionar pág.", key="tab_atrasados_sel_page", use_container_width=True)
+                with cB:
+                    limpar_sel = st.button("Limpar", key="tab_atrasados_clear_sel", use_container_width=True)
+                with cC:
+                    aplicar_lote = st.button("Aplicar", key="tab_atrasados_apply_bulk", use_container_width=True)
 
-            
-            # Ações em lote (na página atual)
-            bulk_c1, bulk_c2, bulk_c3, bulk_c4 = st.columns([3, 2, 2, 4])
-            with bulk_c1:
-                bulk_status = st.selectbox(
-                    "Status (lote)",
-                    options=["Novo", "Em andamento", "Resolvido"],
-                    index=0,
-                    key="tab_atrasados_bulk_status",
-                )
-            with bulk_c2:
-                marcar_pagina = st.button("✅ Selecionar página", key="tab_atrasados_sel_page", use_container_width=True)
-            with bulk_c3:
-                limpar_sel = st.button("🧹 Limpar", key="tab_atrasados_clear_sel", use_container_width=True)
-            with bulk_c4:
-                aplicar_lote = st.button("⚡ Aplicar aos selecionados", key="tab_atrasados_apply_bulk", use_container_width=True)
+            # Paginação (estado)
+            total = len(pedidos_filtrados)
+            total_pages = max(1, int(math.ceil(total / per_page)))
+            page_key = "tab_atrasados_page"
+            page = int(st.session_state.get(page_key, 1))
+            if prev:
+                page -= 1
+            if nextb:
+                page += 1
+            page = max(1, min(total_pages, page))
+            st.session_state[page_key] = int(page)
+
+            start_i = (page - 1) * per_page
+            end_i = start_i + per_page
+            pagina_itens = pedidos_filtrados[start_i:end_i]
+
+            st.caption(f"📄 Página {page}/{total_pages} — exibindo {len(pagina_itens)} de {total}")
 
             if marcar_pagina or limpar_sel:
                 for _i, _p in enumerate(pagina_itens):
@@ -1144,67 +1141,83 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         pedidos_base = _apply_global_pedidos(alertas.get("pedidos_vencendo", []))
 
         if pedidos_base:
-            fornecedores_venc = sorted(
-                list({safe_text(p.get("fornecedor", "N/A")) for p in pedidos_base})
-            )
-
-            col_filtro1, col_filtro2 = st.columns(2)
+            col_filtro1, col_filtro2 = st.columns([3, 5])
 
             with col_filtro1:
                 ordem_venc = st.selectbox(
-                    "Ordenar por:",
+                    "Ordenar",
                     [
-                        "Dias Restantes (menor primeiro)",
-                        "Dias Restantes (maior primeiro)",
-                        "Valor (maior primeiro)",
-                        "Valor (menor primeiro)",
+                        "Dias restantes (menor)",
+                        "Dias restantes (maior)",
+                        "Valor (maior)",
+                        "Valor (menor)",
                     ],
                     key="filtro_vencendo_ordem",
+                    label_visibility="collapsed",
                 )
 
             with col_filtro2:
-                fornecedor_venc_filtro = st.multiselect(
-                    "Filtrar por Fornecedor:",
-                    options=fornecedores_venc,
-                    default=[],
-                    key="filtro_vencendo_fornecedor",
-                )
+                busca = st.text_input("Buscar (OC/descrição/fornecedor)", value="", key="filtro_vencendo_busca", label_visibility="collapsed")
 
-            if "Dias Restantes (menor primeiro)" in ordem_venc:
+            if "Dias restantes (menor)" in ordem_venc:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("dias_restantes", 0))
-            elif "Dias Restantes (maior primeiro)" in ordem_venc:
+            elif "Dias restantes (maior)" in ordem_venc:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("dias_restantes", 0), reverse=True)
-            elif "Valor (maior primeiro)" in ordem_venc:
+            elif "Valor (maior)" in ordem_venc:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("valor", 0), reverse=True)
-            elif "Valor (menor primeiro)" in ordem_venc:
+            elif "Valor (menor)" in ordem_venc:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("valor", 0))
             else:
                 pedidos_filtrados = pedidos_base
 
-            if fornecedor_venc_filtro:
+            # Busca simples (usa filtros globais já aplicados)
+            if busca:
+                b = busca.strip().lower()
+                def _hit(p):
+                    return (b in str(p.get('nr_oc','')).lower() or b in str(p.get('descricao','')).lower() or b in str(p.get('fornecedor','')).lower())
+                pedidos_filtrados = [p for p in pedidos_filtrados if _hit(p)]
                 pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get("fornecedor", "N/A")) in fornecedor_venc_filtro]
 
             st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos vencendo")
 
-            pagina_itens, _total_itens, _total_paginas, _per_page = _paginate(pedidos_filtrados, "tab_vencendo", per_page_default=10)
-            st.caption(f"📄 Página {int(st.session_state.get('tab_vencendo_page', 1))}/{_total_paginas} — exibindo {len(pagina_itens)} de {len(pedidos_filtrados)}")
+                        # Toolbar (paginação + lote) — compacto
+            t1, t2, t3, t4, t5, t6 = st.columns([2, 2, 2, 2, 3, 5])
+            with t1:
+                per_page = st.selectbox("Por pág.", [10, 20, 30, 50], index=0, key="tab_vencendo_pp", label_visibility="collapsed")
+            with t2:
+                prev = st.button("◀", key="tab_vencendo_prev2", use_container_width=True, disabled=int(st.session_state.get("tab_vencendo_page", 1)) <= 1)
+            with t3:
+                st.markdown(f"<div style='text-align:center; padding:4px 10px; border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-weight:900;'>{int(st.session_state.get('tab_vencendo_page',1))}</div>", unsafe_allow_html=True)
+            with t4:
+                nextb = st.button("▶", key="tab_vencendo_next2", use_container_width=True)
+            with t5:
+                bulk_status = st.selectbox("Status", ["Novo", "Em andamento", "Resolvido"], key="tab_vencendo_bulk_status", label_visibility="collapsed")
+            with t6:
+                cA, cB, cC = st.columns([2,2,3])
+                with cA:
+                    marcar_pagina = st.button("Selecionar pág.", key="tab_vencendo_sel_page", use_container_width=True)
+                with cB:
+                    limpar_sel = st.button("Limpar", key="tab_vencendo_clear_sel", use_container_width=True)
+                with cC:
+                    aplicar_lote = st.button("Aplicar", key="tab_vencendo_apply_bulk", use_container_width=True)
 
-            
-            # Ações em lote (na página atual)
-            bulk_c1, bulk_c2, bulk_c3, bulk_c4 = st.columns([3, 2, 2, 4])
-            with bulk_c1:
-                bulk_status = st.selectbox(
-                    "Status (lote)",
-                    options=["Novo", "Em andamento", "Resolvido"],
-                    index=0,
-                    key="tab_vencendo_bulk_status",
-                )
-            with bulk_c2:
-                marcar_pagina = st.button("✅ Selecionar página", key="tab_vencendo_sel_page", use_container_width=True)
-            with bulk_c3:
-                limpar_sel = st.button("🧹 Limpar", key="tab_vencendo_clear_sel", use_container_width=True)
-            with bulk_c4:
-                aplicar_lote = st.button("⚡ Aplicar aos selecionados", key="tab_vencendo_apply_bulk", use_container_width=True)
+            # Paginação (estado)
+            total = len(pedidos_filtrados)
+            total_pages = max(1, int(math.ceil(total / per_page)))
+            page_key = "tab_vencendo_page"
+            page = int(st.session_state.get(page_key, 1))
+            if prev:
+                page -= 1
+            if nextb:
+                page += 1
+            page = max(1, min(total_pages, page))
+            st.session_state[page_key] = int(page)
+
+            start_i = (page - 1) * per_page
+            end_i = start_i + per_page
+            pagina_itens = pedidos_filtrados[start_i:end_i]
+
+            st.caption(f"📄 Página {page}/{total_pages} — exibindo {len(pagina_itens)} de {total}")
 
             if marcar_pagina or limpar_sel:
                 for _i, _p in enumerate(pagina_itens):
@@ -1237,83 +1250,80 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         pedidos_base = _apply_global_pedidos(alertas.get('pedidos_criticos', []))
 
         if pedidos_base:
-            # Extrair departamentos e fornecedores únicos
-            departamentos_crit = sorted(list(set(
-                [safe_text(p.get('departamento', 'N/A')) for p in pedidos_base]
-            )))
-            
-            fornecedores_crit = sorted(list(set(
-                [safe_text(p.get('fornecedor', 'N/A')) for p in pedidos_base]
-            )))
-            
-            # Filtros
-            col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
-            
+            # Controles (sem filtros repetidos: dept/forn já estão no filtro global)
+            col_filtro1, col_filtro2 = st.columns([3, 5])
+
             with col_filtro1:
                 ordem_crit = st.selectbox(
-                    "Ordenar por:",
-                    ["Valor (maior primeiro)", "Valor (menor primeiro)", 
-                     "Previsão (próxima primeiro)"],
-                    key="filtro_criticos_ordem"
+                    "Ordenar",
+                    ["Valor (maior)", "Valor (menor)", "Previsão (próxima)"],
+                    key="filtro_criticos_ordem",
+                    label_visibility="collapsed",
                 )
-            
+
             with col_filtro2:
-                dept_crit_filtro = st.multiselect(
-                    "Filtrar por Departamento:",
-                    options=departamentos_crit,
-                    default=[],
-                    key="filtro_criticos_dept"
-                )
-            
-            with col_filtro3:
-                fornecedor_crit_filtro = st.multiselect(
-                    "Filtrar por Fornecedor:",
-                    options=fornecedores_crit,
-                    default=[],
-                    key="filtro_criticos_fornecedor"
-                )
+                busca = st.text_input("Buscar (OC/descrição/fornecedor)", value="", key="filtro_criticos_busca", label_visibility="collapsed")
             
             # Aplicar ordenação
-            if "Valor (maior primeiro)" in ordem_crit:
+            if "Valor (maior)" in ordem_crit:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get('valor', 0), reverse=True)
-            elif "Valor (menor primeiro)" in ordem_crit:
+            elif "Valor (menor)" in ordem_crit:
                 pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get('valor', 0))
-            elif "Previsão (próxima primeiro)" in ordem_crit:
+            elif "Previsão (próxima)" in ordem_crit:
                 pedidos_filtrados = sorted(pedidos_base, 
                                           key=lambda x: pd.to_datetime(x.get('previsao', '')) if x.get('previsao') else pd.Timestamp.max)
             else:
                 pedidos_filtrados = pedidos_base
-            
-            # Aplicar filtros de departamento
-            if dept_crit_filtro:
-                pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get('departamento', 'N/A')) in dept_crit_filtro]
-            
-            # Aplicar filtros de fornecedor
-            if fornecedor_crit_filtro:
+
+            # Busca simples (usa filtros globais já aplicados)
+            if busca:
+                b = busca.strip().lower()
+                def _hit(p):
+                    return (b in str(p.get('nr_oc','')).lower() or b in str(p.get('descricao','')).lower() or b in str(p.get('fornecedor','')).lower())
+                pedidos_filtrados = [p for p in pedidos_filtrados if _hit(p)]
                 pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get('fornecedor', 'N/A')) in fornecedor_crit_filtro]
             
             # Mostrar contador
             st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos críticos")
 
-            pagina_itens, _total_itens, _total_paginas, _per_page = _paginate(pedidos_filtrados, "tab_criticos", per_page_default=10)
-            st.caption(f"📄 Página {int(st.session_state.get('tab_criticos_page', 1))}/{_total_paginas} — exibindo {len(pagina_itens)} de {len(pedidos_filtrados)}")
+                        # Toolbar (paginação + lote) — compacto
+            t1, t2, t3, t4, t5, t6 = st.columns([2, 2, 2, 2, 3, 5])
+            with t1:
+                per_page = st.selectbox("Por pág.", [10, 20, 30, 50], index=0, key="tab_criticos_pp", label_visibility="collapsed")
+            with t2:
+                prev = st.button("◀", key="tab_criticos_prev2", use_container_width=True, disabled=int(st.session_state.get("tab_criticos_page", 1)) <= 1)
+            with t3:
+                st.markdown(f"<div style='text-align:center; padding:4px 10px; border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-weight:900;'>{int(st.session_state.get('tab_criticos_page',1))}</div>", unsafe_allow_html=True)
+            with t4:
+                nextb = st.button("▶", key="tab_criticos_next2", use_container_width=True)
+            with t5:
+                bulk_status = st.selectbox("Status", ["Novo", "Em andamento", "Resolvido"], key="tab_criticos_bulk_status", label_visibility="collapsed")
+            with t6:
+                cA, cB, cC = st.columns([2,2,3])
+                with cA:
+                    marcar_pagina = st.button("Selecionar pág.", key="tab_criticos_sel_page", use_container_width=True)
+                with cB:
+                    limpar_sel = st.button("Limpar", key="tab_criticos_clear_sel", use_container_width=True)
+                with cC:
+                    aplicar_lote = st.button("Aplicar", key="tab_criticos_apply_bulk", use_container_width=True)
 
-            
-            # Ações em lote (na página atual)
-            bulk_c1, bulk_c2, bulk_c3, bulk_c4 = st.columns([3, 2, 2, 4])
-            with bulk_c1:
-                bulk_status = st.selectbox(
-                    "Status (lote)",
-                    options=["Novo", "Em andamento", "Resolvido"],
-                    index=0,
-                    key="tab_criticos_bulk_status",
-                )
-            with bulk_c2:
-                marcar_pagina = st.button("✅ Selecionar página", key="tab_criticos_sel_page", use_container_width=True)
-            with bulk_c3:
-                limpar_sel = st.button("🧹 Limpar", key="tab_criticos_clear_sel", use_container_width=True)
-            with bulk_c4:
-                aplicar_lote = st.button("⚡ Aplicar aos selecionados", key="tab_criticos_apply_bulk", use_container_width=True)
+            # Paginação (estado)
+            total = len(pedidos_filtrados)
+            total_pages = max(1, int(math.ceil(total / per_page)))
+            page_key = "tab_criticos_page"
+            page = int(st.session_state.get(page_key, 1))
+            if prev:
+                page -= 1
+            if nextb:
+                page += 1
+            page = max(1, min(total_pages, page))
+            st.session_state[page_key] = int(page)
+
+            start_i = (page - 1) * per_page
+            end_i = start_i + per_page
+            pagina_itens = pedidos_filtrados[start_i:end_i]
+
+            st.caption(f"📄 Página {page}/{total_pages} — exibindo {len(pagina_itens)} de {total}")
 
             if marcar_pagina or limpar_sel:
                 for _i, _p in enumerate(pagina_itens):
@@ -1329,7 +1339,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                     _base_key = f"critico_{_aid}_{_nr}_{_i}"
                     if bool(st.session_state.get(f"sel_{_base_key}", False)):
                         set_alert_status(_aid, bulk_status)
-            
+
             if pagina_itens:
                 st.warning("⚠️ Pedidos de alto valor com previsão de entrega próxima")
                 
