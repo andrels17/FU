@@ -300,8 +300,8 @@ def _safe_last_pedidos(supabase_db, user_id: str, limit: int = 5) -> List[Dict[s
     """
     # seleção ampla; se alguma coluna não existir, pode falhar -> cai no except e tenta outra seleção
     selections = [
-        "id,numero,status,departamento,criado_em,atualizado_em,descricao,valor_total",
-        "id,status,departamento,criado_em,descricao,valor_total",
+        "id,numero,status,departamento,cod_equipamento,criado_em,atualizado_em,descricao,valor_total",
+        "id,status,departamento,cod_equipamento,criado_em,descricao,valor_total",
         "id,status,criado_em,descricao",
         "id,criado_em",
     ]
@@ -461,11 +461,13 @@ def exibir_perfil(supabase_db):
                 numero = p.get("numero") or ""
                 status = p.get("status") or ""
                 depto = p.get("departamento") or ""
+                cod_eq = (p.get("cod_equipamento") or "").strip()
                 descricao = (p.get("descricao") or "").strip()
                 criado_em = _fmt_dt_br(p.get("criado_em"))
                 valor = _fmt_money_br(p.get("valor_total"))
 
-                cA, cB, cC, cD, cE, cF = st.columns([0.9, 2.6, 1.2, 1.1, 1.1, 1.0])
+                # Agrupado: descrição + equipamento + depto (visual mais limpo)
+                cA, cB, cC, cD, cE = st.columns([0.9, 4.2, 1.2, 1.1, 1.0])
                 with cA:
                     if st.button("🔎 Abrir", key=f"perfil_open_{pid}", use_container_width=True):
                         # Navega para Consulta > Ações
@@ -475,27 +477,30 @@ def exibir_perfil(supabase_db):
                         st.session_state["consulta_tab_target"] = "⚡ Ações"
                         st.rerun()
                 with cB:
-                    # Mostra a descrição do material (quando existir) em vez do ID
-                    if descricao:
-                        short = descricao if len(descricao) <= 60 else (descricao[:57] + "…")
-                        st.markdown(f"**{short}**")
-                        if numero:
-                            st.caption(f"Material · Nº {numero}")
-                        else:
-                            st.caption("Material")
+                    # Mostra a descrição do material (quando existir) e agrupa metadados
+                    titulo = descricao or (numero or str(pid)[:8])
+                    titulo = titulo.strip() if isinstance(titulo, str) else str(titulo)
+                    titulo = titulo if len(titulo) <= 74 else (titulo[:71] + "…")
+                    st.markdown(f"**{titulo}**")
+
+                    meta_parts = []
+                    if cod_eq:
+                        meta_parts.append(f"Equip.: {cod_eq}")
+                    if depto:
+                        meta_parts.append(f"Depto: {depto}")
+                    if numero:
+                        meta_parts.append(f"Nº {numero}")
+                    if meta_parts:
+                        st.caption(" · ".join(meta_parts))
                     else:
-                        st.markdown(f"**{numero or str(pid)[:8]}**")
-                        st.caption("Nº" if numero else "ID")
+                        st.caption("Material")
                 with cC:
                     st.markdown(_status_pill(status), unsafe_allow_html=True)
                     st.caption("Status")
                 with cD:
-                    st.write(depto or "—")
-                    st.caption("Depto")
-                with cE:
                     st.write(criado_em or "—")
                     st.caption("Criado")
-                with cF:
+                with cE:
                     st.write(valor or "—")
                     st.caption("Valor")
 
