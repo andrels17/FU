@@ -187,7 +187,7 @@ def _validate_upload_df(df_upload: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
     return df, df_erros
 
 
-def _resolve_import_plan(_supabase, df: pd.DataFrame, modo_importacao: str) -> tuple[int, int]:
+def _resolve_import_plan(_supabase, df: pd.DataFrame, modo_importacao: str, tenant_id: str | None = None) -> tuple[int, int]:
     """
     Calcula quantos serão inseridos/atualizados (pré-visualização).
     Só considera atualização por nr_oc quando modo é 'Atualizar...'
@@ -206,7 +206,10 @@ def _resolve_import_plan(_supabase, df: pd.DataFrame, modo_importacao: str) -> t
 
     # busca existentes
     try:
-        res = _supabase.table("pedidos").select("nr_oc").in_("nr_oc", ocs).execute()
+        q = _supabase.table("pedidos").select("nr_oc").in_("nr_oc", ocs)
+        if tenant_id:
+            q = q.eq("tenant_id", str(tenant_id))
+        res = q.execute()
         existentes = set([r["nr_oc"] for r in (res.data or []) if r.get("nr_oc")])
     except Exception:
         # fallback simples (sem quebrar)
@@ -622,7 +625,11 @@ def exibir_gestao_pedidos(_supabase):
                     ocs = [x for x in ocs.tolist() if x]
                     if ocs:
                         try:
-                            res = _supabase.table("pedidos").select("nr_oc").in_("nr_oc", ocs).execute()
+                            q = _supabase.table("pedidos").select("nr_oc").in_("nr_oc", ocs)
+                            _tid = st.session_state.get("tenant_id")
+                            if _tid:
+                                q = q.eq("tenant_id", str(_tid))
+                            res = q.execute()
                             existentes = set([r["nr_oc"] for r in (res.data or []) if r.get("nr_oc")])
                             duplicados_oc = sum(1 for oc in ocs if oc in existentes)
                         except Exception:
@@ -640,7 +647,7 @@ def exibir_gestao_pedidos(_supabase):
                     df_norm = df_norm[~df_norm["nr_oc"].fillna("").astype(str).str.strip().isin(existentes)]
 
                 # Pré-visualização do que vai acontecer
-                insere_prev, atualiza_prev = _resolve_import_plan(_supabase, df_norm, modo_importacao)
+                insere_prev, atualiza_prev = _resolve_import_plan(_supabase, df_norm, modo_importacao, tenant_id=st.session_state.get("tenant_id"))
                 cprev1, cprev2, cprev3 = st.columns(3)
                 cprev1.metric("Registros válidos", len(df_norm))
                 cprev2.metric("Previsão inserir", int(insere_prev))
@@ -767,7 +774,7 @@ def exibir_gestao_pedidos(_supabase):
                             ocs = [x for x in ocs.tolist() if x]
                             if ocs:
                                 try:
-                                    res_oc = _supabase.table("pedidos").select("id,nr_oc").in_("nr_oc", ocs).execute()
+                                    res_oc = _supabase.table("pedidos").select("id,nr_oc").eq("tenant_id", tenant_id).in_("nr_oc", ocs).execute()
                                     for r in (res_oc.data or []):
                                         nr_oc_db = str(r.get("nr_oc") or "").strip()
                                         if nr_oc_db:
@@ -782,7 +789,7 @@ def exibir_gestao_pedidos(_supabase):
                             sols = [x for x in sols.tolist() if x]
                             if sols:
                                 try:
-                                    res_sol = _supabase.table("pedidos").select("id,nr_solicitacao,nr_oc").in_("nr_solicitacao", sols).execute()
+                                    res_sol = _supabase.table("pedidos").select("id,nr_solicitacao,nr_oc").eq("tenant_id", tenant_id).in_("nr_solicitacao", sols).execute()
                                     for r in (res_sol.data or []):
                                         sol_db = str(r.get("nr_solicitacao") or "").strip()
                                         oc_db = str(r.get("nr_oc") or "").strip()
@@ -798,19 +805,33 @@ def exibir_gestao_pedidos(_supabase):
 
                         for idx, row in df_norm.iterrows():
                             try:
-                                # Idempotência inteligente:
+                                # -------------------------------------------------
+                                # Idempotência (evita duplicar / garante update)
                                 # - Se tiver nr_oc e já existir: atualiza
                                 # - Se NÃO tiver nr_oc e tiver nr_solicitacao:
                                 #     * se solicitação já tem OC no banco: pula (não sobrescreve)
                                 #     * se solicitação existir sem OC: atualiza
+                                # -------------------------------------------------
                                 pedido_id_existente = None
 
-                                if modo_importacao == "Adicionar novos pedidos":
-                                    nr_oc_row = str(row.get("nr_oc") or "").strip()
-                                    nr_sol_row = str(row.get("nr_solicitacao") or "").strip()
+                                nr_oc_row = str(row.get("nr_oc") or "").strip()
+                                nr_sol_row = str(row.get("nr_solicitacao") or "").strip()
 
+                                if modo_importacao == "Adicionar novos pedidos":
+                                    # Se OC já existe:
                                     if nr_oc_row and nr_oc_row in oc_to_id:
+                                        if pular_duplicados:
+                                            avisos.append(f"Linha {idx + 2}: OC {nr_oc_row} já existe — pulado")
+                                            registros_pulados_dup += 1
+                                            registros_processados += 1
+                                            if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
+                                                progress_bar.progress(min(1.0, registros_processados / total_rows))
+                                                status_txt.caption(f"Processando {registros_processados}/{total_rows}...")
+                                            continue
+                                        # se não estiver pulando, atualiza (em vez de duplicar)
                                         pedido_id_existente = oc_to_id[nr_oc_row]
+
+                                    # Se não tem OC, tenta idempotência por solicitação
                                     elif (not nr_oc_row) and nr_sol_row:
                                         if nr_sol_row in sol_com_oc:
                                             avisos.append(
@@ -824,6 +845,26 @@ def exibir_gestao_pedidos(_supabase):
                                             continue
                                         if nr_sol_row in sol_to_id_sem_oc:
                                             pedido_id_existente = sol_to_id_sem_oc[nr_sol_row]
+
+                                elif modo_importacao == "Atualizar pedidos existentes (por N° OC)":
+                                    # Atualização preferencial por OC
+                                    if nr_oc_row and nr_oc_row in oc_to_id:
+                                        pedido_id_existente = oc_to_id[nr_oc_row]
+                                    # Se não há OC, tenta atualizar por solicitação (quando possível)
+                                    elif (not nr_oc_row) and nr_sol_row:
+                                        if nr_sol_row in sol_com_oc:
+                                            avisos.append(
+                                                f"Linha {idx + 2}: Solicitação {nr_sol_row} já possui OC no banco — ignorado para evitar sobrescrita"
+                                            )
+                                            registros_pulados_dup += 1
+                                            registros_processados += 1
+                                            if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
+                                                progress_bar.progress(min(1.0, registros_processados / total_rows))
+                                                status_txt.caption(f"Processando {registros_processados}/{total_rows}...")
+                                            continue
+                                        if nr_sol_row in sol_to_id_sem_oc:
+                                            pedido_id_existente = sol_to_id_sem_oc[nr_sol_row]
+
                                 fornecedor_id = None
 
                                 if "cod_fornecedor" in row and pd.notna(row["cod_fornecedor"]):
@@ -835,6 +876,7 @@ def exibir_gestao_pedidos(_supabase):
                                                 busca_forn = (
                                                     _supabase.table("fornecedores")
                                                     .select("id")
+                                                    .eq("tenant_id", tenant_id)
                                                     .eq("cod_fornecedor", cod_forn)
                                                     .execute()
                                                 )
@@ -869,6 +911,7 @@ def exibir_gestao_pedidos(_supabase):
                                                     busca_forn = (
                                                         _supabase.table("fornecedores")
                                                         .select("id")
+                                                        .eq("tenant_id", tenant_id)
                                                         .eq("cod_fornecedor", cod_forn)
                                                         .execute()
                                                     )
@@ -929,25 +972,25 @@ def exibir_gestao_pedidos(_supabase):
                                     "fornecedor_id": fornecedor_id,
                                 }
 
+                                # remove Nones (mas preserva campos numéricos)
                                 pedido_data = {
-                                    k: v for k, v in pedido_data.items() if v is not None or k in ["qtde_entregue", "valor_total"]
+                                    k: v
+                                    for k, v in pedido_data.items()
+                                    if v is not None or k in ["qtde_entregue", "valor_total"]
                                 }
 
-                                if modo_importacao == "Atualizar pedidos existentes (por N° OC)" and pedido_data.get("nr_oc"):
-                                    pedido_existente = (
-                                        _supabase.table("pedidos").select("id").eq("nr_oc", pedido_data["nr_oc"]).execute()
-                                    )
-                                    if pedido_existente.data:
-                                        _supabase.table("pedidos").update(pedido_data).eq("nr_oc", pedido_data["nr_oc"]).execute()
-                                        registros_atualizados += 1
-                                    else:
-                                        pedido_data["tenant_id"] = tenant_id
-                                        _supabase.table("pedidos").insert(pedido_data).execute()
-                                        registros_inseridos += 1
+                                # -------------------------------------------------
+                                # APPLY: update (por id) ou insert
+                                # -------------------------------------------------
+                                if pedido_id_existente:
+                                    # Atualiza por ID (mais seguro e rápido)
+                                    _supabase.table("pedidos").update(pedido_data).eq("id", pedido_id_existente).eq("tenant_id", tenant_id).execute()
+                                    registros_atualizados += 1
                                 else:
                                     pedido_data["tenant_id"] = tenant_id
                                     _supabase.table("pedidos").insert(pedido_data).execute()
                                     registros_inseridos += 1
+
                                 registros_processados += 1
                                 if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
                                     progress_bar.progress(min(1.0, registros_processados / total_rows))
