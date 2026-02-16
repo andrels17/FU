@@ -862,8 +862,8 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     # Se o usuário pediu "Limpar", agora que temos vmin/vmax, resetamos o slider
     if st.session_state.get("__reset_valor_range"):
         st.session_state["__reset_valor_range"] = False
-        st.session_state["alertas_global_valor_min_txt"] = str(int(vmin))
-        st.session_state["alertas_global_valor_max_txt"] = str(int(vmax))
+        st.session_state["alertas_global_valor_min_txt"] = ""
+        st.session_state["alertas_global_valor_max_txt"] = ""
 
     colg1, colg2, colg3, colg4 = st.columns([4,4,3.5,1.5])
     with colg1:
@@ -890,7 +890,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             # Faixa de valor (BR): inputs texto (R$) para evitar visual "técnico"
             def _fmt_br_int(x: float) -> str:
                 try:
-                    return f"{int(round(float(x))):,}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    return ("R$ " + f"{int(round(float(x))):,}").replace(",", "X").replace(".", ",").replace("X", ".")
                 except Exception:
                     return "0"
 
@@ -909,7 +909,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                     "",
                     value=st.session_state.get("alertas_global_valor_min_txt", _fmt_br_int(vmin)),
                     key="alertas_global_valor_min_txt",
-                    placeholder="Mín (ex: 1.000)",
+                    placeholder="Mín (ex: R$ 1.000)",
                     label_visibility="collapsed",
                 )
             with cmax:
@@ -917,7 +917,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                     "",
                     value=st.session_state.get("alertas_global_valor_max_txt", _fmt_br_int(vmax)),
                     key="alertas_global_valor_max_txt",
-                    placeholder="Máx (ex: 50.000)",
+                    placeholder="Máx (ex: R$ 50.000)",
                     label_visibility="collapsed",
                 )
 
@@ -928,7 +928,6 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             lo = float(max(vmin, min(vmax, min(vmin_in, vmax_in))))
             hi = float(max(vmin, min(vmax, max(vmin_in, vmax_in))))
             faixa_valor = (lo, hi)
-            st.markdown(f"<div style='text-align:right;font-size:12px;opacity:.75;margin-top:4px;'>R$ {faixa_valor[0]:,.0f} — R$ {faixa_valor[1]:,.0f}</div>".replace(',', 'X').replace('.', ',').replace('X','.'), unsafe_allow_html=True)
         else:
             faixa_valor = (0.0, 0.0)
             st.caption("Valor (global): sem dados")
