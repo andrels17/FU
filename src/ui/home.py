@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import textwrap
 from collections import defaultdict
+
 import streamlit as st
 
 
@@ -32,7 +33,6 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
 
     # -----------------------------
     # KPIs (corrigidos)
-    # Seu alertas é baseado em listas: pedidos_atrasados/criticos/vencendo :contentReference[oaicite:2]{index=2}
     # -----------------------------
     def _safe_list_len(v) -> int:
         try:
@@ -69,7 +69,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         st.rerun()
 
     # -----------------------------
-    # Helpers para lista "Top 5"
+    # Helpers
     # -----------------------------
     def _top_n(lista: list, n: int = 5):
         return list(lista or [])[:n]
@@ -95,7 +95,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         s = f"{float(v):,.0f}"
         return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
-    # Listas vindas do seu cálculo de alertas :contentReference[oaicite:3]{index=3}
+    # Listas vindas do seu cálculo de alertas
     lista_criticos = list(alertas.get("pedidos_criticos", []) or [])
     lista_atrasados = list(alertas.get("pedidos_atrasados", []) or [])
     lista_vencendo = list(alertas.get("pedidos_vencendo", []) or [])
@@ -106,7 +106,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
     vencendo_top = sorted(lista_vencendo, key=lambda p: _as_int((p or {}).get("dias_restantes", 0)))
 
     # -----------------------------
-    # CSS (SaaS internacional)
+    # CSS (SaaS internacional + KPIs compactos em chips)
     # -----------------------------
     st.markdown(
         textwrap.dedent(
@@ -138,29 +138,75 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
                 white-space: nowrap;
               }
 
-              .fu-grid { margin-top: 14px; display:grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
+              .fu-section-title { margin: 18px 0 10px 0; font-size: 1.05rem; font-weight: 900; opacity:.94; }
+              .fu-muted { opacity: .72; font-size: 0.92rem; }
+
+              /* KPI bar (chips) */
+              .fu-kpi-bar{
+                display:flex;
+                gap:10px;
+                margin-top: 12px;
+                margin-bottom: 6px;
+                flex-wrap: wrap;
+              }
+              .fu-kpi-chip{
+                flex: 1;
+                min-width: 220px;
+                border-radius: 999px;
+                padding: 10px 14px;
+                background: rgba(255,255,255,0.03);
+                border: 1px solid rgba(255,255,255,0.08);
+                display:flex;
+                align-items:center;
+                justify-content:space-between;
+                transition: transform .14s ease, border-color .14s ease, background-color .14s ease;
+              }
+              .fu-kpi-chip:hover{
+                transform: translateY(-1px);
+                border-color: rgba(245,158,11,0.25);
+                background: rgba(255,255,255,0.04);
+              }
+              .fu-kpi-left{
+                display:flex;
+                align-items:center;
+                gap:10px;
+              }
+              .fu-kpi-ico{
+                width: 30px;
+                height: 30px;
+                border-radius: 999px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                background: rgba(255,255,255,0.03);
+                border: 1px solid rgba(255,255,255,0.08);
+                font-size: 14px;
+              }
+              .fu-kpi-label{
+                font-size: 12px;
+                opacity: .72;
+                margin: 0;
+                line-height: 1.1;
+              }
+              .fu-kpi-value{
+                font-size: 18px;
+                font-weight: 900;
+                margin: 0;
+                letter-spacing: .2px;
+              }
+
+              /* Cards / lists */
               .fu-card {
-                border-radius: 18px;
-                padding: 16px 16px;
+                border-radius: 16px;
+                padding: 10px 14px;
                 background: rgba(255,255,255,0.035);
                 border: 1px solid rgba(255,255,255,0.08);
                 transition: transform .14s ease, border-color .14s ease, background-color .14s ease;
               }
               .fu-card:hover { transform: translateY(-2px); border-color: rgba(245,158,11,0.30); background: rgba(255,255,255,0.045); }
-              .fu-kpi-num { margin:0; font-size: 30px; font-weight: 950; letter-spacing: 0.2px; }
-              .fu-kpi-lbl { margin:2px 0 0 0; font-size: 12.5px; opacity: .75; }
 
-              .fu-section-title { margin: 18px 0 10px 0; font-size: 1.05rem; font-weight: 900; opacity:.94; }
-              .fu-note {
-                border-radius: 18px;
-                padding: 14px 16px;
-                background: linear-gradient(135deg, rgba(245,158,11,0.10), rgba(255,255,255,0.03));
-                border: 1px solid rgba(245,158,11,0.22);
-              }
-              .fu-note p { margin:0; opacity:.88; }
-
-              .fu-actions .stButton button { border-radius: 14px; height: 44px; }
-              .fu-muted { opacity: .72; font-size: 0.92rem; }
+              .fu-kpi-num { margin:0; font-size: 22px; font-weight: 850; letter-spacing: 0.2px; }
+              .fu-kpi-lbl { margin:2px 0 0 0; font-size: 11px; opacity: .70; }
 
               .fu-mini {
                 border-radius: 16px;
@@ -221,51 +267,41 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         unsafe_allow_html=True,
     )
 
-    # KPIs
-    st.markdown('<div class="fu-grid">', unsafe_allow_html=True)
-
+    # KPIs (chips compactos)
     st.markdown(
         f"""
-        <div class="fu-card" style="grid-column: span 4;">
-          <p class="fu-kpi-num">⚠️ {atrasados}</p>
-          <p class="fu-kpi-lbl">Pedidos atrasados</p>
+        <div class="fu-kpi-bar">
+          <div class="fu-kpi-chip">
+            <div class="fu-kpi-left">
+              <div class="fu-kpi-ico">⚠️</div>
+              <p class="fu-kpi-label">Pedidos atrasados</p>
+            </div>
+            <p class="fu-kpi-value">{atrasados}</p>
+          </div>
+
+          <div class="fu-kpi-chip">
+            <div class="fu-kpi-left">
+              <div class="fu-kpi-ico">🚨</div>
+              <p class="fu-kpi-label">Pedidos críticos</p>
+            </div>
+            <p class="fu-kpi-value">{criticos}</p>
+          </div>
+
+          <div class="fu-kpi-chip">
+            <div class="fu-kpi-left">
+              <div class="fu-kpi-ico">⏰</div>
+              <p class="fu-kpi-label">Vencendo / próximos</p>
+            </div>
+            <p class="fu-kpi-value">{vencendo}</p>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.markdown(
-        f"""
-        <div class="fu-card" style="grid-column: span 4;">
-          <p class="fu-kpi-num">🚨 {criticos}</p>
-          <p class="fu-kpi-lbl">Pedidos críticos</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"""
-        <div class="fu-card" style="grid-column: span 4;">
-          <p class="fu-kpi-num">⏰ {vencendo}</p>
-          <p class="fu-kpi-lbl">Vencendo / próximos</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
-    st.markdown("</div>", unsafe_allow_html=True)  # end grid
-
-    # Resumo operacional
-    st.markdown('<div class="fu-section-title">📌 Resumo operacional</div>', unsafe_allow_html=True)
-    if criticos > 0:
-        msg = f"🚨 Você tem {criticos} pedido(s) crítico(s). Priorize follow-up imediato."
-    elif atrasados > 0:
-        msg = f"⚠️ Existem {atrasados} pedido(s) atrasado(s). Recomendado acionar fornecedor e atualizar status."
-    elif vencendo > 0:
-        msg = f"⏰ Você tem {vencendo} pedido(s) vencendo em breve. Vale revisar prazos e pendências."
-    else:
-        msg = "✅ Tudo sob controle. Sem críticos/atrasos/vencimentos relevantes agora."
-    st.markdown(f'<div class="fu-note"><p>{msg}</p></div>', unsafe_allow_html=True)
-
+    # -----------------------------
+    # 🧠 Insights
+    # -----------------------------
     def _sum_valor(lista: list[dict]) -> float:
         total = 0.0
         for p in (lista or []):
@@ -274,7 +310,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             except Exception:
                 pass
         return float(total)
-    
+
     def _group_count(lista: list[dict], key: str) -> dict[str, int]:
         acc = defaultdict(int)
         for p in (lista or []):
@@ -283,7 +319,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
                 k = "Não informado"
             acc[k] += 1
         return dict(acc)
-    
+
     def _group_sum_valor(lista: list[dict], key: str) -> dict[str, float]:
         acc = defaultdict(float)
         for p in (lista or []):
@@ -295,17 +331,16 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             except Exception:
                 pass
         return dict(acc)
-    
+
     def _top_item(d: dict, by_value=True):
         if not d:
             return None, 0
         if by_value:
             k = max(d, key=lambda x: float(d.get(x) or 0))
             return k, float(d.get(k) or 0)
-        else:
-            k = max(d, key=lambda x: int(d.get(x) or 0))
-            return k, int(d.get(k) or 0)
-    
+        k = max(d, key=lambda x: int(d.get(x) or 0))
+        return k, int(d.get(k) or 0)
+
     def _pct(part: float, total: float) -> int:
         if total <= 0:
             return 0
@@ -313,45 +348,35 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             return int(round((part / total) * 100))
         except Exception:
             return 0
-    
-    # Reusa as listas que você já montou acima
-    # lista_criticos, lista_atrasados, lista_vencendo
-    
+
     valor_critico = _sum_valor(lista_criticos)
     valor_atrasado = _sum_valor(lista_atrasados)
     valor_risco_total = valor_critico + valor_atrasado
-    
-    # Concentração por departamento (atrasados)
+
     dept_counts = _group_count(lista_atrasados, "departamento")
     dept_top, dept_top_qtd = _top_item(dept_counts, by_value=False)
     dept_pct = _pct(dept_top_qtd, sum(dept_counts.values()) if dept_counts else 0)
-    
-    # Fornecedor mais crítico (por valor em risco = críticos + atrasados)
+
     forn_val = _group_sum_valor((lista_criticos or []) + (lista_atrasados or []), "fornecedor")
     forn_top, forn_top_valor = _top_item(forn_val, by_value=True)
-    
-    # Maior atraso observado
-    maior_atraso = 0
+
     try:
         maior_atraso = max([int((p or {}).get("dias_atraso") or 0) for p in (lista_atrasados or [])] or [0])
     except Exception:
         maior_atraso = 0
-    
-    # “Vencendo em 48h”
-    vencendo_48h = 0
+
     try:
         vencendo_48h = sum(1 for p in (lista_vencendo or []) if int((p or {}).get("dias_restantes") or 9999) <= 2)
     except Exception:
         vencendo_48h = 0
-    
+
     st.markdown('<div class="fu-section-title">🧠 Insights</div>', unsafe_allow_html=True)
-    
     i1, i2, i3 = st.columns(3)
-    
+
     with i1:
         st.markdown(
             f"""
-            <div class="fu-card" style="grid-column: span 4;">
+            <div class="fu-card">
               <p class="fu-kpi-num">💰 R$ {_moeda_br(valor_risco_total)}</p>
               <p class="fu-kpi-lbl">Risco financeiro (críticos + atrasados)</p>
               <p class="fu-item-desc" style="margin-top:8px;">
@@ -362,12 +387,12 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             """,
             unsafe_allow_html=True,
         )
-    
+
     with i2:
         if dept_top and sum(dept_counts.values()) > 0:
             st.markdown(
                 f"""
-                <div class="fu-card" style="grid-column: span 4;">
+                <div class="fu-card">
                   <p class="fu-kpi-num">🏭 {dept_pct}%</p>
                   <p class="fu-kpi-lbl">{dept_top} concentra {dept_pct}% dos atrasos</p>
                   <p class="fu-item-desc" style="margin-top:8px;">
@@ -380,7 +405,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         else:
             st.markdown(
                 """
-                <div class="fu-card" style="grid-column: span 4;">
+                <div class="fu-card">
                   <p class="fu-kpi-num">🏭 —</p>
                   <p class="fu-kpi-lbl">Sem atrasos para calcular concentração</p>
                   <p class="fu-item-desc" style="margin-top:8px;">Quando houver atrasos, mostramos o depto dominante.</p>
@@ -388,12 +413,12 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
                 """,
                 unsafe_allow_html=True,
             )
-    
+
     with i3:
         if forn_top and forn_top_valor > 0:
             st.markdown(
                 f"""
-                <div class="fu-card" style="grid-column: span 4;">
+                <div class="fu-card">
                   <p class="fu-kpi-num">🏢 {forn_top}</p>
                   <p class="fu-kpi-lbl">Fornecedor com maior valor em risco</p>
                   <p class="fu-item-desc" style="margin-top:8px;">
@@ -406,7 +431,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         else:
             st.markdown(
                 f"""
-                <div class="fu-card" style="grid-column: span 4;">
+                <div class="fu-card">
                   <p class="fu-kpi-num">✅ OK</p>
                   <p class="fu-kpi-lbl">Sem valor em risco relevante agora</p>
                   <p class="fu-item-desc" style="margin-top:8px;">
@@ -416,14 +441,15 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
                 """,
                 unsafe_allow_html=True,
             )
-    
-    # Insight adicional curto (linha única)
+
     if vencendo_48h > 0:
         st.info(f"⏰ Atenção: {vencendo_48h} pedido(s) vencendo em até 48h. Pode valer um follow-up preventivo.")
     elif maior_atraso >= 10:
         st.warning(f"⚠️ Maior atraso observado: {maior_atraso} dia(s). Recomendo priorizar tratativa com fornecedor.")
 
-    
+    # -----------------------------
+    # 🎯 Prioridades do dia
+    # -----------------------------
     st.markdown('<div class="fu-section-title">🎯 Prioridades do dia</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
 
@@ -499,7 +525,9 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             st.caption("✅ Sem vencimentos próximos.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Ações rápidas
+    # -----------------------------
+    # ⚡ Ações rápidas
+    # -----------------------------
     st.markdown('<div class="fu-section-title">⚡ Ações rápidas</div>', unsafe_allow_html=True)
     a1, a2, a3, a4 = st.columns(4)
 
@@ -517,5 +545,5 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             _go("Mapa Geográfico")
 
     st.markdown('<p class="fu-muted">Dica: use a busca rápida na barra lateral para navegar instantaneamente.</p>', unsafe_allow_html=True)
-
     st.markdown("</div>", unsafe_allow_html=True)  # end wrap
+
