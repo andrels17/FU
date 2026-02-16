@@ -734,6 +734,10 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             label = "Novo"
         return f"""<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:{bg};border:1px solid {bd};color:{fg};font-weight:800;font-size:12px;">{label}</span>"""
 
+
+    st.markdown("<div class='fu-header'><h1>🔔 Central de Notificações e Alertas</h1></div>", unsafe_allow_html=True)
+
+    # CSS (PRECISA ficar dentro da função)
     st.markdown(
         """
         <style>
