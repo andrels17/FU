@@ -1572,6 +1572,21 @@ def exibir_gestao_pedidos(_supabase):
                 "observacoes": observacoes.strip() or None,
             }
 
+            # Auto-regra: se quantidade entregue >= solicitada, considerar como Entregue e registrar data_entrega
+            try:
+                qs = float(pedido_atualizado.get('qtde_solicitada') or 0)
+                qe = float(pedido_atualizado.get('qtde_entregue') or 0)
+            except Exception:
+                qs, qe = 0.0, 0.0
+
+            if qs > 0 and qe >= qs:
+                pedido_atualizado['status'] = 'Entregue'
+                # registra data_entrega se ainda não existir
+                if not (pedido_atual.get('data_entrega') or pedido_atualizado.get('data_entrega')):
+                    pedido_atualizado['data_entrega'] = datetime.now().date().isoformat()
+
+
+
             sucesso, mensagem = salvar_pedido(pedido_atualizado, _supabase)
             if sucesso:
                 try:
@@ -1742,10 +1757,7 @@ def exibir_gestao_pedidos(_supabase):
                             # Ajusta status para Entregue automaticamente quando completar
                             if auto_entregue and (qtde_pendente - float(qtde_entrega) <= 0.0):
                                 try:
-                                    salvar_pedido(
-                                        {"id": pedido_editar, "status": "Entregue"},
-                                        _supabase,
-                                    )
+                                    salvar_pedido({"id": pedido_editar, "status": "Entregue", "data_entrega": str(data_entrega)}, _supabase)
                                 except Exception:
                                     pass
 
@@ -1760,6 +1772,13 @@ def exibir_gestao_pedidos(_supabase):
                                 pass
 
                             st.success(mensagem)
+                            try:
+                                antes = float(qtde_pendente)
+                                depois = max(0.0, antes - float(qtde_entrega))
+                                st.caption(f"📌 Pendente: {antes:g} → {depois:g}")
+                            except Exception:
+                                pass
+
                             st.cache_data.clear()
                             st.rerun()
                         else:
