@@ -103,6 +103,37 @@ def _download_df(df: pd.DataFrame, nome: str) -> None:
         use_container_width=True,
     )
 
+
+# -------------------------------
+# Auditoria / Histórico (safety)
+# -------------------------------
+def _safe_insert_historico(_supabase, payload: dict) -> None:
+    """Insere no historico_pedidos sem quebrar caso a tabela/colunas não existam."""
+    if not payload:
+        return
+
+    # tentativa 1: payload completo
+    try:
+        _supabase.table("historico_pedidos").insert(payload).execute()
+        return
+    except Exception:
+        pass
+
+    # tentativa 2: payload mínimo (colunas mais prováveis)
+    try:
+        minimo = {
+            "pedido_id": payload.get("pedido_id"),
+            "tenant_id": payload.get("tenant_id"),
+            "usuario_id": payload.get("usuario_id"),
+            "campo": payload.get("campo"),
+            "valor_anterior": payload.get("valor_anterior"),
+            "valor_novo": payload.get("valor_novo"),
+        }
+        _supabase.table("historico_pedidos").insert(minimo).execute()
+    except Exception:
+        # se não existir tabela, só ignora
+        return
+
 DEPARTAMENTOS_VALIDOS = [
     "Estoque", "Caminhões", "Oficina Geral", "Borracharia",
     "Máquinas pesadas", "Veic. Leves", "Tratores", "Colhedoras",
@@ -432,6 +463,60 @@ def exibir_gestao_pedidos(_supabase):
                             )
                         except Exception:
                             pass
+                        
+                        # --------------------------------------------
+                        # 📜 Histórico de criação (best-effort)
+                        # --------------------------------------------
+                        try:
+                            _tid = st.session_state.get("tenant_id")
+                            _tid = str(_tid) if _tid else None
+
+                            pid = None
+                            # tenta achar por OC, senão por Solicitação (dentro do tenant)
+                            if _tid:
+                                if str(nr_oc or "").strip():
+                                    r = (
+                                        _supabase.table("pedidos")
+                                        .select("id")
+                                        .eq("tenant_id", _tid)
+                                        .eq("nr_oc", str(nr_oc).strip())
+                                        .order("criado_em", desc=True)
+                                        .limit(1)
+                                        .execute()
+                                    )
+                                    if r.data:
+                                        pid = str(r.data[0].get("id"))
+                                elif str(nr_solicitacao or "").strip():
+                                    r = (
+                                        _supabase.table("pedidos")
+                                        .select("id")
+                                        .eq("tenant_id", _tid)
+                                        .eq("nr_solicitacao", str(nr_solicitacao).strip())
+                                        .order("criado_em", desc=True)
+                                        .limit(1)
+                                        .execute()
+                                    )
+                                    if r.data:
+                                        pid = str(r.data[0].get("id"))
+
+                            if pid:
+                                _safe_insert_historico(
+                                    _supabase,
+                                    {
+                                        "pedido_id": pid,
+                                        "tenant_id": _tid,
+                                        "usuario_id": st.session_state.usuario.get("id"),
+                                        "usuario_email": st.session_state.usuario.get("email"),
+                                        "acao": "criar",
+                                        "campo": "__pedido__",
+                                        "valor_anterior": "",
+                                        "valor_novo": "criado",
+                                        "motivo": None,
+                                    },
+                                )
+                        except Exception:
+                            pass
+
                         st.success(mensagem)
                         st.rerun()
                     else:
@@ -1518,6 +1603,13 @@ def exibir_gestao_pedidos(_supabase):
                 disabled=desabilitar,
             )
 
+            motivo_alteracao = st.text_input(
+                "Motivo da alteração (opcional)",
+                value="",
+                disabled=desabilitar,
+                help="Opcional, mas recomendado para auditoria (ex.: 'correção OC', 'ajuste quantidade', 'material trocado').",
+            )
+
             submitted_edit = st.form_submit_button("💾 Salvar Alterações", use_container_width=True, disabled=desabilitar)
 
         # --------------------------------------------
@@ -1531,6 +1623,40 @@ def exibir_gestao_pedidos(_supabase):
             if qtde_solicitada <= 0:
                 st.error("⚠️ A quantidade solicitada deve ser maior que zero.")
                 st.stop()
+
+            # ------------------------------
+            # 🔒 Validações estruturais (regras de negócio)
+            # ------------------------------
+            try:
+                qe_antiga = float(pedido_atual.get("qtde_entregue") or 0)
+            except Exception:
+                qe_antiga = 0.0
+
+            if float(qtde_entregue) > float(qtde_solicitada):
+                st.error("❌ Quantidade entregue não pode ser maior que a solicitada.")
+                st.stop()
+
+            if float(qtde_solicitada) < float(qe_antiga):
+                st.error(
+                    f"❌ Não é permitido reduzir a quantidade solicitada abaixo da já entregue ({qe_antiga:g})."
+                )
+                st.stop()
+
+            # Status coerente com OC
+            if status == "Sem OC" and str(nr_oc or "").strip():
+                st.error("❌ Status 'Sem OC' não pode ter número de OC preenchido.")
+                st.stop()
+
+            if status == "Tem OC" and not str(nr_oc or "").strip():
+                st.error("❌ Status 'Tem OC' exige número de OC.")
+                st.stop()
+
+            # Status coerente com entrega
+            pendente_calc = float(qtde_solicitada) - float(qtde_entregue)
+            if status == "Entregue" and pendente_calc > 0:
+                st.error("❌ Não é possível marcar como Entregue se ainda há quantidade pendente.")
+                st.stop()
+
 
             # valida OC duplicada (dentro do mesmo tenant)
             nr_oc_new = str(nr_oc or "").strip()
@@ -1598,6 +1724,54 @@ def exibir_gestao_pedidos(_supabase):
                     )
                 except Exception:
                     pass
+                
+                # --------------------------------------------
+                # 📜 Histórico campo-a-campo (audit trail)
+                # --------------------------------------------
+                try:
+                    campos_auditaveis = [
+                        "nr_solicitacao",
+                        "nr_oc",
+                        "departamento",
+                        "cod_material",
+                        "cod_equipamento",
+                        "descricao",
+                        "qtde_solicitada",
+                        "qtde_entregue",
+                        "status",
+                        "valor_total",
+                        "fornecedor_id",
+                        "data_solicitacao",
+                        "data_oc",
+                        "previsao_entrega",
+                        "data_entrega",
+                        "observacoes",
+                    ]
+
+                    for campo in campos_auditaveis:
+                        ant = pedido_atual.get(campo)
+                        novo = pedido_atualizado.get(campo)
+
+                        # normaliza para string para comparação estável
+                        ant_s = "" if ant is None else str(ant)
+                        novo_s = "" if novo is None else str(novo)
+
+                        if ant_s != novo_s:
+                            payload = {
+                                "pedido_id": pedido_editar,
+                                "tenant_id": tenant_id,
+                                "usuario_id": st.session_state.usuario.get("id"),
+                                "usuario_email": st.session_state.usuario.get("email"),
+                                "acao": "editar",
+                                "campo": campo,
+                                "valor_anterior": ant_s,
+                                "valor_novo": novo_s,
+                                "motivo": (motivo_alteracao or "").strip() or None,
+                            }
+                            _safe_insert_historico(_supabase, payload)
+                except Exception:
+                    pass
+
                 st.success(mensagem)
                 st.cache_data.clear()
                 st.rerun()
@@ -1612,6 +1786,7 @@ def exibir_gestao_pedidos(_supabase):
             colx1, colx2 = st.columns(2)
             with colx1:
                 confirmar_exclusao = st.checkbox("Confirmo que quero excluir este pedido", value=False)
+                motivo_exclusao = st.text_input("Motivo da exclusão (opcional)", value="")
             with colx2:
                 if st.button(
                     "🗑️ Excluir Pedido",
@@ -1620,6 +1795,26 @@ def exibir_gestao_pedidos(_supabase):
                     disabled=not confirmar_exclusao,
                 ):
                     try:
+                        
+                        # histórico antes de excluir (mantém rastreabilidade mesmo após delete)
+                        try:
+                            _safe_insert_historico(
+                                _supabase,
+                                {
+                                    "pedido_id": pedido_editar,
+                                    "tenant_id": tenant_id,
+                                    "usuario_id": st.session_state.usuario.get("id"),
+                                    "usuario_email": st.session_state.usuario.get("email"),
+                                    "acao": "excluir",
+                                    "campo": "__pedido__",
+                                    "valor_anterior": "existente",
+                                    "valor_novo": "excluido",
+                                    "motivo": (motivo_exclusao or "").strip() or None,
+                                },
+                            )
+                        except Exception:
+                            pass
+
                         _supabase.table("pedidos").delete().eq("id", pedido_editar).eq("tenant_id", tenant_id).execute()
                         try:
                             ba.registrar_acao(
@@ -1787,6 +1982,68 @@ def exibir_gestao_pedidos(_supabase):
                         st.error(f"❌ Erro ao registrar entrega: {e_ent}")
         else:
             st.success("✅ Pedido totalmente entregue!")
+
+        # --------------------------------------------
+        # 📜 Histórico do pedido (auditoria)
+        # --------------------------------------------
+        st.markdown("---")
+        with st.expander("📜 Histórico do Pedido", expanded=False):
+            try:
+                qh = (
+                    _supabase.table("historico_pedidos")
+                    .select("*")
+                    .eq("pedido_id", pedido_editar)
+                    .eq("tenant_id", tenant_id)
+                    .order("criado_em", desc=True)
+                    .limit(500)
+                    .execute()
+                )
+                rows = qh.data or []
+                if not rows:
+                    st.info("Nenhuma alteração registrada ainda.")
+                else:
+                    dfh = pd.DataFrame(rows)
+
+                    # tenta resolver nome/email do usuário
+                    if "usuario_email" not in dfh.columns:
+                        dfh["usuario_email"] = None
+
+                    if dfh["usuario_email"].isna().all() and "usuario_id" in dfh.columns:
+                        try:
+                            uids = [str(x) for x in dfh["usuario_id"].dropna().astype(str).unique().tolist() if x]
+                            if uids:
+                                # tenta 'usuarios' e depois 'users'
+                                mapa = {}
+                                for tb_user in ["usuarios", "users"]:
+                                    try:
+                                        ru = _supabase.table(tb_user).select("id,email,nome").in_("id", uids).execute()
+                                        for r in (ru.data or []):
+                                            uid = str(r.get("id") or "")
+                                            nm = str(r.get("nome") or "").strip()
+                                            em = str(r.get("email") or "").strip()
+                                            mapa[uid] = (nm or em or uid)
+                                        if mapa:
+                                            break
+                                    except Exception:
+                                        continue
+                                dfh["usuario"] = dfh["usuario_id"].astype(str).map(lambda x: mapa.get(str(x), str(x)))
+                            else:
+                                dfh["usuario"] = ""
+                        except Exception:
+                            dfh["usuario"] = dfh.get("usuario_id", "").astype(str)
+                    else:
+                        dfh["usuario"] = dfh["usuario_email"].fillna(dfh.get("usuario_id", "")).astype(str)
+
+                    # colunas amigáveis
+                    for c in ["acao", "campo", "valor_anterior", "valor_novo", "motivo", "criado_em"]:
+                        if c not in dfh.columns:
+                            dfh[c] = ""
+
+                    df_show = dfh[["criado_em", "usuario", "acao", "campo", "valor_anterior", "valor_novo", "motivo"]].copy()
+                    st.dataframe(df_show, use_container_width=True, hide_index=True)
+            except Exception:
+                st.caption("Histórico não disponível (tabela historico_pedidos não encontrada ou sem permissão).")
+
 
 
     with tab4:
