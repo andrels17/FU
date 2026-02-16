@@ -9,6 +9,49 @@ import requests
 import streamlit as st
 
 
+
+# =========================
+# Helpers UI / Formatting
+# =========================
+def _fmt_dt_br(x) -> str:
+    """Formata datas para dd/mm/aaaa (best-effort)."""
+    if not x:
+        return ""
+    try:
+        from datetime import datetime
+        s = str(x).strip()
+        s = s.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        return dt.strftime("%d/%m/%Y")
+    except Exception:
+        # fallback simples
+        s = str(x)
+        return s
+
+def _fmt_money_br(v) -> str:
+    try:
+        if v is None or v == "":
+            return ""
+        x = float(v)
+        s = f"{x:,.2f}"
+        return "R$ " + s.replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return str(v) if v is not None else ""
+
+def _status_pill(status: str) -> str:
+    """Pill simples (HTML) para status."""
+    s = "" if status is None else str(status)
+    s0 = s.strip().lower()
+    cls = "neutral"
+    if s0 in ["entregue", "entregues", "finalizado", "concluído", "concluido", "encerrado", "tem oc", "com oc"]:
+        cls = "green"
+    elif s0 in ["em transporte", "transporte", "vencendo"]:
+        cls = "orange"
+    elif s0 in ["atrasado", "vencido", "em atraso", "crítico", "critico"]:
+        cls = "red"
+    elif s0 in ["em aberto", "aberto", "pendente", "em andamento", "sem oc", "sem pedido", "sem oc/sol", "sem oc/solicitação"]:
+        cls = "yellow"
+    return f'<span class="fu-pill fu-pill-{cls}">{s or "—"}</span>'
 # =========================
 # Helpers Auth / Headers
 # =========================
@@ -61,6 +104,7 @@ def _auth_headers() -> dict:
 
 
 def _get_empresa_atual() -> str | None:
+    # Preferência: chaves legadas
     for k in ("empresa", "empresa_selecionada", "empresa_atual", "empresa_nome"):
         v = st.session_state.get(k)
         if isinstance(v, str) and v.strip():
@@ -73,6 +117,22 @@ def _get_empresa_atual() -> str | None:
                 nv = v.get(kk)
                 if isinstance(nv, str) and nv.strip():
                     return nv.strip()
+
+    # Fallback: tenant (SaaS)
+    tid = st.session_state.get("tenant_id")
+    opts = st.session_state.get("tenant_options", []) or []
+    if tid and isinstance(opts, list):
+        for t in opts:
+            try:
+                if isinstance(t, dict) and t.get("tenant_id") == tid:
+                    nome = t.get("nome") or t.get("name") or t.get("razao_social")
+                    if isinstance(nome, str) and nome.strip():
+                        return nome.strip()
+                    return str(tid)
+            except Exception:
+                continue
+        return str(tid)
+
     return None
 
 
@@ -286,6 +346,19 @@ def exibir_perfil(supabase_db):
     """Aba Meu Perfil (v3)."""
     DEBUG = str(st.secrets.get("DEBUG", "false")).lower() in ("1", "true", "yes", "y")
 
+    # CSS leve (pills / compacto)
+    st.markdown("""
+    <style>
+      .fu-pill{display:inline-block; padding:2px 10px; border-radius:999px; font-size:.78rem; font-weight:700;
+              border:1px solid rgba(255,255,255,.10);}
+      .fu-pill-green{background:rgba(46,204,113,.18); color:rgba(46,204,113,1);}
+      .fu-pill-yellow{background:rgba(241,196,15,.18); color:rgba(241,196,15,1);}
+      .fu-pill-red{background:rgba(231,76,60,.18); color:rgba(231,76,60,1);}
+      .fu-pill-orange{background:rgba(230,126,34,.18); color:rgba(230,126,34,1);}
+      .fu-pill-neutral{background:rgba(255,255,255,.07); color:rgba(255,255,255,.82);}
+    </style>
+    """, unsafe_allow_html=True)
+
     uid = _jwt_sub(st.session_state.get("auth_access_token"))
     usuario = st.session_state.get("usuario") or {}
     user_id = uid or usuario.get("id") or st.session_state.get("auth_user_id")
@@ -381,20 +454,43 @@ def exibir_perfil(supabase_db):
         if not last:
             st.caption("Nenhum pedido encontrado (ou não foi possível ler a tabela/colunas).")
         else:
-            # tabela enxuta com o que existir
-            rows = []
+            st.caption("Clique em **Abrir** para ir direto para a aba de ações do pedido.")
+            # Render compacto (lista ERP) com ação
             for p in last:
-                rows.append(
-                    {
-                        "ID": p.get("id"),
-                        "Nº": p.get("numero", ""),
-                        "Status": p.get("status", ""),
-                        "Depto": p.get("departamento", ""),
-                        "Criado em": p.get("criado_em", ""),
-                    }
-                )
-            st.dataframe(rows, use_container_width=True, hide_index=True)
-            st.caption("Atalho: se você tiver uma página de Consulta, posso transformar o ID em link/ação para abrir direto.")
+                pid = p.get("id")
+                numero = p.get("numero") or ""
+                status = p.get("status") or ""
+                depto = p.get("departamento") or ""
+                criado_em = _fmt_dt_br(p.get("criado_em"))
+                valor = _fmt_money_br(p.get("valor_total"))
+
+                cA, cB, cC, cD, cE, cF = st.columns([0.9, 1.2, 1.4, 1.2, 1.2, 1.0])
+                with cA:
+                    if st.button("🔎 Abrir", key=f"perfil_open_{pid}", use_container_width=True):
+                        # Navega para Consulta > Ações
+                        st.session_state["current_page"] = "Consultar Pedidos"
+                        st.session_state["_force_menu_sync"] = True
+                        st.session_state["consulta_selected_pid"] = str(pid or "")
+                        st.session_state["consulta_tab_target"] = "⚡ Ações"
+                        st.rerun()
+                with cB:
+                    st.markdown(f"**{numero or str(pid)[:8]}**")
+                    st.caption("Nº" if numero else "ID")
+                with cC:
+                    st.markdown(_status_pill(status), unsafe_allow_html=True)
+                    st.caption("Status")
+                with cD:
+                    st.write(depto or "—")
+                    st.caption("Depto")
+                with cE:
+                    st.write(criado_em or "—")
+                    st.caption("Criado")
+                with cF:
+                    st.write(valor or "—")
+                    st.caption("Valor")
+
+                # linha suave
+                st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
 
         st.divider()
         st.markdown("### 📦 Exportar meus dados")
