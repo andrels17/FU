@@ -5,6 +5,23 @@ import html
 from datetime import datetime, timedelta
 
 
+# ============================
+# Configurações de Alertas
+# ============================
+ALERT_CONFIG = {
+    "dias_vencendo": 3,                 # Janela para "vencendo"
+    "min_pedidos_fornecedor": 5,        # Mínimo de pedidos p/ avaliar fornecedor
+    "taxa_sucesso_min": 70.0,           # Abaixo disso, entra em "baixa performance"
+    "valor_critico_min": 0.0,           # Piso opcional (0 = desativado)
+    "risk_score_weights": {             # Pesos p/ índice de risco
+        "atrasados": 3,
+        "criticos": 2,
+        "vencendo": 1,
+        "fornecedores": 1,
+    },
+}
+
+
 def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | None = None):
     """Calcula todos os tipos de alertas do sistema.
 
@@ -55,11 +72,16 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
     prev = _dt("previsao_entrega")
     prazo = _dt("prazo_entrega")
 
+    data_entrega = _dt(\"data_entrega\")
+
     due = prev.combine_first(prazo)
     fallback_due = data_oc + pd.to_timedelta(30, unit="D")
     df["_due"] = due.combine_first(fallback_due)
 
     df["_atrasado"] = df["_pendente"] & df["_due"].notna() & (df["_due"] < hoje)
+
+    # Entregue em atraso (se existir data_entrega). Mantém compatibilidade: se não existir, tudo False.
+    df[\"_entregue_tarde\"] = df[\"entregue\"] & df[\"_due\"].notna() & data_entrega.notna() & (data_entrega > df[\"_due\"])
 
         # ============================
     # Fornecedor: tentar manter nome já vindo da view (vw_pedidos_completo),
@@ -183,7 +205,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
             })
 
     
-    data_limite = hoje + timedelta(days=3)
+    data_limite = hoje + timedelta(days=int(ALERT_CONFIG.get('dias_vencendo', 3)))
     df_vencendo = df[
         df["_pendente"] &
         df["_due"].notna() &
@@ -213,24 +235,31 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
         grp = df.groupby("fornecedor_nome", dropna=False).agg(
             total_pedidos=(id_col, "count"),
             entregues=("entregue", "sum"),
-            atrasados=("_atrasado", "sum"),
+            atrasados_pendentes=("_atrasado", "sum"),
+            entregues_tarde=("_entregue_tarde", "sum"),
         ).reset_index()
 
-        grp["taxa_sucesso"] = ((grp["entregues"] - grp["atrasados"]) / grp["total_pedidos"] * 100).fillna(0)
+        # Atraso total: pendentes vencidos + entregues após o prazo (se houver data_entrega)
+        grp["atrasos_total"] = (grp["atrasados_pendentes"] + grp["entregues_tarde"]).fillna(0)
+        grp["taxa_sucesso"] = (100 - (grp["atrasos_total"] / grp["total_pedidos"] * 100)).clip(lower=0, upper=100).fillna(0)
 
-        baixa = grp[(grp["taxa_sucesso"] < 70) & (grp["total_pedidos"] >= 5)]
+        taxa_min = float(ALERT_CONFIG.get("taxa_sucesso_min", 70.0))
+        min_ped = int(ALERT_CONFIG.get("min_pedidos_fornecedor", 5))
+        baixa = grp[(grp["taxa_sucesso"] < taxa_min) & (grp["total_pedidos"] >= min_ped)]
         for _, f in baixa.iterrows():
             alertas["fornecedores_baixa_performance"].append({
                 "fornecedor": f["fornecedor_nome"],
                 "taxa_sucesso": float(f["taxa_sucesso"]),
                 "total_pedidos": int(f["total_pedidos"]),
-                "atrasados": int(f["atrasados"]),
+                "atrasados": int(f["atrasos_total"]),
             })
 
     # ============================
     # 4) Pedidos Críticos (Alto valor + urgente)
     # ============================
-    valor_critico = df["_valor_total"].quantile(0.75) if len(df) >= 4 else df["_valor_total"].max()
+    valor_critico_base = df["_valor_total"].quantile(0.75) if len(df) >= 4 else df["_valor_total"].max()
+    piso = float(ALERT_CONFIG.get("valor_critico_min", 0.0) or 0.0)
+    valor_critico = max(float(valor_critico_base), piso)
     df_criticos = df[
         df["_pendente"] &
         (df["_valor_total"] >= float(valor_critico)) &
@@ -261,24 +290,47 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
     return alertas
 
 def exibir_badge_alertas(alertas: dict):
-    total = alertas.get("total", 0)
-
+    total = int(alertas.get("total", 0) or 0)
     if total == 0:
         return
+
+    a = len(alertas.get("pedidos_atrasados", []))
+    v = len(alertas.get("pedidos_vencendo", []))
+    c = len(alertas.get("pedidos_criticos", []))
+    f = len(alertas.get("fornecedores_baixa_performance", []))
+
+    w = ALERT_CONFIG.get("risk_score_weights", {})
+    score = (
+        a * int(w.get("atrasados", 3))
+        + c * int(w.get("criticos", 2))
+        + v * int(w.get("vencendo", 1))
+        + f * int(w.get("fornecedores", 1))
+    )
+
+    # Faixas simples de severidade
+    if score >= 16:
+        label = "CRÍTICO"
+        grad = "linear-gradient(135deg,#dc2626,#991b1b)"
+    elif score >= 6:
+        label = "ATENÇÃO"
+        grad = "linear-gradient(135deg,#f59e0b,#b45309)"
+    else:
+        label = "ESTÁVEL"
+        grad = "linear-gradient(135deg,#10b981,#059669)"
 
     st.markdown(
         f"""
         <div style="
-            background: linear-gradient(135deg,#7c3aed,#2563eb);
+            background: {grad};
             padding: 12px;
             border-radius: 12px;
             text-align: center;
-            font-weight: 600;
+            font-weight: 700;
             color: white;
             margin-bottom: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
         ">
-            🔔 {total} Alertas Pendentes
+            🔔 {total} alertas — <span style='opacity:0.95'>{label}</span> <span style='opacity:0.85'>(score {score})</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -509,6 +561,65 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
     st.markdown("---")
 
+    # ============================
+    # Filtros Globais (aplicam em todas as abas)
+    # ============================
+    pedidos_all = (
+        list(alertas.get("pedidos_atrasados", []))
+        + list(alertas.get("pedidos_vencendo", []))
+        + list(alertas.get("pedidos_criticos", []))
+    )
+
+    deps_all = sorted(list({safe_text(p.get("departamento", "N/A")) for p in pedidos_all if p is not None}))
+    forns_all = sorted(list({safe_text(p.get("fornecedor", "N/A")) for p in pedidos_all if p is not None}))
+    # incluir fornecedores da aba de performance também
+    forns_perf = sorted(list({safe_text(p.get("fornecedor", "N/A")) for p in alertas.get("fornecedores_baixa_performance", [])}))
+    forns_all = sorted(list(set(forns_all + forns_perf)))
+
+    vals = [float(p.get("valor", 0) or 0) for p in pedidos_all if p is not None]
+    vmin = float(min(vals)) if vals else 0.0
+    vmax = float(max(vals)) if vals else 0.0
+
+    with st.expander("🎛️ Filtros globais", expanded=False):
+        c1, c2, c3 = st.columns([1.2, 1.2, 1.6])
+
+        with c1:
+            g_deps = st.multiselect("Departamento", options=deps_all, default=[], key="fu_global_deps")
+        with c2:
+            g_forns = st.multiselect("Fornecedor", options=forns_all, default=[], key="fu_global_forns")
+        with c3:
+            if vmax > 0:
+                g_val = st.slider("Faixa de valor (R$)", min_value=float(vmin), max_value=float(vmax), value=(float(vmin), float(vmax)), step=max(1.0, (vmax - vmin) / 100), key="fu_global_val")
+            else:
+                g_val = (0.0, 0.0)
+                st.caption("Sem valores para filtrar")
+
+    def _apply_global_pedidos(lista):
+        if not lista:
+            return []
+        out = lista
+
+        if g_deps:
+            out = [p for p in out if safe_text(p.get("departamento", "N/A")) in g_deps]
+
+        if g_forns:
+            out = [p for p in out if safe_text(p.get("fornecedor", "N/A")) in g_forns]
+
+        if vmax > 0:
+            lo, hi = g_val
+            out = [p for p in out if lo <= float(p.get("valor", 0) or 0) <= hi]
+
+        return out
+
+    def _apply_global_fornecedores(lista):
+        if not lista:
+            return []
+        out = lista
+        if g_forns:
+            out = [f for f in out if safe_text(f.get("fornecedor", "N/A")) in g_forns]
+        return out
+
+
     # Tabs
     tab1, tab2, tab3, tab4 = st.tabs(
         [
@@ -523,12 +634,31 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     with tab1:
         st.subheader("⚠️ Pedidos Atrasados")
 
-        if alertas["pedidos_atrasados"]:
+        pedidos_base = _apply_global_pedidos(alertas.get("pedidos_atrasados", []))
+
+        if pedidos_base:
+
+            # Ranking rápido por departamento (após filtro global)
+            try:
+                df_rank = pd.DataFrame(pedidos_base)
+                if "departamento" in df_rank.columns and not df_rank.empty:
+                    rank = (
+                        df_rank.groupby("departamento", dropna=False)
+                        .agg(qtde=("id", "count"), valor_total=("valor", "sum"))
+                        .sort_values(["qtde", "valor_total"], ascending=False)
+                        .head(10)
+                        .reset_index()
+                    )
+                    with st.expander("🏷️ Top departamentos com atrasos", expanded=False):
+                        st.dataframe(rank, use_container_width=True, hide_index=True)
+            except Exception:
+                pass
+
             departamentos = sorted(
-                list({safe_text(p.get("departamento", "N/A")) for p in alertas["pedidos_atrasados"]})
+                list({safe_text(p.get("departamento", "N/A")) for p in pedidos_base})
             )
             fornecedores = sorted(
-                list({safe_text(p.get("fornecedor", "N/A")) for p in alertas["pedidos_atrasados"]})
+                list({safe_text(p.get("fornecedor", "N/A")) for p in pedidos_base})
             )
 
             col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
@@ -562,15 +692,15 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 )
 
             if "Dias de Atraso (maior primeiro)" in ordem:
-                pedidos_filtrados = sorted(alertas["pedidos_atrasados"], key=lambda x: x.get("dias_atraso", 0), reverse=True)
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("dias_atraso", 0), reverse=True)
             elif "Dias de Atraso (menor primeiro)" in ordem:
-                pedidos_filtrados = sorted(alertas["pedidos_atrasados"], key=lambda x: x.get("dias_atraso", 0))
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("dias_atraso", 0))
             elif "Valor (maior primeiro)" in ordem:
-                pedidos_filtrados = sorted(alertas["pedidos_atrasados"], key=lambda x: x.get("valor", 0), reverse=True)
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("valor", 0), reverse=True)
             elif "Valor (menor primeiro)" in ordem:
-                pedidos_filtrados = sorted(alertas["pedidos_atrasados"], key=lambda x: x.get("valor", 0))
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("valor", 0))
             else:
-                pedidos_filtrados = alertas["pedidos_atrasados"]
+                pedidos_filtrados = pedidos_base
 
             if dept_filtro:
                 pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get("departamento", "N/A")) in dept_filtro]
@@ -578,7 +708,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             if fornecedor_filtro:
                 pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get("fornecedor", "N/A")) in fornecedor_filtro]
 
-            st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(alertas['pedidos_atrasados'])} pedidos atrasados")
+            st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos atrasados")
 
             if pedidos_filtrados:
                 for pedido in pedidos_filtrados:
@@ -592,9 +722,11 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     with tab2:
         st.subheader("⏰ Pedidos Vencendo nos Próximos 3 Dias")
 
-        if alertas["pedidos_vencendo"]:
+        pedidos_base = _apply_global_pedidos(alertas.get("pedidos_vencendo", []))
+
+        if pedidos_base:
             fornecedores_venc = sorted(
-                list({safe_text(p.get("fornecedor", "N/A")) for p in alertas["pedidos_vencendo"]})
+                list({safe_text(p.get("fornecedor", "N/A")) for p in pedidos_base})
             )
 
             col_filtro1, col_filtro2 = st.columns(2)
@@ -620,20 +752,20 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 )
 
             if "Dias Restantes (menor primeiro)" in ordem_venc:
-                pedidos_filtrados = sorted(alertas["pedidos_vencendo"], key=lambda x: x.get("dias_restantes", 0))
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("dias_restantes", 0))
             elif "Dias Restantes (maior primeiro)" in ordem_venc:
-                pedidos_filtrados = sorted(alertas["pedidos_vencendo"], key=lambda x: x.get("dias_restantes", 0), reverse=True)
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("dias_restantes", 0), reverse=True)
             elif "Valor (maior primeiro)" in ordem_venc:
-                pedidos_filtrados = sorted(alertas["pedidos_vencendo"], key=lambda x: x.get("valor", 0), reverse=True)
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("valor", 0), reverse=True)
             elif "Valor (menor primeiro)" in ordem_venc:
-                pedidos_filtrados = sorted(alertas["pedidos_vencendo"], key=lambda x: x.get("valor", 0))
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get("valor", 0))
             else:
-                pedidos_filtrados = alertas["pedidos_vencendo"]
+                pedidos_filtrados = pedidos_base
 
             if fornecedor_venc_filtro:
                 pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get("fornecedor", "N/A")) in fornecedor_venc_filtro]
 
-            st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(alertas['pedidos_vencendo'])} pedidos vencendo")
+            st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos vencendo")
 
             if pedidos_filtrados:
                 for pedido in pedidos_filtrados:
@@ -645,15 +777,17 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     
     with tab3:
         st.subheader("🚨 Pedidos Críticos (Alto Valor + Urgente)")
-        
-        if alertas['pedidos_criticos']:
+
+        pedidos_base = _apply_global_pedidos(alertas.get('pedidos_criticos', []))
+
+        if pedidos_base:
             # Extrair departamentos e fornecedores únicos
             departamentos_crit = sorted(list(set(
-                [safe_text(p.get('departamento', 'N/A')) for p in alertas['pedidos_criticos']]
+                [safe_text(p.get('departamento', 'N/A')) for p in pedidos_base]
             )))
             
             fornecedores_crit = sorted(list(set(
-                [safe_text(p.get('fornecedor', 'N/A')) for p in alertas['pedidos_criticos']]
+                [safe_text(p.get('fornecedor', 'N/A')) for p in pedidos_base]
             )))
             
             # Filtros
@@ -685,14 +819,14 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             
             # Aplicar ordenação
             if "Valor (maior primeiro)" in ordem_crit:
-                pedidos_filtrados = sorted(alertas['pedidos_criticos'], key=lambda x: x.get('valor', 0), reverse=True)
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get('valor', 0), reverse=True)
             elif "Valor (menor primeiro)" in ordem_crit:
-                pedidos_filtrados = sorted(alertas['pedidos_criticos'], key=lambda x: x.get('valor', 0))
+                pedidos_filtrados = sorted(pedidos_base, key=lambda x: x.get('valor', 0))
             elif "Previsão (próxima primeiro)" in ordem_crit:
-                pedidos_filtrados = sorted(alertas['pedidos_criticos'], 
+                pedidos_filtrados = sorted(pedidos_base, 
                                           key=lambda x: pd.to_datetime(x.get('previsao', '')) if x.get('previsao') else pd.Timestamp.max)
             else:
-                pedidos_filtrados = alertas['pedidos_criticos']
+                pedidos_filtrados = pedidos_base
             
             # Aplicar filtros de departamento
             if dept_crit_filtro:
@@ -703,7 +837,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get('fornecedor', 'N/A')) in fornecedor_crit_filtro]
             
             # Mostrar contador
-            st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(alertas['pedidos_criticos'])} pedidos críticos")
+            st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos críticos")
             
             if pedidos_filtrados:
                 st.warning("⚠️ Pedidos de alto valor com previsão de entrega próxima")
@@ -717,11 +851,13 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     
     with tab4:
         st.subheader("📉 Fornecedores com Baixa Performance")
-        
-        if alertas['fornecedores_baixa_performance']:
+
+        fornecedores_base = _apply_global_fornecedores(alertas.get('fornecedores_baixa_performance', []))
+
+        if fornecedores_base:
             # Extrair nomes de fornecedores únicos
             nomes_fornecedores = sorted(list(set(
-                [safe_text(f.get('fornecedor', 'N/A')) for f in alertas['fornecedores_baixa_performance']]
+                [safe_text(f.get('fornecedor', 'N/A')) for f in fornecedores_base]
             )))
             
             # Filtros
@@ -753,7 +889,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             
             # Aplicar filtro de nível
             fornecedores_filtrados = []
-            for fornecedor in alertas['fornecedores_baixa_performance']:
+            for fornecedor in fornecedores_base:
                 taxa = max(0, min(100, fornecedor['taxa_sucesso']))
                 
                 # Verificar nível
@@ -784,7 +920,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 fornecedores_filtrados = sorted(fornecedores_filtrados, key=lambda x: x['total_pedidos'], reverse=True)
             
             # Mostrar contador
-            st.caption(f"📊 Mostrando {len(fornecedores_filtrados)} de {len(alertas['fornecedores_baixa_performance'])} fornecedores")
+            st.caption(f"📊 Mostrando {len(fornecedores_filtrados)} de {len(fornecedores_base)} (após filtro global) fornecedores")
             
             if fornecedores_filtrados:
                 st.warning("⚠️ Fornecedores com taxa de sucesso abaixo de 70%")
@@ -795,4 +931,3 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 st.info("📭 Nenhum fornecedor corresponde aos filtros selecionados")
         else:
             st.success("✅ Todos os fornecedores com boa performance!")
-
