@@ -187,45 +187,86 @@ def _validate_upload_df(df_upload: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
     return df, df_erros
 
 
-def _resolve_import_plan(_supabase, df: pd.DataFrame, modo_importacao: str, tenant_id: str | None = None) -> tuple[int, int]:
+def _resolve_import_plan(_supabase, df: pd.DataFrame, tenant_id: str | None = None) -> tuple[int, int, int]:
     """
-    Calcula quantos serão inseridos/atualizados (pré-visualização).
-    Só considera atualização por nr_oc quando modo é 'Atualizar...'
+    Plano de importação unificado (UPSERT):
+    - Se encontrar pelo nr_oc (preferencial) => update
+    - Se não tiver nr_oc, tenta nr_solicitacao (somente quando no banco também não tem OC) => update
+    - Caso contrário => insert
+    Retorna (insere, atualiza, pula)
     """
     if df is None or df.empty:
-        return 0, 0
+        return 0, 0, 0
 
-    if modo_importacao != "Atualizar pedidos existentes (por N° OC)":
-        return len(df), 0
+    _tid = str(tenant_id) if tenant_id else None
 
-    # somente linhas com nr_oc
-    ocs = df["nr_oc"].dropna().astype(str).str.strip()
-    ocs = [x for x in ocs.tolist() if x]
-    if not ocs:
-        return len(df), 0
+    # Prefetch OCs
+    oc_to_id: dict[str, str] = {}
+    if "nr_oc" in df.columns:
+        ocs = df["nr_oc"].dropna().astype(str).str.strip()
+        ocs = [x for x in ocs.tolist() if x]
+        if ocs:
+            try:
+                q = _supabase.table("pedidos").select("id,nr_oc").in_("nr_oc", ocs)
+                if _tid:
+                    q = q.eq("tenant_id", _tid)
+                res = q.execute()
+                for r in (res.data or []):
+                    nr = str(r.get("nr_oc") or "").strip()
+                    if nr:
+                        oc_to_id[nr] = str(r.get("id"))
+            except Exception:
+                oc_to_id = {}
 
-    # busca existentes
-    try:
-        q = _supabase.table("pedidos").select("nr_oc").in_("nr_oc", ocs)
-        if tenant_id:
-            q = q.eq("tenant_id", str(tenant_id))
-        res = q.execute()
-        existentes = set([r["nr_oc"] for r in (res.data or []) if r.get("nr_oc")])
-    except Exception:
-        # fallback simples (sem quebrar)
-        existentes = set()
+    # Prefetch solicitações (somente linhas sem OC no arquivo)
+    sol_to_id_sem_oc: dict[str, str] = {}
+    sol_com_oc: set[str] = set()
+    if "nr_solicitacao" in df.columns:
+        mask_sem_oc = df.get("nr_oc", "").fillna("").astype(str).str.strip().eq("")
+        sols = df.loc[mask_sem_oc, "nr_solicitacao"].dropna().astype(str).str.strip()
+        sols = [x for x in sols.tolist() if x]
+        if sols:
+            try:
+                q = _supabase.table("pedidos").select("id,nr_solicitacao,nr_oc").in_("nr_solicitacao", sols)
+                if _tid:
+                    q = q.eq("tenant_id", _tid)
+                res = q.execute()
+                for r in (res.data or []):
+                    sol = str(r.get("nr_solicitacao") or "").strip()
+                    oc = str(r.get("nr_oc") or "").strip()
+                    if not sol:
+                        continue
+                    if oc:
+                        sol_com_oc.add(sol)
+                    else:
+                        sol_to_id_sem_oc[sol] = str(r.get("id"))
+            except Exception:
+                sol_to_id_sem_oc = {}
+                sol_com_oc = set()
 
-    atualiza = 0
-    insere = 0
+    insere = atualiza = pula = 0
     for _, r in df.iterrows():
         nr_oc = str(r.get("nr_oc") or "").strip()
-        if nr_oc and nr_oc in existentes:
-            atualiza += 1
+        nr_sol = str(r.get("nr_solicitacao") or "").strip()
+
+        if nr_oc:
+            if nr_oc in oc_to_id:
+                atualiza += 1
+            else:
+                insere += 1
+            continue
+
+        if nr_sol:
+            if nr_sol in sol_com_oc:
+                pula += 1
+            elif nr_sol in sol_to_id_sem_oc:
+                atualiza += 1
+            else:
+                insere += 1
         else:
-            insere += 1
-    return insere, atualiza
+            pula += 1
 
-
+    return insere, atualiza, pula
 def _bulk_update(_supabase, ids: list[str], payload: dict) -> tuple[int, list[str]]:
     """
     Tenta atualizar em lote; se não suportar, faz loop.
@@ -547,11 +588,13 @@ def exibir_gestao_pedidos(_supabase):
                 col1, col2, col3, col4 = st.columns(4)
 
                 with col1:
-                    modo_importacao = st.radio(
-                        "Modo de Importação",
-                        ["Adicionar novos pedidos", "Atualizar pedidos existentes (por N° OC)"],
+                    st.markdown("**Modo:** Importar / Sincronizar (UPSERT automático por OC → Solicitação)")
+                    atualizacao_conservadora = st.checkbox(
+                        "🛡️ Atualização conservadora (recomendado)",
+                        value=True,
+                        help="Atualiza apenas status/datas/quantidades/valor/observações. Desmarque para atualizar todos os campos recebidos.",
                     )
-                    pular_duplicados = st.checkbox("⛔ Pular pedidos com OC já existente", value=True)
+                    pular_duplicados = st.checkbox("⛔ Pular se já existir (OC/SOL)", value=False)
 
                 with col2:
                     criar_fornecedores = st.checkbox(
@@ -647,11 +690,12 @@ def exibir_gestao_pedidos(_supabase):
                     df_norm = df_norm[~df_norm["nr_oc"].fillna("").astype(str).str.strip().isin(existentes)]
 
                 # Pré-visualização do que vai acontecer
-                insere_prev, atualiza_prev = _resolve_import_plan(_supabase, df_norm, modo_importacao, tenant_id=st.session_state.get("tenant_id"))
-                cprev1, cprev2, cprev3 = st.columns(3)
+                insere_prev, atualiza_prev, pula_prev = _resolve_import_plan(_supabase, df_norm, tenant_id=st.session_state.get("tenant_id"))
+                cprev1, cprev2, cprev3, cprev4 = st.columns(4)
                 cprev1.metric("Registros válidos", len(df_norm))
                 cprev2.metric("Previsão inserir", int(insere_prev))
                 cprev3.metric("Previsão atualizar", int(atualiza_prev))
+                cprev4.metric("Previsão pular", int(pula_prev))
 
                 if modo_simulacao:
                     st.info("🔎 Modo simulação ativado: nada será gravado no banco.")
@@ -816,54 +860,46 @@ def exibir_gestao_pedidos(_supabase):
 
                                 nr_oc_row = str(row.get("nr_oc") or "").strip()
                                 nr_sol_row = str(row.get("nr_solicitacao") or "").strip()
+                                # UPSERT unificado (OC > Solicitação)
+                                # 1) Se OC existe no banco:
+                                #    - se pular_duplicados => pula
+                                #    - senão => atualiza por ID
+                                # 2) Se não tem OC e tem Solicitação:
+                                #    - se a solicitação já tem OC no banco => pula (evita sobrescrever)
+                                #    - se existir sem OC => atualiza por ID
+                                # 3) Caso contrário => insere
+                                if nr_oc_row and nr_oc_row in oc_to_id:
+                                    if pular_duplicados:
+                                        avisos.append(f"Linha {idx + 2}: OC {nr_oc_row} já existe — pulado")
+                                        registros_pulados_dup += 1
+                                        registros_processados += 1
+                                        if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
+                                            progress_bar.progress(min(1.0, registros_processados / total_rows))
+                                            status_txt.caption(f"Processando {registros_processados}/{total_rows}...")
+                                        continue
+                                    pedido_id_existente = oc_to_id[nr_oc_row]
 
-                                if modo_importacao == "Adicionar novos pedidos":
-                                    # Se OC já existe:
-                                    if nr_oc_row and nr_oc_row in oc_to_id:
+                                elif (not nr_oc_row) and nr_sol_row:
+                                    if nr_sol_row in sol_com_oc:
+                                        avisos.append(
+                                            f"Linha {idx + 2}: Solicitação {nr_sol_row} já possui OC no banco — ignorado para evitar sobrescrita"
+                                        )
+                                        registros_pulados_dup += 1
+                                        registros_processados += 1
+                                        if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
+                                            progress_bar.progress(min(1.0, registros_processados / total_rows))
+                                            status_txt.caption(f"Processando {registros_processados}/{total_rows}...")
+                                        continue
+                                    if nr_sol_row in sol_to_id_sem_oc:
                                         if pular_duplicados:
-                                            avisos.append(f"Linha {idx + 2}: OC {nr_oc_row} já existe — pulado")
+                                            avisos.append(f"Linha {idx + 2}: SOL {nr_sol_row} já existe — pulado")
                                             registros_pulados_dup += 1
                                             registros_processados += 1
                                             if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
                                                 progress_bar.progress(min(1.0, registros_processados / total_rows))
                                                 status_txt.caption(f"Processando {registros_processados}/{total_rows}...")
                                             continue
-                                        # se não estiver pulando, atualiza (em vez de duplicar)
-                                        pedido_id_existente = oc_to_id[nr_oc_row]
-
-                                    # Se não tem OC, tenta idempotência por solicitação
-                                    elif (not nr_oc_row) and nr_sol_row:
-                                        if nr_sol_row in sol_com_oc:
-                                            avisos.append(
-                                                f"Linha {idx + 2}: Solicitação {nr_sol_row} já possui OC no banco — ignorado para evitar sobrescrita"
-                                            )
-                                            registros_pulados_dup += 1
-                                            registros_processados += 1
-                                            if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
-                                                progress_bar.progress(min(1.0, registros_processados / total_rows))
-                                                status_txt.caption(f"Processando {registros_processados}/{total_rows}...")
-                                            continue
-                                        if nr_sol_row in sol_to_id_sem_oc:
-                                            pedido_id_existente = sol_to_id_sem_oc[nr_sol_row]
-
-                                elif modo_importacao == "Atualizar pedidos existentes (por N° OC)":
-                                    # Atualização preferencial por OC
-                                    if nr_oc_row and nr_oc_row in oc_to_id:
-                                        pedido_id_existente = oc_to_id[nr_oc_row]
-                                    # Se não há OC, tenta atualizar por solicitação (quando possível)
-                                    elif (not nr_oc_row) and nr_sol_row:
-                                        if nr_sol_row in sol_com_oc:
-                                            avisos.append(
-                                                f"Linha {idx + 2}: Solicitação {nr_sol_row} já possui OC no banco — ignorado para evitar sobrescrita"
-                                            )
-                                            registros_pulados_dup += 1
-                                            registros_processados += 1
-                                            if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
-                                                progress_bar.progress(min(1.0, registros_processados / total_rows))
-                                                status_txt.caption(f"Processando {registros_processados}/{total_rows}...")
-                                            continue
-                                        if nr_sol_row in sol_to_id_sem_oc:
-                                            pedido_id_existente = sol_to_id_sem_oc[nr_sol_row]
+                                        pedido_id_existente = sol_to_id_sem_oc[nr_sol_row]
 
                                 fornecedor_id = None
 
@@ -978,6 +1014,23 @@ def exibir_gestao_pedidos(_supabase):
                                     for k, v in pedido_data.items()
                                     if v is not None or k in ["qtde_entregue", "valor_total"]
                                 }
+
+
+                                # Atualização conservadora: evita sobrescrever descrições/códigos
+                                if pedido_id_existente and atualizacao_conservadora:
+                                    allow = {
+                                        "status",
+                                        "data_solicitacao",
+                                        "data_oc",
+                                        "previsao_entrega",
+                                        "data_entrega",
+                                        "qtde_solicitada",
+                                        "qtde_entregue",
+                                        "valor_total",
+                                        "fornecedor_id",
+                                        "departamento",
+                                    }
+                                    pedido_data = {k: v for k, v in pedido_data.items() if k in allow or k in ("nr_oc", "nr_solicitacao")}
 
                                 # -------------------------------------------------
                                 # APPLY: update (por id) ou insert
