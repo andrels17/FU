@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import textwrap
-
+from collections import defaultdict
 import streamlit as st
 
 
@@ -341,6 +341,163 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         else:
             st.caption("✅ Sem vencimentos próximos.")
         st.markdown("</div>", unsafe_allow_html=True)
+
+    def _sum_valor(lista: list[dict]) -> float:
+        total = 0.0
+        for p in (lista or []):
+            try:
+                total += float((p or {}).get("valor") or 0.0)
+            except Exception:
+                pass
+        return float(total)
+    
+    def _group_count(lista: list[dict], key: str) -> dict[str, int]:
+        acc = defaultdict(int)
+        for p in (lista or []):
+            k = str((p or {}).get(key) or "").strip()
+            if not k:
+                k = "Não informado"
+            acc[k] += 1
+        return dict(acc)
+    
+    def _group_sum_valor(lista: list[dict], key: str) -> dict[str, float]:
+        acc = defaultdict(float)
+        for p in (lista or []):
+            k = str((p or {}).get(key) or "").strip()
+            if not k:
+                k = "Não informado"
+            try:
+                acc[k] += float((p or {}).get("valor") or 0.0)
+            except Exception:
+                pass
+        return dict(acc)
+    
+    def _top_item(d: dict, by_value=True):
+        if not d:
+            return None, 0
+        if by_value:
+            k = max(d, key=lambda x: float(d.get(x) or 0))
+            return k, float(d.get(k) or 0)
+        else:
+            k = max(d, key=lambda x: int(d.get(x) or 0))
+            return k, int(d.get(k) or 0)
+    
+    def _pct(part: float, total: float) -> int:
+        if total <= 0:
+            return 0
+        try:
+            return int(round((part / total) * 100))
+        except Exception:
+            return 0
+    
+    # Reusa as listas que você já montou acima
+    # lista_criticos, lista_atrasados, lista_vencendo
+    
+    valor_critico = _sum_valor(lista_criticos)
+    valor_atrasado = _sum_valor(lista_atrasados)
+    valor_risco_total = valor_critico + valor_atrasado
+    
+    # Concentração por departamento (atrasados)
+    dept_counts = _group_count(lista_atrasados, "departamento")
+    dept_top, dept_top_qtd = _top_item(dept_counts, by_value=False)
+    dept_pct = _pct(dept_top_qtd, sum(dept_counts.values()) if dept_counts else 0)
+    
+    # Fornecedor mais crítico (por valor em risco = críticos + atrasados)
+    forn_val = _group_sum_valor((lista_criticos or []) + (lista_atrasados or []), "fornecedor")
+    forn_top, forn_top_valor = _top_item(forn_val, by_value=True)
+    
+    # Maior atraso observado
+    maior_atraso = 0
+    try:
+        maior_atraso = max([int((p or {}).get("dias_atraso") or 0) for p in (lista_atrasados or [])] or [0])
+    except Exception:
+        maior_atraso = 0
+    
+    # “Vencendo em 48h”
+    vencendo_48h = 0
+    try:
+        vencendo_48h = sum(1 for p in (lista_vencendo or []) if int((p or {}).get("dias_restantes") or 9999) <= 2)
+    except Exception:
+        vencendo_48h = 0
+    
+    st.markdown('<div class="fu-section-title">🧠 Insights</div>', unsafe_allow_html=True)
+    
+    i1, i2, i3 = st.columns(3)
+    
+    with i1:
+        st.markdown(
+            f"""
+            <div class="fu-card" style="grid-column: span 4;">
+              <p class="fu-kpi-num">💰 R$ {_moeda_br(valor_risco_total)}</p>
+              <p class="fu-kpi-lbl">Risco financeiro (críticos + atrasados)</p>
+              <p class="fu-item-desc" style="margin-top:8px;">
+                Críticos: <b>R$ {_moeda_br(valor_critico)}</b> •
+                Atrasados: <b>R$ {_moeda_br(valor_atrasado)}</b>
+              </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    with i2:
+        if dept_top and sum(dept_counts.values()) > 0:
+            st.markdown(
+                f"""
+                <div class="fu-card" style="grid-column: span 4;">
+                  <p class="fu-kpi-num">🏭 {dept_pct}%</p>
+                  <p class="fu-kpi-lbl">{dept_top} concentra {dept_pct}% dos atrasos</p>
+                  <p class="fu-item-desc" style="margin-top:8px;">
+                    {dept_top_qtd} de {sum(dept_counts.values())} pedido(s) atrasado(s)
+                  </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                """
+                <div class="fu-card" style="grid-column: span 4;">
+                  <p class="fu-kpi-num">🏭 —</p>
+                  <p class="fu-kpi-lbl">Sem atrasos para calcular concentração</p>
+                  <p class="fu-item-desc" style="margin-top:8px;">Quando houver atrasos, mostramos o depto dominante.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    
+    with i3:
+        if forn_top and forn_top_valor > 0:
+            st.markdown(
+                f"""
+                <div class="fu-card" style="grid-column: span 4;">
+                  <p class="fu-kpi-num">🏢 {forn_top}</p>
+                  <p class="fu-kpi-lbl">Fornecedor com maior valor em risco</p>
+                  <p class="fu-item-desc" style="margin-top:8px;">
+                    Em risco: <b>R$ {_moeda_br(forn_top_valor)}</b> • Maior atraso: <b>{maior_atraso} dia(s)</b>
+                  </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"""
+                <div class="fu-card" style="grid-column: span 4;">
+                  <p class="fu-kpi-num">✅ OK</p>
+                  <p class="fu-kpi-lbl">Sem valor em risco relevante agora</p>
+                  <p class="fu-item-desc" style="margin-top:8px;">
+                    Vencendo em 48h: <b>{vencendo_48h}</b>
+                  </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    
+    # Insight adicional curto (linha única)
+    if vencendo_48h > 0:
+        st.info(f"⏰ Atenção: {vencendo_48h} pedido(s) vencendo em até 48h. Pode valer um follow-up preventivo.")
+    elif maior_atraso >= 10:
+        st.warning(f"⚠️ Maior atraso observado: {maior_atraso} dia(s). Recomendo priorizar tratativa com fornecedor.")
 
     # Ações rápidas
     st.markdown('<div class="fu-section-title">⚡ Ações rápidas</div>', unsafe_allow_html=True)
