@@ -974,7 +974,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             out = [p for p in out if safe_text(p.get("fornecedor", "N/A")) in forn_global]
 
         if vmax > 0:
-            lo, hi = faixa_valoral
+            lo, hi = faixa_valor
             out = [p for p in out if lo <= float(p.get("valor", 0) or 0) <= hi]
 
         return out
