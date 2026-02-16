@@ -30,7 +30,7 @@ def _storage_headers() -> dict:
     if not url or not anon:
         raise RuntimeError("Faltam SUPABASE_URL / SUPABASE_ANON_KEY em st.secrets.")
     if not token:
-        raise RuntimeError("Sem auth_access_token na sessão (usuário não autenticado).")
+        raise RuntimeError("Sem auth_access_token na sessão (usuário não autenticado)." )
 
     return {
         "Authorization": f"Bearer {token}",
@@ -39,34 +39,20 @@ def _storage_headers() -> dict:
 
 
 def _upload_object_rest(bucket: str, object_path: str, data: bytes, mime: str) -> None:
-    """Upload via REST (garante Authorization no Storage).
-
-    - Usa POST /storage/v1/object/<bucket>/<path>
-    - upsert via header x-upsert: true
-    """
+    """Upload via REST (garante Authorization no Storage)."""
     base_url = st.secrets.get("SUPABASE_URL")
     headers = _storage_headers()
-    headers.update(
-        {
-            "Content-Type": mime,
-            "x-upsert": "true",
-        }
-    )
+    headers.update({"Content-Type": mime, "x-upsert": "true"})
 
     url = f"{base_url}/storage/v1/object/{bucket}/{object_path}"
     resp = requests.post(url, headers=headers, data=data, timeout=60)
 
     if resp.status_code not in (200, 201):
-        # retorna corpo para você ver exatamente a causa
         raise RuntimeError(f"Storage upload falhou ({resp.status_code}): {resp.text}")
 
 
 def _signed_url_rest(bucket: str, object_path: str, expires_in: int = 3600) -> Optional[str]:
-    """Gera signed URL via REST para bucket privado.
-
-    Endpoint: POST /storage/v1/object/sign/<bucket>/<path>
-    Body: {"expiresIn": 3600}
-    """
+    """Signed URL via REST para bucket privado."""
     base_url = st.secrets.get("SUPABASE_URL")
     headers = _storage_headers()
     headers.update({"Content-Type": "application/json"})
@@ -75,7 +61,7 @@ def _signed_url_rest(bucket: str, object_path: str, expires_in: int = 3600) -> O
     resp = requests.post(url, headers=headers, json={"expiresIn": int(expires_in)}, timeout=30)
 
     if resp.status_code == 404:
-        return None  # arquivo ainda não existe
+        return None
     if resp.status_code not in (200, 201):
         return None
 
@@ -88,7 +74,7 @@ def _signed_url_rest(bucket: str, object_path: str, expires_in: int = 3600) -> O
     if not signed:
         return None
 
-    # O endpoint geralmente retorna uma URL relativa. Garantimos absoluta:
+    # Normalmente vem como URL relativa (/storage/v1/...)
     if signed.startswith("/"):
         return f"{base_url}{signed}"
     if signed.startswith("http"):
@@ -97,7 +83,12 @@ def _signed_url_rest(bucket: str, object_path: str, expires_in: int = 3600) -> O
 
 
 def exibir_perfil(supabase_db):
-    """Meu Perfil (bucket privado + upload REST + signed URL REST)."""
+    """Meu Perfil (bucket privado + upload REST + signed URL REST).
+
+    IMPORTANTE:
+    - O upload NÃO deve rodar automaticamente a cada rerun (file_uploader mantém o arquivo).
+    - Por isso usamos um botão "Salvar avatar" + key dinâmica para limpar o uploader após sucesso.
+    """
     token = st.session_state.get("auth_access_token")
     uid = _jwt_sub(token)
 
@@ -111,14 +102,22 @@ def exibir_perfil(supabase_db):
         st.error("Não foi possível identificar o usuário logado.")
         return
 
-    # Mantém session_state alinhado
     if isinstance(st.session_state.get("usuario"), dict):
         st.session_state.usuario["id"] = user_id
 
     st.title("👤 Meu Perfil")
 
+
+    # --- Exibição do avatar atual ---
     avatar_path = usuario.get("avatar_path") or f"{user_id}/avatar.png"
-    avatar_display_url = _signed_url_rest("avatars", avatar_path, expires_in=3600) if avatar_path else None
+
+    # cache curto para evitar múltiplas chamadas
+    if st.session_state.get("_avatar_signed_for") == avatar_path and st.session_state.get("_avatar_signed_url"):
+        avatar_display_url = st.session_state.get("_avatar_signed_url")
+    else:
+        avatar_display_url = _signed_url_rest("avatars", avatar_path, expires_in=3600)
+        st.session_state["_avatar_signed_for"] = avatar_path
+        st.session_state["_avatar_signed_url"] = avatar_display_url
 
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -151,8 +150,28 @@ def exibir_perfil(supabase_db):
     st.caption("Envie PNG/JPG. O arquivo será salvo em: avatars/<user_id>/avatar.ext (privado).")
 
 
-    arquivo = st.file_uploader("Escolher imagem", type=["png", "jpg", "jpeg"])
+    if "avatar_uploader_key" not in st.session_state:
+        st.session_state.avatar_uploader_key = 0
+
+    arquivo = st.file_uploader(
+        "Escolher imagem",
+        type=["png", "jpg", "jpeg"],
+        key=f"avatar_uploader_{st.session_state.avatar_uploader_key}",
+    )
+
+    col_a, col_b = st.columns([1, 3])
+    with col_a:
+        salvar = st.button("💾 Salvar avatar", use_container_width=True, disabled=arquivo is None)
+
+    with col_b:
+        st.caption("Dica: clique em **Salvar avatar** após escolher a imagem (evita loop de rerun).")
+
+
+    if not salvar:
+        return
+
     if arquivo is None:
+        st.warning("Selecione uma imagem antes de salvar.")
         return
 
     mime = arquivo.type or mimetypes.guess_type(arquivo.name)[0] or "image/png"
@@ -167,15 +186,22 @@ def exibir_perfil(supabase_db):
         _upload_object_rest("avatars", object_path, file_bytes, mime)
     except Exception as e:
         st.error(f"Erro ao enviar para o Storage: {e}")
-        st.stop()
+        return
 
     # Persiste o PATH no user_profiles
     try:
         supabase_db.table("user_profiles").update({"avatar_path": object_path}).eq("user_id", user_id).execute()
     except Exception as e:
         st.error(f"Avatar enviado, mas falhou ao salvar no perfil: {e}")
-        st.stop()
+        return
 
+    # Atualiza sessão e limpa cache do signed url
     st.session_state.usuario["avatar_path"] = object_path
+    st.session_state["_avatar_signed_for"] = None
+    st.session_state["_avatar_signed_url"] = None
+
+    # limpa uploader (muda a key)
+    st.session_state.avatar_uploader_key += 1
+
     st.success("✅ Avatar atualizado!")
     st.rerun()
