@@ -150,8 +150,8 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
                 flex-wrap: wrap;
               }
               .fu-kpi-chip{
-                flex: 1;
-                min-width: 220px;
+                flex: 1 1 240px;
+                min-width: 180px;
                 border-radius: 999px;
                 padding: 10px 14px;
                 background: rgba(255,255,255,0.03);
@@ -236,7 +236,20 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
                 white-space: nowrap;
               }
               .fu-item-desc { margin: 6px 0 0 0; opacity: .78; font-size: 12.5px; line-height: 1.25; }
-            </style>
+            
+
+  @media (max-width: 900px){
+    .fu-kpi-chip{ padding: 8px 12px; }
+    .fu-kpi-value{ font-size: 16px; }
+    .fu-kpi-label{ font-size: 11px; }
+  }
+
+
+  @media (max-width: 600px){
+    .fu-kpi-bar{ gap: 8px; margin-top: 10px; }
+    .fu-kpi-chip{ min-width: 150px; }
+  }
+</style>
             """
         ),
         unsafe_allow_html=True,
@@ -546,4 +559,3 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
 
     st.markdown('<p class="fu-muted">Dica: use a busca rápida na barra lateral para navegar instantaneamente.</p>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)  # end wrap
-
