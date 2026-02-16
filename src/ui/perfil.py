@@ -5,6 +5,12 @@ import json
 import mimetypes
 import streamlit as st
 
+try:
+    # storage3 (supabase-py) exception class
+    from storage3.utils import StorageException  # type: ignore
+except Exception:  # pragma: no cover
+    StorageException = Exception  # type: ignore
+
 
 def _jwt_sub(token: str | None) -> str | None:
     """Extrai o 'sub' do JWT (sem validar assinatura)."""
@@ -46,25 +52,30 @@ def _upload_avatar(supabase, bucket: str, object_path: str, data: bytes, mime: s
 
 
 def _signed_url(supabase, bucket: str, object_path: str, expires_in: int = 3600) -> str | None:
-    try:
-        res = supabase.storage.from_(bucket).create_signed_url(object_path, expires_in)
-    except TypeError:
-        res = supabase.storage.from_(bucket).create_signed_url(object_path, expires_in=expires_in)
+    """Gera URL assinada (bucket privado).
 
-    if isinstance(res, str):
-        return res
-    if isinstance(res, dict):
-        return res.get("signedURL") or res.get("signedUrl") or res.get("signed_url") or res.get("url")
-    return getattr(res, "signed_url", None) or getattr(res, "signedURL", None)
+    Importante: se o arquivo ainda não existir, a API pode lançar StorageException.
+    Nesse caso retornamos None para não quebrar a tela.
+    """
+    try:
+        try:
+            res = supabase.storage.from_(bucket).create_signed_url(object_path, expires_in)
+        except TypeError:
+            res = supabase.storage.from_(bucket).create_signed_url(object_path, expires_in=expires_in)
+
+        if isinstance(res, str):
+            return res
+        if isinstance(res, dict):
+            return res.get("signedURL") or res.get("signedUrl") or res.get("signed_url") or res.get("url")
+        return getattr(res, "signed_url", None) or getattr(res, "signedURL", None)
+    except StorageException:
+        return None
+    except Exception:
+        return None
 
 
 def exibir_perfil(supabase):
-    """Meu Perfil (avatar em bucket PRIVADO com URL assinada).
-
-    Importante:
-    - O RLS do storage.objects valida auth.uid() contra o PRIMEIRO segmento do path.
-    - Para evitar mismatch, usamos o 'sub' do JWT como user_id de referência.
-    """
+    """Meu Perfil (avatar em bucket PRIVADO com URL assinada)."""
 
     token = st.session_state.get("auth_access_token")
     uid = _jwt_sub(token)
@@ -113,9 +124,11 @@ def exibir_perfil(supabase):
         st.markdown(f"**Perfil:** {perfil}")
         st.caption("🔒 Avatar em bucket privado (URL assinada).")
 
+
     st.divider()
     st.subheader("🖼 Atualizar avatar")
     st.caption("Envie PNG/JPG. O arquivo será salvo em: avatars/<user_id>/avatar.ext (privado).")
+
 
     arquivo = st.file_uploader("Escolher imagem", type=["png", "jpg", "jpeg"])
 
@@ -134,9 +147,6 @@ def exibir_perfil(supabase):
         _upload_avatar(supabase, "avatars", object_path, file_bytes, mime)
     except Exception as e:
         st.error(f"Erro ao enviar para o Storage: {e}")
-        # diagnóstico curto
-        if uid and str(uid) != str(user_id):
-            st.warning(f"Mismatch: jwt sub ({uid}) != user_id ({user_id}).")
         return
 
     # Persiste o PATH no user_profiles
