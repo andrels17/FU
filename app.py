@@ -61,7 +61,13 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
               overflow: hidden !important;
               text-overflow: ellipsis !important;
             }
-            section[data-testid="stSidebar"] .stButton button{
+            section[data-testid="stSidebar"] /* Compact nav buttons */
+section[data-testid="stSidebar"] .stButton button{
+  height: 44px !important;
+  border-radius: 12px !important;
+}
+
+.stButton button{
               width: 44px !important;
               padding-left: 0 !important;
               padding-right: 0 !important;
@@ -314,6 +320,72 @@ def _label_alertas(total_alertas: int) -> str:
         return f"🔔 Alertas e Notificações  🔴 ({int(total_alertas)})"
     return "🔔 Alertas e Notificações"
 
+
+def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin: bool) -> None:
+    """Sidebar compacta (ícones only) para modo colapsado.
+
+    Implementa:
+      - Tooltips via `help=` nos botões
+      - Destaque do item ativo via indicador lateral
+    """
+    items: list[tuple[str, str, str]] = [
+        ("🏠", "🏠 Início", "Início"),
+        ("📊", "Dashboard", "Dashboard"),
+        ("🔔", "🔔 Alertas e Notificações", "Alertas"),
+        ("🔎", "Consultar Pedidos", "Consultar pedidos"),
+        ("👤", "Meu Perfil", "Meu perfil"),
+        ("🧾", "Ficha de Material", "Ficha de material"),
+        ("🛒", "Gestão de Pedidos", "Gestão de pedidos"),
+        ("🗺️", "Mapa Geográfico", "Mapa"),
+    ]
+
+    if is_admin:
+        items += [
+            ("👥", "👥 Gestão de Usuários", "Gestão de usuários"),
+            ("💾", "💾 Backup", "Backup"),
+        ]
+        if is_superadmin:
+            items += [("🧩", "🧩 Admin do SaaS", "Admin do SaaS")]
+
+    current = st.session_state.get("current_page") or "🏠 Início"
+    if str(current).startswith("🔔"):
+        current = "🔔 Alertas e Notificações"
+
+    # Badge de alertas
+    if total_alertas and total_alertas > 0:
+        st.markdown(
+            f"""<div style="display:flex;justify-content:center;margin:6px 0 10px 0;">
+              <div style="background:rgba(239,68,68,0.95);color:white;padding:2px 8px;border-radius:999px;font-weight:900;font-size:11px;">
+                {int(total_alertas)}
+              </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    # Render: indicador + botão ícone (tooltip no help)
+    for ico, page, tip in items:
+        active = (page == current)
+
+        # indicador lateral do item ativo
+        ind_col, btn_col = st.columns([0.22, 0.78], gap="small")
+        with ind_col:
+            st.markdown(
+                f"""<div style="height:40px;display:flex;align-items:center;justify-content:center;">
+                      <div style="width:6px;height:{'22px' if active else '10px'};
+                                  border-radius:999px;
+                                  background:{'rgba(245,158,11,0.95)' if active else 'rgba(255,255,255,0.12)'};">
+                      </div>
+                    </div>""",
+                unsafe_allow_html=True,
+            )
+
+        with btn_col:
+            # Botão do ícone (somente)
+            if st.button(ico, help=tip, key=f"fu_nav_btn_{page}", use_container_width=True):
+                if page != st.session_state.get("current_page"):
+                    st.session_state.current_page = page
+                    st.session_state["_force_menu_sync"] = True
+                    st.rerun()
 
 def _sidebar_footer(supabase_client) -> None:
     """Renderiza Sair + créditos (sempre por último na sidebar)."""
@@ -765,31 +837,46 @@ def main():
     # ===== Sidebar topo + menus (SEM botão sair/creditos aqui) =====
     with st.sidebar:
 
-        usuario = st.session_state.usuario
-        nome = usuario.get("nome", "Usuário")
-        perfil = (usuario.get("perfil") or "user").lower()
-        avatar_url = usuario.get("avatar_url")
+        # Toggle: colapsar/expandir (ícones only no colapsado)
+        btn_lbl = "⮞" if st.session_state.get("fu_sidebar_hidden") else "⮜"
+        btn_help = "Expandir menu lateral" if st.session_state.get("fu_sidebar_hidden") else "Colapsar menu lateral"
+        if st.button(btn_lbl, help=btn_help):
+            st.session_state.fu_sidebar_hidden = (not st.session_state.get("fu_sidebar_hidden"))
+            st.rerun()
 
-        # saudação
-        hora = datetime.now().hour
-        if hora < 12:
-            saudacao = "Bom dia"
-        elif hora < 18:
-            saudacao = "Boa tarde"
-        else:
-            saudacao = "Boa noite"
+        is_admin = st.session_state.usuario.get("perfil") == "admin"
+        _fu_render_compact_sidebar(
+            total_alertas=total_alertas,
+            is_admin=is_admin,
+            is_superadmin=bool(st.session_state.get("is_superadmin")),
+        ) if st.session_state.get("fu_sidebar_hidden") else None
 
-        # badge por perfil
-        if perfil == "admin":
-            badge_cor = "#ef4444"
-        elif perfil == "buyer":
-            badge_cor = "#3b82f6"
-        else:
-            badge_cor = "#10b981"
+        if not st.session_state.get("fu_sidebar_hidden"):
+            usuario = st.session_state.usuario
+            nome = usuario.get("nome", "Usuário")
+            perfil = (usuario.get("perfil") or "user").lower()
+            avatar_url = usuario.get("avatar_url")
+
+            # saudação
+            hora = datetime.now().hour
+            if hora < 12:
+                saudacao = "Bom dia"
+            elif hora < 18:
+                saudacao = "Boa tarde"
+            else:
+                saudacao = "Boa noite"
+
+            # badge por perfil
+            if perfil == "admin":
+                badge_cor = "#ef4444"
+            elif perfil == "buyer":
+                badge_cor = "#3b82f6"
+            else:
+                badge_cor = "#10b981"
 
 
-        st.markdown(
-            textwrap.dedent(f"""<div class="fu-card">
+            st.markdown(
+                textwrap.dedent(f"""<div class="fu-card">
   <p class="fu-user-label">👷 Sistema de Follow-Up</p>
   <div class="fu-bar"></div>
 
@@ -799,8 +886,8 @@ def main():
     <div>
       <p class="fu-user-name" style="margin:0;">{nome}</p>
       <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
-        <span style="background:{badge_cor};padding:2px 10px;border-radius:999px;font-size:11px;color:white;font-weight:900;letter-spacing:0.2px;">{perfil.upper()}</span>
-        <span style="font-size:11px; opacity:.72;">{saudacao}</span>
+            <span style="background:{badge_cor};padding:2px 10px;border-radius:999px;font-size:11px;color:white;font-weight:900;letter-spacing:0.2px;">{perfil.upper()}</span>
+            <span style="font-size:11px; opacity:.72;">{saudacao}</span>
       </div>
     </div>
   </div>
@@ -821,69 +908,69 @@ def main():
   </div>
 </div>
 """),
-            unsafe_allow_html=True,
-        )
+                unsafe_allow_html=True,
+            )
 
-        with st.expander("⚙️ Conta"):
-            if st.button("👤 Meu Perfil", use_container_width=True):
-                st.session_state.current_page = "Meu Perfil"
-                st.session_state["menu_ops"] = "Meu Perfil"
-                st.session_state.exp_ops_open = True
-                st.session_state.exp_gestao_open = False
-                st.rerun()
+            with st.expander("⚙️ Conta"):
+                if st.button("👤 Meu Perfil", use_container_width=True):
+                    st.session_state.current_page = "Meu Perfil"
+                    st.session_state["menu_ops"] = "Meu Perfil"
+                    st.session_state.exp_ops_open = True
+                    st.session_state.exp_gestao_open = False
+                    st.rerun()
 
-            if st.button("🚪 Sair", use_container_width=True):
-                try:
-                    fazer_logout(supabase_anon)
-                except Exception:
-                    pass
-                st.rerun()
+                if st.button("🚪 Sair", use_container_width=True):
+                    try:
+                        fazer_logout(supabase_anon)
+                    except Exception:
+                        pass
+                    st.rerun()
 
-        # 🔎 Busca rápida (navegação)
-        busca = st.text_input(
-            "🔎 Busca rápida",
-            key="global_search_sidebar",
-            placeholder="Ex.: dashboard, alertas, ficha, mapa..."
-        )
+            # 🔎 Busca rápida (navegação)
+            busca = st.text_input(
+                "🔎 Busca rápida",
+                key="global_search_sidebar",
+                placeholder="Ex.: dashboard, alertas, ficha, mapa..."
+            )
 
-        if busca:
-            termo = busca.strip().lower()
+            if busca:
+                termo = busca.strip().lower()
 
-            mapa_paginas = {
-                "dash": "Dashboard",
-                "dashboard": "Dashboard",
-                "alert": "🔔 Alertas e Notificações",
-                "notific": "🔔 Alertas e Notificações",
-                "consulta": "Consultar Pedidos",
-                "pedido": "Consultar Pedidos",
-                "ficha": "Ficha de Material",
-                "material": "Ficha de Material",
-                "gest": "Gestão de Pedidos",
-                "mapa": "Mapa Geográfico",
-                "usu": "👥 Gestão de Usuários",
-                "usuario": "👥 Gestão de Usuários",
-                "backup": "💾 Backup",
-            }
+                mapa_paginas = {
+                    "dash": "Dashboard",
+                    "dashboard": "Dashboard",
+                    "alert": "🔔 Alertas e Notificações",
+                    "notific": "🔔 Alertas e Notificações",
+                    "consulta": "Consultar Pedidos",
+                    "pedido": "Consultar Pedidos",
+                    "ficha": "Ficha de Material",
+                    "material": "Ficha de Material",
+                    "gest": "Gestão de Pedidos",
+                    "mapa": "Mapa Geográfico",
+                    "usu": "👥 Gestão de Usuários",
+                    "usuario": "👥 Gestão de Usuários",
+                    "backup": "💾 Backup",
+                }
 
-            sugestoes = []
-            for chave, destino in mapa_paginas.items():
-                if chave in termo:
-                    sugestoes.append(destino)
+                sugestoes = []
+                for chave, destino in mapa_paginas.items():
+                    if chave in termo:
+                        sugestoes.append(destino)
 
-            sugestoes = list(dict.fromkeys(sugestoes))
+                sugestoes = list(dict.fromkeys(sugestoes))
 
-            if sugestoes:
-                st.caption("Sugestões:")
-                for destino in sugestoes[:8]:
-                    if st.button(f"➡️ Ir para {destino}", key=f"goto_{destino}", use_container_width=True):
-                        st.session_state.current_page = destino
-                        st.rerun()
+                if sugestoes:
+                    st.caption("Sugestões:")
+                    for destino in sugestoes[:8]:
+                        if st.button(f"➡️ Ir para {destino}", key=f"goto_{destino}", use_container_width=True):
+                            st.session_state.current_page = destino
+                            st.rerun()
 
-        st.markdown("---")
+            st.markdown("---")
 
-        if total_alertas > 0:
-            st.markdown(
-                textwrap.dedent(f"""<div class="fu-card" style="
+            if total_alertas > 0:
+                st.markdown(
+                    textwrap.dedent(f"""<div class="fu-card" style="
   border: 1px solid rgba(245,158,11,0.35);
   background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(255,255,255,0.04));
 ">
@@ -903,105 +990,105 @@ def main():
   </div>
 </div>
 """),
-                unsafe_allow_html=True,
-            )
+                    unsafe_allow_html=True,
+                )
 
-        is_admin = st.session_state.usuario.get("perfil") == "admin"
-        alertas_label = _label_alertas(total_alertas)
+            is_admin = st.session_state.usuario.get("perfil") == "admin"
+            alertas_label = _label_alertas(total_alertas)
 
-        # ✅ Controle de navegação (seleção única + expander inteligente)
-        if "current_page" not in st.session_state:
-            st.session_state.current_page = "🏠 Início"
+            # ✅ Controle de navegação (seleção única + expander inteligente)
+            if "current_page" not in st.session_state:
+                st.session_state.current_page = "🏠 Início"
 
-        # Memoriza qual box ficou aberto por último
-        if "exp_ops_open" not in st.session_state:
-            st.session_state.exp_ops_open = False
-        if "exp_gestao_open" not in st.session_state:
-            st.session_state.exp_gestao_open = True
+            # Memoriza qual box ficou aberto por último
+            if "exp_ops_open" not in st.session_state:
+                st.session_state.exp_ops_open = False
+            if "exp_gestao_open" not in st.session_state:
+                st.session_state.exp_gestao_open = True
 
-        # ---------- Operações ----------
-        opcoes_ops = ["🏠 Início", "Dashboard", alertas_label, "Consultar Pedidos", "Meu Perfil"]
-        is_ops_page = st.session_state.current_page in opcoes_ops
-        index_ops = opcoes_ops.index(st.session_state.current_page) if is_ops_page else None
+            # ---------- Operações ----------
+            opcoes_ops = ["🏠 Início", "Dashboard", alertas_label, "Consultar Pedidos", "Meu Perfil"]
+            is_ops_page = st.session_state.current_page in opcoes_ops
+            index_ops = opcoes_ops.index(st.session_state.current_page) if is_ops_page else None
 
-        # ---------- Gestão ----------
-        if is_admin:
-            opcoes_gestao = [
-                "Ficha de Material",
-                "Gestão de Pedidos",
-                "Mapa Geográfico",
-                "👥 Gestão de Usuários",
-                "💾 Backup",
-            ] + (["🧩 Admin do SaaS"] if st.session_state.get("is_superadmin") else [])
-        else:
-            opcoes_gestao = ["Ficha de Material", "Mapa Geográfico"]
+            # ---------- Gestão ----------
+            if is_admin:
+                opcoes_gestao = [
+                    "Ficha de Material",
+                    "Gestão de Pedidos",
+                    "Mapa Geográfico",
+                    "👥 Gestão de Usuários",
+                    "💾 Backup",
+                ] + (["🧩 Admin do SaaS"] if st.session_state.get("is_superadmin") else [])
+            else:
+                opcoes_gestao = ["Ficha de Material", "Mapa Geográfico"]
 
-        is_gestao_page = st.session_state.current_page in opcoes_gestao
-        index_gestao = opcoes_gestao.index(st.session_state.current_page) if is_gestao_page else None
+            is_gestao_page = st.session_state.current_page in opcoes_gestao
+            index_gestao = opcoes_gestao.index(st.session_state.current_page) if is_gestao_page else None
 
-        # Auto-abrir o box do grupo ativo (e lembrar o estado do último aberto)
-        expanded_ops = True if is_ops_page else bool(st.session_state.exp_ops_open)
-        expanded_gestao = True if is_gestao_page else bool(st.session_state.exp_gestao_open)
+            # Auto-abrir o box do grupo ativo (e lembrar o estado do último aberto)
+            expanded_ops = True if is_ops_page else bool(st.session_state.exp_ops_open)
+            expanded_gestao = True if is_gestao_page else bool(st.session_state.exp_gestao_open)
 
-        # Renderiza expanders + menus
-        
-        # 🔁 Sincroniza o valor dos rádios (menu_ops/menu_gestao) ANTES de criar os widgets
-        # Evita warning: widget criado com default e também setado via session_state no mesmo rerun.
-        if st.session_state.get("_force_menu_sync"):
-            try:
-                if st.session_state.current_page in opcoes_ops:
-                    st.session_state["menu_ops"] = st.session_state.current_page
-                if st.session_state.current_page in opcoes_gestao:
-                    st.session_state["menu_gestao"] = st.session_state.current_page
-            except Exception:
-                pass
-            st.session_state["_force_menu_sync"] = False
+            # Renderiza expanders + menus
+            
+            # 🔁 Sincroniza o valor dos rádios (menu_ops/menu_gestao) ANTES de criar os widgets
+            # Evita warning: widget criado com default e também setado via session_state no mesmo rerun.
+            if st.session_state.get("_force_menu_sync"):
+                try:
+                    if st.session_state.current_page in opcoes_ops:
+                        st.session_state["menu_ops"] = st.session_state.current_page
+                    if st.session_state.current_page in opcoes_gestao:
+                        st.session_state["menu_gestao"] = st.session_state.current_page
+                except Exception:
+                    pass
+                st.session_state["_force_menu_sync"] = False
 
-        with st.expander("📊 Operações", expanded=expanded_ops):
-            if is_ops_page:
-                st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
+            with st.expander("📊 Operações", expanded=expanded_ops):
+                if is_ops_page:
+                    st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
 
-            escolha_ops = st.radio(
-                "",
-                opcoes_ops,
-                index=index_ops,
-                label_visibility="collapsed",
-                key="menu_ops",
-            )
+                escolha_ops = st.radio(
+                    "",
+                    opcoes_ops,
+                    index=index_ops,
+                    label_visibility="collapsed",
+                    key="menu_ops",
+                )
 
-            if is_ops_page:
-                st.markdown("</div>", unsafe_allow_html=True)
+                if is_ops_page:
+                    st.markdown("</div>", unsafe_allow_html=True)
 
-        with st.expander("🛠️ Gestão", expanded=expanded_gestao):
-            if is_gestao_page:
-                st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
+            with st.expander("🛠️ Gestão", expanded=expanded_gestao):
+                if is_gestao_page:
+                    st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
 
-            escolha_gestao = st.radio(
-                "",
-                opcoes_gestao,
-                index=index_gestao,
-                label_visibility="collapsed",
-                key="menu_gestao",
-            )
+                escolha_gestao = st.radio(
+                    "",
+                    opcoes_gestao,
+                    index=index_gestao,
+                    label_visibility="collapsed",
+                    key="menu_gestao",
+                )
 
-            if is_gestao_page:
-                st.markdown("</div>", unsafe_allow_html=True)
+                if is_gestao_page:
+                    st.markdown("</div>", unsafe_allow_html=True)
 
-        # Atualiza página + estado dos expanders (garante seleção única)
-        nova_pagina = None
-        if escolha_ops in opcoes_ops and escolha_ops != st.session_state.current_page:
-            nova_pagina = escolha_ops
-            st.session_state.exp_ops_open = True
-            st.session_state.exp_gestao_open = False
+            # Atualiza página + estado dos expanders (garante seleção única)
+            nova_pagina = None
+            if escolha_ops in opcoes_ops and escolha_ops != st.session_state.current_page:
+                nova_pagina = escolha_ops
+                st.session_state.exp_ops_open = True
+                st.session_state.exp_gestao_open = False
 
-        if escolha_gestao in opcoes_gestao and escolha_gestao != st.session_state.current_page:
-            nova_pagina = escolha_gestao
-            st.session_state.exp_ops_open = False
-            st.session_state.exp_gestao_open = True
+            if escolha_gestao in opcoes_gestao and escolha_gestao != st.session_state.current_page:
+                nova_pagina = escolha_gestao
+                st.session_state.exp_ops_open = False
+                st.session_state.exp_gestao_open = True
 
-        if nova_pagina:
-            st.session_state.current_page = nova_pagina
-            st.rerun()
+            if nova_pagina:
+                st.session_state.current_page = nova_pagina
+                st.rerun()
 
         # Página atual (fonte de verdade)
         pagina = st.session_state.current_page
