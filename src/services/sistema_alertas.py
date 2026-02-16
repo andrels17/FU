@@ -962,33 +962,19 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     vmin = float(min(vals)) if vals else 0.0
     vmax = float(max(vals)) if vals else 0.0
 
-    with st.expander("🎛️ Filtros globais", expanded=False):
-        c1, c2, c3 = st.columns([1.2, 1.2, 1.6])
-
-        with c1:
-            g_deps = st.multiselect("Departamento", options=deps_all, default=[], key="fu_global_deps")
-        with c2:
-            g_forns = st.multiselect("Fornecedor", options=forns_all, default=[], key="fu_global_forns")
-        with c3:
-            if vmax > 0:
-                g_val = st.slider("Faixa de valor (R$)", min_value=float(vmin), max_value=float(vmax), value=(float(vmin), float(vmax)), step=max(1.0, (vmax - vmin) / 100), key="fu_global_val")
-            else:
-                g_val = (0.0, 0.0)
-                st.caption("Sem valores para filtrar")
-
     def _apply_global_pedidos(lista):
         if not lista:
             return []
         out = lista
 
-        if g_deps:
-            out = [p for p in out if safe_text(p.get("departamento", "N/A")) in g_deps]
+        if dept_global:
+            out = [p for p in out if safe_text(p.get("departamento", "N/A")) in dept_global]
 
-        if g_forns:
-            out = [p for p in out if safe_text(p.get("fornecedor", "N/A")) in g_forns]
+        if forn_global:
+            out = [p for p in out if safe_text(p.get("fornecedor", "N/A")) in forn_global]
 
         if vmax > 0:
-            lo, hi = g_val
+            lo, hi = faixa_valoral
             out = [p for p in out if lo <= float(p.get("valor", 0) or 0) <= hi]
 
         return out
@@ -997,8 +983,8 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         if not lista:
             return []
         out = lista
-        if g_forns:
-            out = [f for f in out if safe_text(f.get("fornecedor", "N/A")) in g_forns]
+        if forn_global:
+            out = [f for f in out if safe_text(f.get("fornecedor", "N/A")) in forn_global]
         return out
 
 
