@@ -81,7 +81,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
     df["_atrasado"] = df["_pendente"] & df["_due"].notna() & (df["_due"] < hoje)
 
     # Entregue em atraso (se existir data_entrega). Mantém compatibilidade: se não existir, tudo False.
-    df[\"_entregue_tarde\"] = df[\"entregue\"] & df[\"_due\"].notna() & data_entrega.notna() & (data_entrega > df[\"_due\"])
+    df["_entregue_tarde"] = df["entregue"] & df["_due"].notna() & data_entrega.notna() & (data_entrega > df["_due"])
 
         # ============================
     # Fornecedor: tentar manter nome já vindo da view (vw_pedidos_completo),
