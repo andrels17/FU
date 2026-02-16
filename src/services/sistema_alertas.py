@@ -3,6 +3,7 @@ import pandas as pd
 import re
 import html
 from datetime import datetime, timedelta
+import math
 
 
 # ============================
@@ -361,7 +362,7 @@ def exibir_painel_alertas(alertas: dict, formatar_moeda_br):
     """Alias para compatibilidade com o app.py."""
     return exibir_alertas_completo(alertas, formatar_moeda_br)
 
-def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
+def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0):
     """Renderiza um card de pedido (atrasado, vencendo ou crítico)."""
     
     def safe_text(txt):
@@ -381,7 +382,9 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
         dept = safe_text(pedido.get("departamento", "N/A"))
         
         with st.container():
-            st.markdown(
+            cbox, cbtn1, cbtn2 = st.columns([12, 2, 2])
+            with cbox:
+                st.markdown(
                 f"""
                 <div style='border-left: 4px solid #dc2626; padding: 12px; margin-bottom: 10px; background-color: rgba(220, 38, 38, 0.10); border-radius: 10px;'>
                     <p style='margin: 0; font-size: 14px; color: #dc2626; font-weight: 600;'>🔴 OC: {nr_oc_txt}</p>
@@ -396,11 +399,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
             )
 
             # Ações rápidas (híbrido: operacional + executivo)
-            seq = int(st.session_state.get("_alerta_widget_seq", 0)) + 1
-            st.session_state["_alerta_widget_seq"] = seq
-            base_key = f"{tipo}_{seq}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
-
-            cbtn1, cbtn2 = st.columns([1, 1])
+            base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}_{idx}"
             with cbtn1:
                 if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
                     _ir_para_ficha_material_do_alerta(pedido)
@@ -408,9 +407,9 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
                 if st.button("📋 Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
                     st.session_state["oc_copiada"] = str(pedido.get("nr_oc", "") or "")
                     try:
-                        st.toast("OC copiada (salva em sessão).", icon="📋")
+                        st.toast("OC copiada.", icon="📋")
                     except Exception:
-                        st.info("OC copiada (salva em sessão).")
+                        st.info("OC copiada.")
 
     
     elif tipo == "vencendo":
@@ -418,7 +417,9 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
         prev = safe_text(pedido.get("previsao", "N/A"))
         
         with st.container():
-            st.markdown(
+            cbox, cbtn1, cbtn2 = st.columns([12, 2, 2])
+            with cbox:
+                st.markdown(
                 f"""
                 <div style='border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 10px; background-color: rgba(245, 158, 11, 0.10); border-radius: 10px;'>
                     <p style='margin: 0; font-size: 14px; color: #f59e0b; font-weight: 600;'>⏰ OC: {nr_oc_txt}</p>
@@ -433,11 +434,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
             )
 
             # Ações rápidas (híbrido: operacional + executivo)
-            seq = int(st.session_state.get("_alerta_widget_seq", 0)) + 1
-            st.session_state["_alerta_widget_seq"] = seq
-            base_key = f"{tipo}_{seq}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
-
-            cbtn1, cbtn2 = st.columns([1, 1])
+            base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}_{idx}"
             with cbtn1:
                 if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
                     _ir_para_ficha_material_do_alerta(pedido)
@@ -445,9 +442,9 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
                 if st.button("📋 Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
                     st.session_state["oc_copiada"] = str(pedido.get("nr_oc", "") or "")
                     try:
-                        st.toast("OC copiada (salva em sessão).", icon="📋")
+                        st.toast("OC copiada.", icon="📋")
                     except Exception:
-                        st.info("OC copiada (salva em sessão).")
+                        st.info("OC copiada.")
 
     
     elif tipo == "critico":
@@ -455,7 +452,9 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
         dept = safe_text(pedido.get("departamento", "N/A"))
         
         with st.container():
-            st.markdown(
+            cbox, cbtn1, cbtn2 = st.columns([12, 2, 2])
+            with cbox:
+                st.markdown(
                 f"""
                 <div style='border-left: 4px solid #7c3aed; padding: 12px; margin-bottom: 10px; background-color: rgba(124, 58, 237, 0.10); border-radius: 10px;'>
                     <p style='margin: 0; font-size: 14px; color: #7c3aed; font-weight: 600;'>🚨 OC: {nr_oc_txt}</p>
@@ -470,11 +469,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
             )
 
             # Ações rápidas (híbrido: operacional + executivo)
-            seq = int(st.session_state.get("_alerta_widget_seq", 0)) + 1
-            st.session_state["_alerta_widget_seq"] = seq
-            base_key = f"{tipo}_{seq}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
-
-            cbtn1, cbtn2 = st.columns([1, 1])
+            base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}_{idx}"
             with cbtn1:
                 if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
                     _ir_para_ficha_material_do_alerta(pedido)
@@ -482,9 +477,9 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
                 if st.button("📋 Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
                     st.session_state["oc_copiada"] = str(pedido.get("nr_oc", "") or "")
                     try:
-                        st.toast("OC copiada (salva em sessão).", icon="📋")
+                        st.toast("OC copiada.", icon="📋")
                     except Exception:
-                        st.info("OC copiada (salva em sessão).")
+                        st.info("OC copiada.")
 
 
 
@@ -570,6 +565,47 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             return "N/A"
         txt_str = re.sub(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]", "", txt_str)
         return html.escape(txt_str)
+
+
+    def _paginate(itens: list, key_prefix: str, per_page_default: int = 10):
+        """Paginação simples para listas."""
+        if not itens:
+            return [], 0, 0, per_page_default
+
+        per_page = st.selectbox(
+            "Itens por página",
+            options=[10, 20, 30, 50],
+            index=[10, 20, 30, 50].index(per_page_default) if per_page_default in [10, 20, 30, 50] else 0,
+            key=f"{key_prefix}_per_page",
+        )
+        total = len(itens)
+        total_pages = max(1, int(math.ceil(total / per_page)))
+        page = int(st.session_state.get(f"{key_prefix}_page", 1))
+        page = max(1, min(total_pages, page))
+
+        nav1, nav2, nav3 = st.columns([1, 2, 1])
+        with nav1:
+            if st.button("⬅️", key=f"{key_prefix}_prev", disabled=(page <= 1)):
+                page -= 1
+        with nav3:
+            if st.button("➡️", key=f"{key_prefix}_next", disabled=(page >= total_pages)):
+                page += 1
+        with nav2:
+            page = st.number_input(
+                "Página",
+                min_value=1,
+                max_value=total_pages,
+                value=page,
+                step=1,
+                key=f"{key_prefix}_page_input",
+                label_visibility="collapsed",
+            )
+
+        st.session_state[f"{key_prefix}_page"] = int(page)
+
+        start = (page - 1) * per_page
+        end = start + per_page
+        return itens[start:end], total, total_pages, per_page
 
     st.title("🔔 Central de Notificações e Alertas")
 
@@ -915,8 +951,8 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos atrasados")
 
             if pedidos_filtrados:
-                for pedido in pedidos_filtrados:
-                    criar_card_pedido(pedido, "atrasado", formatar_moeda_br)
+                for i, pedido in enumerate(pedidos_filtrados):
+                    criar_card_pedido(pedido, "atrasado", formatar_moeda_br, idx=i)
             else:
                 st.info("📭 Nenhum pedido atrasado corresponde aos filtros selecionados")
         else:
@@ -972,8 +1008,8 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos vencendo")
 
             if pedidos_filtrados:
-                for pedido in pedidos_filtrados:
-                    criar_card_pedido(pedido, "vencendo", formatar_moeda_br)
+                for i, pedido in enumerate(pedidos_filtrados):
+                    criar_card_pedido(pedido, "vencendo", formatar_moeda_br, idx=i)
             else:
                 st.info("📭 Nenhum pedido vencendo corresponde aos filtros selecionados")
         else:
@@ -1046,8 +1082,8 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             if pedidos_filtrados:
                 st.warning("⚠️ Pedidos de alto valor com previsão de entrega próxima")
                 
-                for pedido in pedidos_filtrados:
-                    criar_card_pedido(pedido, "critico", formatar_moeda_br)
+                for i, pedido in enumerate(pedidos_filtrados):
+                    criar_card_pedido(pedido, "critico", formatar_moeda_br, idx=i)
             else:
                 st.info("📭 Nenhum pedido crítico corresponde aos filtros selecionados")
         else:
