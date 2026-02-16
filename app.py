@@ -812,6 +812,19 @@ def main():
         expanded_gestao = True if is_gestao_page else bool(st.session_state.exp_gestao_open)
 
         # Renderiza expanders + menus
+        
+        # 🔁 Sincroniza o valor dos rádios (menu_ops/menu_gestao) ANTES de criar os widgets
+        # Evita warning: widget criado com default e também setado via session_state no mesmo rerun.
+        if st.session_state.get("_force_menu_sync"):
+            try:
+                if st.session_state.current_page in opcoes_ops:
+                    st.session_state["menu_ops"] = st.session_state.current_page
+                if st.session_state.current_page in opcoes_gestao:
+                    st.session_state["menu_gestao"] = st.session_state.current_page
+            except Exception:
+                pass
+            st.session_state["_force_menu_sync"] = False
+
         with st.expander("📊 Operações", expanded=expanded_ops):
             if is_ops_page:
                 st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
