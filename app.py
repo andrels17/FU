@@ -13,12 +13,42 @@ st.set_page_config(
 
 
 
+
+
+# --- Detecta viewport (mobile) e seta parâmetro na URL para default colapsado ---
+components.html(
+    """
+    <script>
+      (function(){
+        try{
+          const isMobile = window.innerWidth < 900;
+          const url = new URL(window.location.href);
+          const params = url.searchParams;
+
+          // Evita loop: só seta uma vez por sessão do navegador
+          const already = window.localStorage.getItem("fu_mobile_detected") === "1";
+
+          if(isMobile && !already && !params.has("fu_mobile")){
+            params.set("fu_mobile","1");
+            url.search = params.toString();
+            window.localStorage.setItem("fu_mobile_detected","1");
+            window.location.replace(url.toString());
+          }
+        }catch(e){}
+      })();
+    </script>
+    """,
+    height=0,
+)
+
 # --- Responsividade global (zoom/mobile) + Sidebar colapsável ---
 if "fu_sidebar_hidden" not in st.session_state:
-    st.session_state.fu_sidebar_hidden = False
+    # Se detectar mobile (via query param), começa com sidebar recolhida
+    is_mobile_default = bool(st.query_params.get("fu_mobile"))
+    st.session_state.fu_sidebar_hidden = True if is_mobile_default else False
 
 def _fu_inject_global_css(sidebar_hidden: bool) -> None:
-    hide_css = "section[data-testid=\"stSidebar\"]{display:none !important;}" if sidebar_hidden else ""
+    hide_css = ( "section[data-testid=\"stSidebar\"]{ transform: translateX(-110%); opacity: 0; width: 0 !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; pointer-events: none !important; }" ) if sidebar_hidden else ""
 
     st.markdown(
         f'''
@@ -27,7 +57,7 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         .fu-wrap{{ width: min(1200px, calc(100% - 32px)); margin: 0 auto; }}
 
         /* Sidebar responsiva */
-        section[data-testid="stSidebar"]{{ width: clamp(260px, 20vw, 340px) !important; transition: all .2s ease; }}
+        section[data-testid="stSidebar"]{{ width: clamp(260px, 20vw, 340px) !important; transition: transform .28s ease, opacity .28s ease, width .28s ease, margin .28s ease, padding .28s ease; }}
         @media (max-width: 1100px){{ section[data-testid="stSidebar"]{{ width: 240px !important; }} }}
         @media (max-width: 900px){{ section[data-testid="stSidebar"]{{ width: 100% !important; }} }}
 
