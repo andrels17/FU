@@ -430,20 +430,26 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
             # Seleção + status (por item)
             base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}_{idx}"
             with csel:
+                # checkbox (seleção para lote)
                 _chk_key = f"sel_{base_key}"
-                selecionado = st.checkbox("", key=_chk_key)
+                st.checkbox("", key=_chk_key)
+
+                # status (sincroniza UI <- store para não "desfazer" lote)
+                _status_key = f"status_{base_key}"
+                _stored = get_alert_status(str(pedido.get("id", "")) or str(pedido.get("nr_oc", "")) or str(idx))
+
+                # garante que o widget reflita o status armazenado (inclusive após ação em lote)
+                if st.session_state.get(_status_key) != _stored:
+                    st.session_state[_status_key] = _stored
+
                 novo_status = st.selectbox(
                     "",
                     options=["Novo", "Em andamento", "Resolvido"],
-                    index=["Novo", "Em andamento", "Resolvido"].index(status) if status in ["Novo", "Em andamento", "Resolvido"] else 0,
-                    key=f"status_{base_key}",
+                    key=_status_key,
                     label_visibility="collapsed",
                 )
-                if novo_status != status:
-                    try:
-                        set_alert_status(str(pedido.get('id','')), novo_status)
-                    except Exception:
-                        pass
+                if novo_status != _stored:
+                    set_alert_status(str(pedido.get("id", "")) or str(pedido.get("nr_oc", "")) or str(idx), novo_status)
 
             # Ações rápidas (híbrido: operacional + executivo)
             with cbtn1:
@@ -823,7 +829,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     vmax = float(max(valores)) if valores else 0.0
 
     st.markdown("<div class='fu-bar'>", unsafe_allow_html=True)
-    colg1, colg2, colg3 = st.columns(3)
+    colg1, colg2, colg3, colg4 = st.columns([4,4,3.5,1.5])
     with colg1:
         dept_global = st.multiselect(
             "Departamento",
@@ -851,9 +857,29 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 key="alertas_global_valor",
                 label_visibility="collapsed",
             )
+            st.markdown(f"<div style='text-align:right;font-size:12px;opacity:.75;margin-top:4px;'>R$ {faixa_valor[0]:,.0f} — R$ {faixa_valor[1]:,.0f}</div>".replace(',', 'X').replace('.', ',').replace('X','.'), unsafe_allow_html=True)
         else:
             faixa_valor = (0.0, 0.0)
             st.caption("Valor (global): sem dados")
+
+
+        with colg4:
+            st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:4px;text-align:right;'>Ações</div>", unsafe_allow_html=True)
+            if st.button("🧹 Limpar", key="alertas_global_clear", use_container_width=True):
+                # reset widgets (antes de serem renderizados)
+                st.session_state["alertas_global_dept"] = []
+                st.session_state["alertas_global_forn"] = []
+                # tenta resetar slider para o intervalo total
+                try:
+                    _vmin = float(min(valores)) if valores else 0.0
+                    _vmax = float(max(valores)) if valores else 0.0
+                except Exception:
+                    _vmin, _vmax = 0.0, 0.0
+                st.session_state["alertas_global_valor"] = (_vmin, _vmax)
+                try:
+                    st.rerun()
+                except Exception:
+                    pass
 
     st.markdown("</div>", unsafe_allow_html=True)
 
