@@ -1162,31 +1162,31 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                         # Toolbar (paginação + lote) — compacto
             t1, t2, t3, t4, t5, t6 = st.columns([2, 1.1, 1.4, 1.1, 2.3, 6.1])
             with t1:
-                per_page = st.selectbox("Por pág.", [10, 20, 30, 50], index=0, key="tab_criticos_pp", label_visibility="collapsed")
+                per_page = st.selectbox("Por pág.", [10, 20, 30, 50], index=0, key="tab_atrasados_pp", label_visibility="collapsed")
             with t2:
-                prev = st.button("◀", key="tab_criticos_prev2", use_container_width=True, disabled=int(st.session_state.get("tab_criticos_page", 1)) <= 1)
+                prev = st.button("◀", key="tab_atrasados_prev2", use_container_width=True, disabled=int(st.session_state.get("tab_atrasados_page", 1)) <= 1)
             with t3:
                 st.markdown(
-                    f"<div style='text-align:center; padding:4px 10px; border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-weight:900;'>{int(st.session_state.get('tab_criticos_page',1))}</div>",
+                    f"<div style='text-align:center; padding:4px 10px; border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-weight:900;'>{int(st.session_state.get('tab_atrasados_page',1))}</div>",
                     unsafe_allow_html=True
                 )
             with t4:
-                nextb = st.button("▶", key="tab_criticos_next2", use_container_width=True)
+                nextb = st.button("▶", key="tab_atrasados_next2", use_container_width=True)
             with t5:
-                bulk_status = st.selectbox("Status", ["Novo", "Em andamento", "Resolvido"], key="tab_criticos_bulk_status", label_visibility="collapsed")
+                bulk_status = st.selectbox("Status", ["Novo", "Em andamento", "Resolvido"], key="tab_atrasados_bulk_status", label_visibility="collapsed")
             with t6:
                 cA, cB, cC = st.columns([2.6, 1.6, 1.8])
                 with cA:
-                    marcar_pagina = st.button("✅ Sel. pág.", key="tab_criticos_sel_page", use_container_width=True)
+                    marcar_pagina = st.button("✅ Sel. pág.", key="tab_atrasados_sel_page", use_container_width=True)
                 with cB:
-                    limpar_sel = st.button("🧹 Limpar", key="tab_criticos_clear_sel", use_container_width=True)
+                    limpar_sel = st.button("🧹 Limpar", key="tab_atrasados_clear_sel", use_container_width=True)
                 with cC:
-                    aplicar_lote = st.button("⚡ Aplicar", key="tab_criticos_apply_bulk", use_container_width=True)
+                    aplicar_lote = st.button("⚡ Aplicar", key="tab_atrasados_apply_bulk", use_container_width=True)
 
             # Paginação (estado)
             total = len(pedidos_filtrados)
             total_pages = max(1, int(math.ceil(total / per_page)))
-            page_key = "tab_criticos_page"
+            page_key = "tab_atrasados_page"
             page = int(st.session_state.get(page_key, 1))
             if prev:
                 page -= 1
@@ -1205,14 +1205,14 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 for _i, _p in enumerate(pagina_itens):
                     _aid = str(_p.get("id") or _p.get("nr_oc") or f"row{_i}")
                     _nr = str(_p.get("nr_oc", "") or "")
-                    _base_key = f"critico_{_aid}_{_nr}_{_i}"
+                    _base_key = f"atrasado_{_aid}_{_nr}_{_i}"
                     st.session_state[f"sel_{_base_key}"] = bool(marcar_pagina)
 
             if aplicar_lote:
                 for _i, _p in enumerate(pagina_itens):
                     _aid = str(_p.get("id") or _p.get("nr_oc") or f"row{_i}")
                     _nr = str(_p.get("nr_oc", "") or "")
-                    _base_key = f"critico_{_aid}_{_nr}_{_i}"
+                    _base_key = f"atrasado_{_aid}_{_nr}_{_i}"
                     if bool(st.session_state.get(f"sel_{_base_key}", False)):
                         set_alert_status(_aid, bulk_status)
 
@@ -1227,7 +1227,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 st.info("📭 Nenhum pedido crítico corresponde aos filtros selecionados")
         else:
             st.success("✅ Nenhum pedido crítico no momento")
-    
+
     with tab2:
         st.subheader("⏰ Pedidos Vencendo nos Próximos 3 Dias")
 
@@ -1336,7 +1336,6 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 st.info("📭 Nenhum pedido vencendo corresponde aos filtros selecionados")
         else:
             st.info("📭 Nenhum pedido vencendo nos próximos 3 dias")
-    
 
     with tab3:
         st.subheader("🚨 Pedidos Críticos (Alto Valor + Urgente)")
@@ -1445,7 +1444,6 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 st.info("📭 Nenhum pedido crítico corresponde aos filtros selecionados")
         else:
             st.success("✅ Nenhum pedido crítico no momento")
-    
 
     with tab4:
         st.subheader("📉 Fornecedores com Baixa Performance")
