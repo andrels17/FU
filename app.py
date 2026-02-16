@@ -560,6 +560,7 @@ def main():
 
 
     supabase = get_supabase_user_client(st.session_state.auth_access_token)
+    st.session_state["supabase_client"] = supabase
     handle_auth_callback(supabase)
     # Super Admin (SaaS)
     try:
@@ -629,55 +630,51 @@ def main():
 
     _industrial_sidebar_css()
 
-    
-    # ===== Sidebar topo + menus =====
+    # ===== Sidebar topo + menus (SEM botão sair/creditos aqui) =====
     with st.sidebar:
 
-        usuario = st.session_state.usuario
-        nome = usuario.get("nome", "Usuário")
-        perfil = usuario.get("perfil", "user").lower()
-        avatar = usuario.get("avatar_url")
-        hora = datetime.now().hour
-        if hora < 12:
-            saudacao = "Bom dia"
-        elif hora < 18:
-            saudacao = "Boa tarde"
-        else:
-            saudacao = "Boa noite"
+        nome = st.session_state.usuario.get("nome", "Usuário")
+        perfil = str(st.session_state.usuario.get("perfil", "")).title() or "—"
 
-        if perfil == "admin":
-            badge_cor = "#ef4444"
-        elif perfil == "buyer":
-            badge_cor = "#3b82f6"
-        else:
-            badge_cor = "#10b981"
+        st.markdown(
+            textwrap.dedent(f"""<div class="fu-card">
+  <p class="fu-user-label">👷 Sistema de Follow-Up</p>
+  <div class="fu-bar"></div>
+  <p class="fu-user-name">{nome}</p>
+  <p class="fu-user-role">{perfil}</p>
 
-        st.markdown("### 👤 Usuário")
-
-        if avatar:
-            st.image(avatar, width=80)
-        else:
-            st.markdown(f'''
-                <div style="
-                    width:80px;height:80px;
-                    border-radius:50%;
-                    background:linear-gradient(135deg,#f59e0b,#3b82f6);
-                    display:flex;align-items:center;justify-content:center;
-                    font-size:32px;font-weight:bold;color:white;margin:0 auto;">
-                    {nome[0].upper()}
-                </div>
-            ''', unsafe_allow_html=True)
-
-        st.markdown(f"**{saudacao}, {nome}!**")
-        st.markdown(f'''
-            <span style="background:{badge_cor};padding:4px 10px;
-            border-radius:12px;font-size:12px;color:white;">
-            {perfil.upper()}</span>
-        ''', unsafe_allow_html=True)
+  <div class="fu-kpi-row">
+    <div class="fu-kpi">
+      <p class="fu-kpi-title">⚠️ Atrasados</p>
+      <p class="fu-kpi-value">{atrasados}</p>
+    </div>
+    <div class="fu-kpi">
+      <p class="fu-kpi-title">🚨 Críticos</p>
+      <p class="fu-kpi-value">{criticos}</p>
+    </div>
+    <div class="fu-kpi">
+      <p class="fu-kpi-title">⏰ Vencendo</p>
+      <p class="fu-kpi-value">{vencendo}</p>
+    </div>
+  </div>
+</div>
+"""),
+            unsafe_allow_html=True,
+        )
 
         with st.expander("⚙️ Conta"):
             if st.button("👤 Meu Perfil", use_container_width=True):
                 st.session_state.current_page = "Meu Perfil"
+                st.session_state["menu_ops"] = "Meu Perfil"
+                st.session_state.exp_ops_open = True
+                st.session_state.exp_gestao_open = False
+                st.rerun()
+
+            if st.button("🚪 Sair", use_container_width=True):
+                try:
+                    fazer_logout(supabase_anon)
+                except Exception:
+                    pass
                 st.rerun()
 
         # 🔎 Busca rápida (navegação)
@@ -761,7 +758,7 @@ def main():
             st.session_state.exp_gestao_open = True
 
         # ---------- Operações ----------
-        opcoes_ops = ["🏠 Início", "Dashboard", alertas_label, "Consultar Pedidos"]
+        opcoes_ops = ["🏠 Início", "Dashboard", alertas_label, "Consultar Pedidos", "Meu Perfil"]
         is_ops_page = st.session_state.current_page in opcoes_ops
         index_ops = opcoes_ops.index(st.session_state.current_page) if is_ops_page else None
 
@@ -900,6 +897,11 @@ def main():
         exibir_gestao_usuarios(supabase)
     elif pagina == "💾 Backup":
         ba.realizar_backup_manual(supabase)
+    
+    elif pagina == "Meu Perfil":
+        from src.ui.perfil import exibir_perfil
+        exibir_perfil(supabase)
+
     elif pagina == "🧩 Admin do SaaS":
         exibir_admin_saas(supabase)
 
