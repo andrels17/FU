@@ -246,6 +246,25 @@ def _sidebar_footer(supabase_client) -> None:
     )
 
 
+def _sync_empresa_nome(tenant_id: str | None, tenant_opts) -> None:
+    """Mantém um nome de empresa legível no session_state (para Perfil / UI)."""
+    try:
+        if not tenant_id:
+            return
+        nome = None
+        if tenant_opts and isinstance(tenant_opts, list):
+            for t in tenant_opts:
+                if isinstance(t, dict) and t.get("tenant_id") == tenant_id:
+                    nome = t.get("nome") or t.get("name") or t.get("razao_social")
+                    break
+        nome_final = (str(nome).strip() if isinstance(nome, str) and nome.strip() else str(tenant_id))
+        st.session_state["empresa_nome"] = nome_final
+        # compat com chaves antigas
+        st.session_state["empresa_atual"] = nome_final
+    except Exception:
+        pass
+
+
 def selecionar_empresa_no_login() -> bool:
     """Após autenticar, força seleção do tenant quando houver mais de uma empresa."""
 
@@ -260,6 +279,7 @@ def selecionar_empresa_no_login() -> bool:
 
     if len(tenant_opts) == 1:
         st.session_state["tenant_id"] = tenant_opts[0]["tenant_id"]
+        _sync_empresa_nome(st.session_state.get("tenant_id"), tenant_opts)
         return True
 
     st.title("🏢 Selecione a empresa")
@@ -277,6 +297,7 @@ def selecionar_empresa_no_login() -> bool:
 
     if c1.button("✅ Entrar", use_container_width=True):
         st.session_state["tenant_id"] = escolhido
+        _sync_empresa_nome(escolhido, tenant_opts)
         st.rerun()
 
     if c2.button("🚪 Sair", use_container_width=True):
@@ -575,6 +596,7 @@ def main():
     if not tenant_id and tenant_opts:
         tenant_id = tenant_opts[0]["tenant_id"]
         st.session_state.tenant_id = tenant_id
+        _sync_empresa_nome(tenant_id, tenant_opts)
 
     # Se o usuário tiver mais de uma empresa, permite escolher
     if tenant_opts and len(tenant_opts) > 1:
@@ -593,6 +615,7 @@ def main():
 
             if escolhido != current:
                 st.session_state.tenant_id = escolhido
+                _sync_empresa_nome(escolhido, tenant_opts)
                 # atualiza perfil conforme empresa selecionada
                 role = next((t.get("role") for t in tenant_opts if t.get("tenant_id") == escolhido), "user")
                 if "usuario" in st.session_state and isinstance(st.session_state.usuario, dict):
@@ -601,6 +624,7 @@ def main():
                 st.rerun()
 
     tenant_id = st.session_state.get("tenant_id") or tenant_id
+    _sync_empresa_nome(tenant_id, tenant_opts)
     if not tenant_id:
         st.error("❌ Não foi possível determinar sua empresa (tenant).")
         return
