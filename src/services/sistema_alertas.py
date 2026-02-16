@@ -72,7 +72,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
     prev = _dt("previsao_entrega")
     prazo = _dt("prazo_entrega")
 
-    data_entrega = _dt(\"data_entrega\")
+    data_entrega = _dt("data_entrega")
 
     due = prev.combine_first(prazo)
     fallback_due = data_oc + pd.to_timedelta(30, unit="D")
