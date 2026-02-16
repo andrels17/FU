@@ -100,6 +100,32 @@ def _signed_url(storage_client, bucket: str, object_path: str, expires_in: int =
 
 
 def exibir_perfil(supabase_db):
+
+    st.subheader("🧪 Debug Auth/Storage")
+
+    token = st.session_state.get("auth_access_token")
+    refresh = st.session_state.get("auth_refresh_token")
+    st.write("Tem access token?", bool(token))
+    st.write("Tem refresh token?", bool(refresh))
+    
+    # UID do JWT (sub)
+    uid_jwt = _jwt_sub(token)
+    st.write("JWT sub (uid):", uid_jwt)
+
+# UID visto pela lib (auth.get_user)
+try:
+    u = supabase.auth.get_user()
+    # algumas libs retornam dict/objeto; tenta ambos
+    user_obj = getattr(u, "user", None) or u.get("user")
+    st.write("auth.get_user id:", getattr(user_obj, "id", None) or user_obj.get("id"))
+    st.write("auth.get_user email:", getattr(user_obj, "email", None) or user_obj.get("email"))
+except Exception as e:
+    st.write("auth.get_user() ERRO:", str(e))
+
+# path que você está tentando gravar
+st.write("user_id usado no path:", user_id)
+st.write("object_path teste:", f"{user_id}/avatar.png")
+
     """Meu Perfil (avatar em bucket PRIVADO + URL assinada)."""
     # client dedicado pro Storage, com sessão aplicada
     try:
