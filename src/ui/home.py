@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from zoneinfo import ZoneInfo
 from datetime import datetime
 import textwrap
 
@@ -10,7 +10,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
     # -----------------------------
     # Saudação
     # -----------------------------
-    hora = datetime.now().hour
+    hora = datetime.now(ZoneInfo("America/Fortaleza")).hour
     if hora < 12:
         saudacao = "Bom dia"
     elif hora < 18:
