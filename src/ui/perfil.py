@@ -3,15 +3,14 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
-import streamlit as st
+from typing import Optional
 
-try:
-    from storage3.utils import StorageException  # type: ignore
-except Exception:  # pragma: no cover
-    StorageException = Exception  # type: ignore
+import requests
+import streamlit as st
 
 
 def _jwt_sub(token: str | None) -> str | None:
+    """Extrai o 'sub' do JWT (sem validar assinatura)."""
     if not token or token.count(".") < 2:
         return None
     try:
@@ -23,121 +22,103 @@ def _jwt_sub(token: str | None) -> str | None:
         return None
 
 
-def _get_storage_client():
-    """Cria um client Supabase com sessão do usuário aplicada (para Storage enxergar auth.uid())."""
-    from supabase import create_client  # type: ignore
-
+def _storage_headers() -> dict:
     url = st.secrets.get("SUPABASE_URL")
-    key = st.secrets.get("SUPABASE_ANON_KEY")
-    if not url or not key:
+    anon = st.secrets.get("SUPABASE_ANON_KEY")
+    token = st.session_state.get("auth_access_token")
+
+    if not url or not anon:
         raise RuntimeError("Faltam SUPABASE_URL / SUPABASE_ANON_KEY em st.secrets.")
+    if not token:
+        raise RuntimeError("Sem auth_access_token na sessão (usuário não autenticado)." কাম)
 
-    sb = create_client(url, key)
-
-    access = st.session_state.get("auth_access_token")
-    refresh = st.session_state.get("auth_refresh_token")
-
-    if access and refresh:
-        try:
-            sb.auth.set_session(access, refresh)
-        except Exception:
-            sb.auth.set_session(access_token=access, refresh_token=refresh)  # type: ignore
-
-    return sb
+    return {
+        "Authorization": f"Bearer {token}",
+        "apikey": anon,
+    }
 
 
-def _upload_avatar(storage_client, bucket: str, object_path: str, data: bytes, mime: str) -> None:
-    candidates = [
-        {"file_options": {"content-type": mime, "upsert": "true"}},
-        {"file_options": {"contentType": mime, "upsert": "true"}},
-        {"positional": {"content-type": mime, "upsert": "true"}},
-        {"positional": {"contentType": mime, "upsert": "true"}},
-    ]
+def _upload_object_rest(bucket: str, object_path: str, data: bytes, mime: str) -> None:
+    """Upload via REST (garante Authorization no Storage).
 
-    last_err = None
-    for opt in candidates:
-        try:
-            if "file_options" in opt:
-                storage_client.storage.from_(bucket).upload(object_path, data, file_options=opt["file_options"])
-            else:
-                storage_client.storage.from_(bucket).upload(object_path, data, opt["positional"])
-            return
-        except TypeError as e:
-            last_err = e
-            continue
-        except Exception as e:
-            last_err = e
-            continue
-    raise last_err  # type: ignore
+    - Usa POST /storage/v1/object/<bucket>/<path>
+    - upsert via header x-upsert: true
+    """
+    base_url = st.secrets.get("SUPABASE_URL")
+    headers = _storage_headers()
+    headers.update(
+        {
+            "Content-Type": mime,
+            "x-upsert": "true",
+        }
+    )
+
+    url = f"{base_url}/storage/v1/object/{bucket}/{object_path}"
+    resp = requests.post(url, headers=headers, data=data, timeout=60)
+
+    if resp.status_code not in (200, 201):
+        # retorna corpo para você ver exatamente a causa
+        raise RuntimeError(f"Storage upload falhou ({resp.status_code}): {resp.text}")
 
 
-def _signed_url(storage_client, bucket: str, object_path: str, expires_in: int = 3600) -> str | None:
-    try:
-        try:
-            res = storage_client.storage.from_(bucket).create_signed_url(object_path, expires_in)
-        except TypeError:
-            res = storage_client.storage.from_(bucket).create_signed_url(object_path, expires_in=expires_in)
+def _signed_url_rest(bucket: str, object_path: str, expires_in: int = 3600) -> Optional[str]:
+    """Gera signed URL via REST para bucket privado.
 
-        if isinstance(res, str):
-            return res
-        if isinstance(res, dict):
-            return res.get("signedURL") or res.get("signedUrl") or res.get("signed_url") or res.get("url")
-        return getattr(res, "signed_url", None) or getattr(res, "signedURL", None)
-    except StorageException:
+    Endpoint: POST /storage/v1/object/sign/<bucket>/<path>
+    Body: {"expiresIn": 3600}
+    """
+    base_url = st.secrets.get("SUPABASE_URL")
+    headers = _storage_headers()
+    headers.update({"Content-Type": "application/json"})
+
+    url = f"{base_url}/storage/v1/object/sign/{bucket}/{object_path}"
+    resp = requests.post(url, headers=headers, json={"expiresIn": int(expires_in)}, timeout=30)
+
+    if resp.status_code == 404:
+        return None  # arquivo ainda não existe
+    if resp.status_code not in (200, 201):
         return None
+
+    try:
+        payload = resp.json()
     except Exception:
         return None
 
+    signed = payload.get("signedURL") or payload.get("signedUrl") or payload.get("signed_url") or payload.get("url")
+    if not signed:
+        return None
+
+    # O endpoint geralmente retorna uma URL relativa. Garantimos absoluta:
+    if signed.startswith("/"):
+        return f"{base_url}{signed}"
+    if signed.startswith("http"):
+        return signed
+    return f"{base_url}/{signed.lstrip('/')}"
+
 
 def exibir_perfil(supabase_db):
-    """Meu Perfil (avatar em bucket PRIVADO + URL assinada) + debug."""
-
-    # Client dedicado pro Storage, com sessão aplicada
-    try:
-        supabase_storage = _get_storage_client()
-    except Exception as e:
-        st.error(f"Falha ao inicializar Storage autenticado: {e}")
-        return
-
+    """Meu Perfil (bucket privado + upload REST + signed URL REST)."""
     token = st.session_state.get("auth_access_token")
-    refresh = st.session_state.get("auth_refresh_token")
     uid = _jwt_sub(token)
 
     usuario = st.session_state.get("usuario") or {}
     user_id = uid or usuario.get("id") or st.session_state.get("auth_user_id")
-
     email = usuario.get("email") or st.session_state.get("auth_email")
     nome = usuario.get("nome") or "—"
     perfil = (usuario.get("perfil") or "user").upper()
-
-    # ===== DEBUG =====
-    with st.expander("🧪 Debug Auth/Storage", expanded=False):
-        st.write("Tem access token?", bool(token))
-        st.write("Tem refresh token?", bool(refresh))
-        st.write("JWT sub (uid):", uid)
-        st.write("user_id usado no app:", user_id)
-        try:
-            u = supabase_storage.auth.get_user()
-            user_obj = getattr(u, "user", None) or (u.get("user") if isinstance(u, dict) else None)
-            st.write("storage.auth.get_user id:", getattr(user_obj, "id", None) if user_obj else None)
-            st.write("storage.auth.get_user email:", getattr(user_obj, "email", None) if user_obj else None)
-        except Exception as e:
-            st.write("storage.auth.get_user() ERRO:", str(e))
-        if user_id:
-            st.write("object_path exemplo:", f"{user_id}/avatar.png")
-    # ===== /DEBUG =====
 
     if not user_id:
         st.error("Não foi possível identificar o usuário logado.")
         return
 
+    # Mantém session_state alinhado
     if isinstance(st.session_state.get("usuario"), dict):
         st.session_state.usuario["id"] = user_id
 
     st.title("👤 Meu Perfil")
 
     avatar_path = usuario.get("avatar_path") or f"{user_id}/avatar.png"
-    avatar_display_url = _signed_url(supabase_storage, "avatars", avatar_path, expires_in=3600) if avatar_path else None
+    avatar_display_url = _signed_url_rest("avatars", avatar_path, expires_in=3600) if avatar_path else None
 
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -162,10 +143,13 @@ def exibir_perfil(supabase_db):
         st.markdown(f"**Nome:** {nome}")
         st.markdown(f"**Email:** {email}")
         st.markdown(f"**Perfil:** {perfil}")
-        st.caption("🔒 Avatar em bucket privado (URL assinada).")
+        st.caption("🔒 Avatar em bucket privado (upload REST + signed URL).")
+
 
     st.divider()
     st.subheader("🖼 Atualizar avatar")
+    st.caption("Envie PNG/JPG. O arquivo será salvo em: avatars/<user_id>/avatar.ext (privado).")
+
 
     arquivo = st.file_uploader("Escolher imagem", type=["png", "jpg", "jpeg"])
     if arquivo is None:
@@ -180,17 +164,17 @@ def exibir_perfil(supabase_db):
     file_bytes = arquivo.getvalue()
 
     try:
-        _upload_avatar(supabase_storage, "avatars", object_path, file_bytes, mime)
+        _upload_object_rest("avatars", object_path, file_bytes, mime)
     except Exception as e:
         st.error(f"Erro ao enviar para o Storage: {e}")
-        st.caption("Se der RLS: confirme que storage.auth.get_user id == JWT sub == user_id e que policies usam split_part(name,'/',1)=auth.uid()::text.")
-        return
+        st.stop()
 
+    # Persiste o PATH no user_profiles
     try:
         supabase_db.table("user_profiles").update({"avatar_path": object_path}).eq("user_id", user_id).execute()
     except Exception as e:
         st.error(f"Avatar enviado, mas falhou ao salvar no perfil: {e}")
-        return
+        st.stop()
 
     st.session_state.usuario["avatar_path"] = object_path
     st.success("✅ Avatar atualizado!")
