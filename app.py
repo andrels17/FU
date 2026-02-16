@@ -827,7 +827,6 @@ def main():
 
     alertas = sa.calcular_alertas(df_pedidos, df_fornecedores)
     total_alertas = int(alertas.get("total", 0) or 0)
-
     atrasados = _safe_len(alertas.get("pedidos_atrasados"))
     criticos = _safe_len(alertas.get("pedidos_criticos"))
     vencendo = _safe_len(alertas.get("pedidos_vencendo"))
