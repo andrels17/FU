@@ -48,7 +48,32 @@ if "fu_sidebar_hidden" not in st.session_state:
     st.session_state.fu_sidebar_hidden = True if is_mobile_default else False
 
 def _fu_inject_global_css(sidebar_hidden: bool) -> None:
-    hide_css = ( "section[data-testid=\"stSidebar\"]{ transform: translateX(-110%); opacity: 0; width: 0 !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; pointer-events: none !important; }" ) if sidebar_hidden else ""
+    collapsed_css = (
+        textwrap.dedent(
+            """
+            /* Sidebar colapsada (ícones via recorte) */
+            section[data-testid="stSidebar"]{
+              width: 72px !important;
+              min-width: 72px !important;
+            }
+            section[data-testid="stSidebar"] *{
+              white-space: nowrap !important;
+              overflow: hidden !important;
+              text-overflow: ellipsis !important;
+            }
+            section[data-testid="stSidebar"] .stButton button{
+              width: 44px !important;
+              padding-left: 0 !important;
+              padding-right: 0 !important;
+            }
+            section[data-testid="stSidebar"]:hover{
+              width: 240px !important;
+              min-width: 240px !important;
+            }
+            """
+        ).strip()
+    ) if sidebar_hidden else ""
+
 
     st.markdown(
         f'''
@@ -77,8 +102,8 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         /* Botões mais consistentes */
         .stButton button{{ border-radius: 12px !important; }}
 
-        /* Ocultar sidebar (modo compacto) */
-        {hide_css}
+        /* Sidebar colapsada (modo compacto) */
+        {collapsed_css}
         </style>
         ''',
         unsafe_allow_html=True,
@@ -86,13 +111,6 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
 
 _fu_inject_global_css(bool(st.session_state.fu_sidebar_hidden))
 
-# Botão para reabrir sidebar quando estiver oculto (fica no conteúdo principal)
-if st.session_state.fu_sidebar_hidden:
-    col_fu_a, col_fu_b = st.columns([1, 11])
-    with col_fu_a:
-        if st.button("☰", help="Mostrar menu lateral"):
-            st.session_state.fu_sidebar_hidden = False
-            st.rerun()
 
 from datetime import datetime, timezone
 
@@ -685,8 +703,10 @@ def main():
     if tenant_opts and len(tenant_opts) > 1:
         with st.sidebar:
 
-            if st.button('⮜', help='Ocultar menu lateral'):
-                st.session_state.fu_sidebar_hidden = True
+            btn_lbl = '⮞' if st.session_state.get('fu_sidebar_hidden') else '⮜'
+            btn_help = 'Expandir menu lateral' if st.session_state.get('fu_sidebar_hidden') else 'Colapsar menu lateral'
+            if st.button(btn_lbl, help=btn_help):
+                st.session_state.fu_sidebar_hidden = (not st.session_state.get('fu_sidebar_hidden'))
                 st.rerun()
 
 
