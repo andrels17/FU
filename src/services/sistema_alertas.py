@@ -396,7 +396,10 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
             )
 
             # Ações rápidas (híbrido: operacional + executivo)
-            base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
+            seq = int(st.session_state.get("_alerta_widget_seq", 0)) + 1
+            st.session_state["_alerta_widget_seq"] = seq
+            base_key = f"{tipo}_{seq}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
+
             cbtn1, cbtn2 = st.columns([1, 1])
             with cbtn1:
                 if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
@@ -430,7 +433,10 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
             )
 
             # Ações rápidas (híbrido: operacional + executivo)
-            base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
+            seq = int(st.session_state.get("_alerta_widget_seq", 0)) + 1
+            st.session_state["_alerta_widget_seq"] = seq
+            base_key = f"{tipo}_{seq}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
+
             cbtn1, cbtn2 = st.columns([1, 1])
             with cbtn1:
                 if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
@@ -464,7 +470,10 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
             )
 
             # Ações rápidas (híbrido: operacional + executivo)
-            base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
+            seq = int(st.session_state.get("_alerta_widget_seq", 0)) + 1
+            st.session_state["_alerta_widget_seq"] = seq
+            base_key = f"{tipo}_{seq}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
+
             cbtn1, cbtn2 = st.columns([1, 1])
             with cbtn1:
                 if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
