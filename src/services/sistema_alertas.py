@@ -606,7 +606,20 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             return lista
         return [f for f in lista if safe_text(f.get("fornecedor", "N/A")) in forn_global]
 
-    
+    # Aplicar filtros globais
+    alertas = {
+        "pedidos_atrasados": _filtrar_pedidos(alertas.get("pedidos_atrasados", [])),
+        "pedidos_vencendo": _filtrar_pedidos(alertas.get("pedidos_vencendo", [])),
+        "pedidos_criticos": _filtrar_pedidos(alertas.get("pedidos_criticos", [])),
+        "fornecedores_baixa_performance": _filtrar_fornecedores(alertas.get("fornecedores_baixa_performance", [])),
+    }
+    alertas["total"] = (
+        len(alertas["pedidos_atrasados"])
+        + len(alertas["pedidos_vencendo"])
+        + len(alertas["pedidos_criticos"])
+        + len(alertas["fornecedores_baixa_performance"])
+    )
+
     # ============================
     # Resumo geral no topo (já filtrado)
     # ============================
@@ -1038,4 +1051,3 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 st.info("📭 Nenhum fornecedor corresponde aos filtros selecionados")
         else:
             st.success("✅ Todos os fornecedores com boa performance!")
-
