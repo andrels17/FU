@@ -80,6 +80,24 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
 
     df["_atrasado"] = df["_pendente"] & df["_due"].notna() & (df["_due"] < hoje)
 
+
+    def _pedido_id(pedido, fallback_idx=None):
+        """Retorna um identificador estável para o pedido, mesmo quando 'id' vem vazio."""
+        for key in ("id", "id_x", "pedido_id", "pedidoid", "oc_id", "nr_oc"):
+            if key in pedido:
+                val = pedido.get(key)
+                if val is None:
+                    continue
+                try:
+                    if isinstance(val, float) and pd.isna(val):
+                        continue
+                except Exception:
+                    pass
+                s = str(val).strip()
+                if s and s.lower() not in ("nan", "none", "null"):
+                    return s
+        return f"row-{fallback_idx}" if fallback_idx is not None else None
+
     # Entregue em atraso (se existir data_entrega). Mantém compatibilidade: se não existir, tudo False.
     df["_entregue_tarde"] = df["entregue"] & df["_due"].notna() & data_entrega.notna() & (data_entrega > df["_due"])
 
@@ -190,12 +208,12 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
 
     df_atrasados = df[df["_atrasado"]].copy()
     if not df_atrasados.empty:
-        for _, pedido in df_atrasados.iterrows():
+        for i, (_, pedido) in enumerate(df_atrasados.iterrows()):
             due_dt = pedido.get("_due")
             dias_atraso = int((hoje - due_dt).days) if pd.notna(due_dt) else 0
 
             alertas["pedidos_atrasados"].append({
-                "id": pedido.get("id", pedido.get("id_x")),
+                "id": _pedido_id(pedido, i),
                 "nr_oc": pedido.get("nr_oc"),
                 "descricao": pedido.get("descricao", ""),
                 "fornecedor": pedido.get("fornecedor_nome", "N/A"),
@@ -214,10 +232,10 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
     ].copy()
 
     if not df_vencendo.empty:
-        for _, pedido in df_vencendo.iterrows():
+        for i, (_, pedido) in enumerate(df_vencendo.iterrows()):
             dias_restantes = int((pedido.get("_due") - hoje).days) if pd.notna(pedido.get("_due")) else 0
             alertas["pedidos_vencendo"].append({
-                "id": pedido.get("id", pedido.get("id_x")),
+                "id": _pedido_id(pedido, i),
                 "nr_oc": pedido.get("nr_oc"),
                 "descricao": pedido.get("descricao", ""),
                 "fornecedor": pedido.get("fornecedor_nome", "N/A"),
@@ -268,9 +286,9 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
     ].copy()
 
     if not df_criticos.empty:
-        for _, pedido in df_criticos.iterrows():
+        for i, (_, pedido) in enumerate(df_criticos.iterrows()):
             alertas["pedidos_criticos"].append({
-                "id": pedido.get("id", pedido.get("id_x")),
+                "id": _pedido_id(pedido, i),
                 "nr_oc": pedido.get("nr_oc"),
                 "descricao": pedido.get("descricao", ""),
                 "valor": float(pedido.get("_valor_total", 0.0)),
@@ -644,7 +662,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 if "departamento" in df_rank.columns and not df_rank.empty:
                     rank = (
                         df_rank.groupby("departamento", dropna=False)
-                        .agg(qtde=("id", "count"), valor_total=("valor", "sum"))
+                        .agg(qtde=("departamento", "size"), valor_total=("valor", "sum"))
                         .sort_values(["qtde", "valor_total"], ascending=False)
                         .head(10)
                         .reset_index()
