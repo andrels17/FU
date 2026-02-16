@@ -777,7 +777,7 @@ def main():
 
             btn_lbl = '⮞' if st.session_state.get('fu_sidebar_hidden') else '⮜'
             btn_help = 'Expandir menu lateral' if st.session_state.get('fu_sidebar_hidden') else 'Colapsar menu lateral'
-            if st.button(btn_lbl, help=btn_help):
+            if st.button(btn_lbl, help=btn_help, key="fu_sidebar_toggle"):
                 st.session_state.fu_sidebar_hidden = (not st.session_state.get('fu_sidebar_hidden'))
                 st.rerun()
 
