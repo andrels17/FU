@@ -637,8 +637,6 @@ def main():
         nome = usuario.get("nome", "Usuário")
         perfil = usuario.get("perfil", "user").lower()
         avatar = usuario.get("avatar_url")
-
-        from datetime import datetime
         hora = datetime.now().hour
         if hora < 12:
             saudacao = "Bom dia"
