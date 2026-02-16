@@ -1621,46 +1621,154 @@ def exibir_gestao_pedidos(_supabase):
                     except Exception as e_del:
                         st.error(f"❌ Erro ao excluir: {e_del}")
 
+        
         # --------------------------------------------
-        # Registrar entrega
+        # Controle de Entregas (unificado)
         # --------------------------------------------
         st.markdown("---")
-        st.subheader("📦 Registrar Entrega")
+        st.subheader("📦 Controle de Entregas")
 
-        qtde_pendente = float(pedido_atual.get("qtde_pendente") or 0)
+        qtde_solicitada_atual = float(pedido_atual.get("qtde_solicitada") or 0)
+        qtde_entregue_atual = float(pedido_atual.get("qtde_entregue") or 0)
+        qtde_pendente = max(0.0, qtde_solicitada_atual - qtde_entregue_atual)
 
-        if qtde_pendente > 0:
-            c1, c2 = st.columns(2)
-            with c1:
-                qtde_entrega = st.number_input(
-                    f"Quantidade entregue (Pendente: {qtde_pendente})",
-                    min_value=0.0,
-                    max_value=float(qtde_pendente),
-                    step=1.0,
-                )
-                data_entrega = st.date_input("Data da entrega", value=datetime.now())
-            with c2:
-                obs_entrega = st.text_area("Observações da entrega")
+        # Resumo + progresso
+        r1, r2, r3, r4 = st.columns(4)
+        r1.metric("Solicitada", f"{qtde_solicitada_atual:g}")
+        r2.metric("Entregue", f"{qtde_entregue_atual:g}")
+        r3.metric("Pendente", f"{qtde_pendente:g}")
+        frac = 0.0
+        try:
+            frac = (qtde_entregue_atual / qtde_solicitada_atual) if qtde_solicitada_atual > 0 else 0.0
+        except Exception:
+            frac = 0.0
+        r4.progress(min(1.0, max(0.0, float(frac))))
 
-            if st.button("✅ Registrar Entrega", type="primary"):
-                if qtde_entrega > 0:
-                    sucesso, mensagem = registrar_entrega(
-                        pedido_editar,
-                        qtde_entrega,
-                        data_entrega.isoformat(),
-                        obs_entrega,
-                        _supabase=_supabase,
-                    )
-                    if sucesso:
-                        st.success(mensagem)
-                        st.cache_data.clear()
-                        st.rerun()
+        # Sugestão automática de status (não força, mas ajuda)
+        if qtde_solicitada_atual > 0 and qtde_pendente <= 0 and str(pedido_atual.get("status") or "") != "Entregue":
+            st.info("ℹ️ Este pedido está 100% entregue. Você pode ajustar o status para **Entregue** na edição acima (ou registrar uma entrega extra somente se necessário).")
+
+        # Histórico de entregas (se existir tabela)
+        tenant_id = str(st.session_state.get("tenant_id") or "")
+        historico_rows = []
+        for tb in ["historico_pedidos", "historico", "entregas_pedidos", "entregas"]:
+            try:
+                qh = _supabase.table(tb).select("*").eq("pedido_id", pedido_editar)
+                if tenant_id:
+                    try:
+                        qh = qh.eq("tenant_id", tenant_id)
+                    except Exception:
+                        pass
+                try:
+                    qh = qh.order("criado_em", desc=True)
+                except Exception:
+                    pass
+                rh = qh.limit(50).execute()
+                if rh.data:
+                    historico_rows = rh.data
+                    break
+            except Exception:
+                continue
+
+        if historico_rows:
+            with st.expander(f"🧾 Histórico de entregas ({len(historico_rows)})", expanded=False):
+                try:
+                    df_hist = pd.DataFrame(historico_rows)
+
+                    # tenta normalizar nomes mais comuns
+                    col_map = {}
+                    if "qtde" in df_hist.columns and "qtde_entregue" not in df_hist.columns:
+                        col_map["qtde"] = "qtde_entregue"
+                    if "observacao" in df_hist.columns and "observacoes" not in df_hist.columns:
+                        col_map["observacao"] = "observacoes"
+                    if col_map:
+                        df_hist = df_hist.rename(columns=col_map)
+
+                    # escolhe colunas relevantes, se existirem
+                    cols_pref = ["criado_em", "data_entrega", "qtde_entregue", "observacoes", "usuario_id"]
+                    cols_show = [c for c in cols_pref if c in df_hist.columns]
+                    if cols_show:
+                        df_show = df_hist[cols_show].copy()
                     else:
-                        st.error(mensagem)
+                        df_show = df_hist.copy()
+
+                    # formata datas
+                    for c in ["criado_em", "data_entrega"]:
+                        if c in df_show.columns:
+                            df_show[c] = pd.to_datetime(df_show[c], errors="coerce").dt.strftime("%d/%m/%Y")
+                    st.dataframe(df_show, use_container_width=True, hide_index=True, height=240)
+                except Exception:
+                    st.info("Histórico encontrado, mas não foi possível exibir com formatação.")
+
+        # Registrar nova entrega
+        if qtde_pendente > 0:
+            with st.form("form_registrar_entrega"):
+                c1, c2, c3 = st.columns([1, 1, 2])
+                with c1:
+                    qtde_entrega = st.number_input(
+                        f"Quantidade a entregar (pendente: {qtde_pendente:g})",
+                        min_value=0.0,
+                        max_value=float(qtde_pendente),
+                        step=1.0,
+                    )
+                with c2:
+                    data_entrega = st.date_input("Data da entrega", value=datetime.now().date())
+                with c3:
+                    obs_entrega = st.text_input("Observação (opcional)")
+
+                auto_entregue = st.checkbox(
+                    "Marcar status como **Entregue** ao zerar pendência",
+                    value=True,
+                    help="Se esta entrega completar 100%, o status será ajustado para Entregue automaticamente.",
+                )
+
+                submitted_ent = st.form_submit_button("✅ Registrar entrega", use_container_width=True)
+
+            if submitted_ent:
+                if qtde_entrega <= 0:
+                    st.warning("⚠️ Informe uma quantidade maior que zero.")
+                elif qtde_entrega > qtde_pendente:
+                    st.error("❌ A quantidade informada é maior que a pendente.")
                 else:
-                    st.warning("⚠️ Informe a quantidade entregue")
+                    try:
+                        sucesso, mensagem = registrar_entrega(
+                            pedido_editar,
+                            float(qtde_entrega),
+                            str(data_entrega),
+                            obs_entrega,
+                            _supabase=_supabase,
+                        )
+                        if sucesso:
+                            # Ajusta status para Entregue automaticamente quando completar
+                            if auto_entregue and (qtde_pendente - float(qtde_entrega) <= 0.0):
+                                try:
+                                    salvar_pedido(
+                                        {"id": pedido_editar, "status": "Entregue"},
+                                        _supabase,
+                                    )
+                                except Exception:
+                                    pass
+
+                            try:
+                                ba.registrar_acao(
+                                    _supabase,
+                                    st.session_state.usuario.get("email"),
+                                    "registrar_entrega",
+                                    {"id": pedido_editar, "qtde": float(qtde_entrega), "data": str(data_entrega)},
+                                )
+                            except Exception:
+                                pass
+
+                            st.success(mensagem)
+                            st.cache_data.clear()
+                            st.rerun()
+                        else:
+                            st.error(mensagem)
+                    except Exception as e_ent:
+                        st.error(f"❌ Erro ao registrar entrega: {e_ent}")
         else:
             st.success("✅ Pedido totalmente entregue!")
+
 
     with tab4:
         st.subheader("⚡ Ações em Massa")
