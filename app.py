@@ -13,42 +13,56 @@ st.set_page_config(
 
 
 
-# --- Global responsive CSS (zoom-friendly) ---
-st.markdown(
-    """
-    <style>
-    /* Conteúdo fluido em qualquer zoom */
-    .fu-wrap{
-      width: min(1200px, calc(100% - 32px));
-      margin: 0 auto;
-    }
+# --- Responsividade global (zoom/mobile) + Sidebar colapsável ---
+if "fu_sidebar_hidden" not in st.session_state:
+    st.session_state.fu_sidebar_hidden = False
 
-    /* Sidebar mais responsiva */
-    section[data-testid="stSidebar"]{
-      width: clamp(280px, 22vw, 360px) !important;
-    }
+def _fu_inject_global_css(sidebar_hidden: bool) -> None:
+    hide_css = "section[data-testid=\"stSidebar\"]{display:none !important;}" if sidebar_hidden else ""
 
-    /* Tipografia fluida (quando as classes existirem) */
-    .fu-title{ font-size: clamp(1.15rem, 1.6vw, 1.55rem) !important; }
-    .fu-sub{ font-size: clamp(.90rem, 1.1vw, .98rem) !important; }
+    st.markdown(
+        f'''
+        <style>
+        /* Conteúdo fluido em qualquer zoom */
+        .fu-wrap{{ width: min(1200px, calc(100% - 32px)); margin: 0 auto; }}
 
-    /* Paddings elásticos */
-    .fu-hero{ padding: clamp(14px, 2vw, 22px) !important; }
-    .fu-mini{ padding: clamp(10px, 1.6vw, 14px) !important; }
+        /* Sidebar responsiva */
+        section[data-testid="stSidebar"]{{ width: clamp(260px, 20vw, 340px) !important; transition: all .2s ease; }}
+        @media (max-width: 1100px){{ section[data-testid="stSidebar"]{{ width: 240px !important; }} }}
+        @media (max-width: 900px){{ section[data-testid="stSidebar"]{{ width: 100% !important; }} }}
 
-    /* Breakpoints */
-    @media (max-width: 1100px){
-      .fu-hero-top{ flex-direction: column; align-items: flex-start !important; }
-      .fu-chip{ margin-top: 10px; }
-    }
-    @media (max-width: 900px){
-      /* Empilha colunas em telas/zoom apertados */
-      div[data-testid="column"]{ width: 100% !important; flex: 1 1 100% !important; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+        /* Tipografia fluida (quando as classes existirem) */
+        .fu-title{{ font-size: clamp(1.15rem, 1.6vw, 1.55rem) !important; }}
+        .fu-sub{{ font-size: clamp(.90rem, 1.1vw, .98rem) !important; }}
+
+        /* Paddings elásticos */
+        .fu-hero{{ padding: clamp(14px, 2vw, 22px) !important; }}
+        .fu-mini{{ padding: clamp(10px, 1.6vw, 14px) !important; }}
+
+        /* Empilha colunas em telas/zoom apertados */
+        @media (max-width: 900px){{
+          div[data-testid="column"]{{ width: 100% !important; flex: 1 1 100% !important; }}
+        }}
+
+        /* Botões mais consistentes */
+        .stButton button{{ border-radius: 12px !important; }}
+
+        /* Ocultar sidebar (modo compacto) */
+        {hide_css}
+        </style>
+        ''',
+        unsafe_allow_html=True,
+    )
+
+_fu_inject_global_css(bool(st.session_state.fu_sidebar_hidden))
+
+# Botão para reabrir sidebar quando estiver oculto (fica no conteúdo principal)
+if st.session_state.fu_sidebar_hidden:
+    col_fu_a, col_fu_b = st.columns([1, 11])
+    with col_fu_a:
+        if st.button("☰", help="Mostrar menu lateral"):
+            st.session_state.fu_sidebar_hidden = False
+            st.rerun()
 
 from datetime import datetime, timezone
 
@@ -640,6 +654,11 @@ def main():
     # Se o usuário tiver mais de uma empresa, permite escolher
     if tenant_opts and len(tenant_opts) > 1:
         with st.sidebar:
+
+            if st.button('⮜', help='Ocultar menu lateral'):
+                st.session_state.fu_sidebar_hidden = True
+                st.rerun()
+
 
             nomes = {t["tenant_id"]: (t.get("nome") or t["tenant_id"]) for t in tenant_opts}
             current = st.session_state.get("tenant_id") or tenant_opts[0]["tenant_id"]
