@@ -7,18 +7,11 @@ import streamlit as st
 def _upload_avatar(supabase, bucket: str, object_path: str, data: bytes, mime: str) -> None:
     """Upload compatível com diferentes versões do supabase/storage.
 
-    O erro `'bool' object has no attribute 'encode'` normalmente acontece quando
-    a lib tenta fazer `.encode()` em algum valor de options (ex.: upsert=True).
-    Então, aqui garantimos que options sejam strings.
+    Evita erro de encode quando a lib não aceita boolean em options (upsert).
     """
-
-    # Algumas versões aceitam file_options=..., outras aceitam options/dict posicional.
-    # Também variam as chaves: content-type vs contentType.
     candidates = [
-        # storage3 / supabase-py (file_options)
         {"file_options": {"content-type": mime, "upsert": "true"}},
         {"file_options": {"contentType": mime, "upsert": "true"}},
-        # dict posicional (options)
         {"positional": {"content-type": mime, "upsert": "true"}},
         {"positional": {"contentType": mime, "upsert": "true"}},
     ]
@@ -40,7 +33,6 @@ def _upload_avatar(supabase, bucket: str, object_path: str, data: bytes, mime: s
                 )
             return
         except TypeError as e:
-            # assinatura diferente -> tenta próximo formato
             last_err = e
             continue
         except Exception as e:
@@ -50,12 +42,34 @@ def _upload_avatar(supabase, bucket: str, object_path: str, data: bytes, mime: s
     raise last_err  # type: ignore
 
 
-def exibir_perfil(supabase):
-    """Página Meu Perfil (dados + avatar).
+def _get_avatar_url_private(supabase, bucket: str, object_path: str, expires_in: int = 3600) -> str | None:
+    """Gera URL assinada (bucket privado).
 
-    Requisitos no Supabase:
-    - Storage bucket: avatars
-    - Tabela public.user_profiles com colunas: user_id (uuid), nome (text), avatar_url (text)
+    Algumas libs retornam dict, outras string.
+    """
+    try:
+        res = supabase.storage.from_(bucket).create_signed_url(object_path, expires_in)
+    except TypeError:
+        # algumas versões usam expires_in como kwarg
+        res = supabase.storage.from_(bucket).create_signed_url(object_path, expires_in=expires_in)
+
+    if isinstance(res, str):
+        return res
+    if isinstance(res, dict):
+        # variações
+        return res.get("signedURL") or res.get("signedUrl") or res.get("signed_url") or res.get("url")
+    # objeto com atributo
+    return getattr(res, "signed_url", None) or getattr(res, "signedURL", None)
+
+
+def exibir_perfil(supabase):
+    """Página Meu Perfil (dados + avatar privado).
+
+    Requisitos:
+    - Storage bucket: avatars (PRIVADO)
+    - Policies de storage.objects permitindo INSERT/UPDATE/SELECT no próprio path:
+      avatars/<user_id>/...
+    - Tabela public.user_profiles: user_id, nome, avatar_path (text, opcional), avatar_url (text, opcional)
     """
 
     usuario = st.session_state.get("usuario") or {}
@@ -66,11 +80,21 @@ def exibir_perfil(supabase):
 
     st.title("👤 Meu Perfil")
 
+    # Determina o caminho salvo (recomendado) — persistimos o PATH (não a URL assinada)
+    avatar_path = usuario.get("avatar_path") or f"{user_id}/avatar.png" if user_id else None
+
     c1, c2 = st.columns([1, 2])
     with c1:
-        avatar_url = usuario.get("avatar_url")
-        if avatar_url:
-            st.image(avatar_url, width=140)
+        # Exibir avatar via URL assinada, se existir
+        avatar_display_url = None
+        if avatar_path and user_id:
+            try:
+                avatar_display_url = _get_avatar_url_private(supabase, "avatars", avatar_path, expires_in=3600)
+            except Exception:
+                avatar_display_url = None
+
+        if avatar_display_url:
+            st.image(avatar_display_url, width=140)
         else:
             inicial = (nome[:1] or "U").upper()
             st.markdown(
@@ -90,10 +114,11 @@ def exibir_perfil(supabase):
         st.markdown(f"**Nome:** {nome}")
         st.markdown(f"**Email:** {email}")
         st.markdown(f"**Perfil:** {perfil}")
+        st.caption("🔒 Avatar em bucket privado (URL assinada).")
 
     st.divider()
-    st.subheader("🖼 Avatar")
-    st.caption("Envie uma imagem (PNG/JPG). O avatar será salvo no Storage e o link persistido em user_profiles.avatar_url.")
+    st.subheader("🖼 Atualizar avatar")
+    st.caption("Envie PNG/JPG. O arquivo será salvo em: avatars/<user_id>/avatar.ext (privado).")
 
     arquivo = st.file_uploader("Escolher imagem", type=["png", "jpg", "jpeg"])
 
@@ -112,28 +137,30 @@ def exibir_perfil(supabase):
     object_path = f"{user_id}/avatar.{ext}"
     file_bytes = arquivo.getvalue()
 
+    # Upload (privado)
     try:
         _upload_avatar(supabase, "avatars", object_path, file_bytes, mime)
     except Exception as e:
         st.error(f"Erro ao enviar para o Storage: {e}")
         return
 
-    # URL pública (se bucket público). Se bucket privado, você pode trocar por create_signed_url.
-    public_url = supabase.storage.from_("avatars").get_public_url(object_path)
-    if isinstance(public_url, dict):
-        public_url = public_url.get("publicUrl") or public_url.get("public_url") or public_url.get("publicURL")  # variações
-
-    if not public_url:
-        st.warning("Upload OK, mas não consegui obter URL pública. Verifique se o bucket está público ou ajuste as policies.")
-        return
-
-    # Persiste no user_profiles
+    # Persiste SOMENTE o path (melhor prática)
     try:
-        supabase.table("user_profiles").update({"avatar_url": public_url}).eq("user_id", user_id).execute()
+        supabase.table("user_profiles").update({"avatar_url": None, "avatar_path": object_path}).eq("user_id", user_id).execute()
     except Exception as e:
         st.error(f"Avatar enviado, mas falhou ao salvar no perfil: {e}")
         return
 
-    st.session_state.usuario["avatar_url"] = public_url
-    st.success("✅ Avatar atualizado!")
+    # Atualiza sessão (path)
+    st.session_state.usuario["avatar_path"] = object_path
+
+    # URL assinada para feedback imediato
+    try:
+        signed = _get_avatar_url_private(supabase, "avatars", object_path, expires_in=3600)
+        if signed:
+            st.image(signed, width=160, caption="Pré-visualização")
+    except Exception:
+        pass
+
+    st.success("✅ Avatar atualizado (privado)!")
     st.rerun()
