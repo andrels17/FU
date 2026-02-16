@@ -521,7 +521,108 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         unsafe_allow_html=True,
     )
 
-    # Resumo geral no topo
+
+    # ============================
+    # Filtros globais (afetam KPIs e todas as abas)
+    # ============================
+    pedidos_todos = (
+        list(alertas.get("pedidos_atrasados", []))
+        + list(alertas.get("pedidos_vencendo", []))
+        + list(alertas.get("pedidos_criticos", []))
+    )
+
+    # Opções de filtros
+    departamentos_opts = sorted(
+        {safe_text(p.get("departamento", "N/A")) for p in pedidos_todos if p.get("departamento") is not None}
+    )
+    fornecedores_opts = sorted(
+        {
+            safe_text(x.get("fornecedor", "N/A"))
+            for x in (pedidos_todos + list(alertas.get("fornecedores_baixa_performance", [])))
+            if x is not None
+        }
+    )
+
+    # Faixa de valor (somente para pedidos)
+    valores = [float(p.get("valor", 0.0) or 0.0) for p in pedidos_todos]
+    vmin = float(min(valores)) if valores else 0.0
+    vmax = float(max(valores)) if valores else 0.0
+
+    colg1, colg2, colg3 = st.columns(3)
+    with colg1:
+        dept_global = st.multiselect(
+            "Departamento (global)",
+            options=departamentos_opts,
+            default=[],
+            key="alertas_global_dept",
+        )
+    with colg2:
+        forn_global = st.multiselect(
+            "Fornecedor (global)",
+            options=fornecedores_opts,
+            default=[],
+            key="alertas_global_forn",
+        )
+    with colg3:
+        if vmax > 0:
+            faixa_valor = st.slider(
+                "Valor (global)",
+                min_value=float(vmin),
+                max_value=float(vmax),
+                value=(float(vmin), float(vmax)),
+                step=max(1.0, float((vmax - vmin) / 100.0)) if vmax > vmin else 1.0,
+                key="alertas_global_valor",
+            )
+        else:
+            faixa_valor = (0.0, 0.0)
+            st.caption("Valor (global): sem dados")
+
+    def _filtrar_pedidos(lista: list[dict]) -> list[dict]:
+        if not lista:
+            return []
+        out = []
+        for p in lista:
+            dept_ok = True
+            if dept_global:
+                dept_ok = safe_text(p.get("departamento", "N/A")) in dept_global
+
+            forn_ok = True
+            if forn_global:
+                forn_ok = safe_text(p.get("fornecedor", "N/A")) in forn_global
+
+            val = float(p.get("valor", 0.0) or 0.0)
+            val_ok = True
+            if vmax > 0:
+                val_ok = faixa_valor[0] <= val <= faixa_valor[1]
+
+            if dept_ok and forn_ok and val_ok:
+                out.append(p)
+        return out
+
+    def _filtrar_fornecedores(lista: list[dict]) -> list[dict]:
+        if not lista:
+            return []
+        if not forn_global:
+            return lista
+        return [f for f in lista if safe_text(f.get("fornecedor", "N/A")) in forn_global]
+
+    # Aplicar filtros globais
+    alertas = {
+        "pedidos_atrasados": _filtrar_pedidos(alertas.get("pedidos_atrasados", [])),
+        "pedidos_vencendo": _filtrar_pedidos(alertas.get("pedidos_vencendo", [])),
+        "pedidos_criticos": _filtrar_pedidos(alertas.get("pedidos_criticos", [])),
+        "fornecedores_baixa_performance": _filtrar_fornecedores(alertas.get("fornecedores_baixa_performance", [])),
+    }
+    alertas["total"] = (
+        len(alertas["pedidos_atrasados"])
+        + len(alertas["pedidos_vencendo"])
+        + len(alertas["pedidos_criticos"])
+        + len(alertas["fornecedores_baixa_performance"])
+    )
+
+    # ============================
+    # Resumo geral no topo (já filtrado)
+    # ============================
     a = len(alertas.get("pedidos_atrasados", []))
     v = len(alertas.get("pedidos_vencendo", []))
     c = len(alertas.get("pedidos_criticos", []))
@@ -578,6 +679,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         )
 
     st.markdown("---")
+
 
     # ============================
     # Filtros Globais (aplicam em todas as abas)
@@ -949,3 +1051,4 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 st.info("📭 Nenhum fornecedor corresponde aos filtros selecionados")
         else:
             st.success("✅ Todos os fornecedores com boa performance!")
+
