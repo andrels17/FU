@@ -607,6 +607,21 @@ def _ir_para_ficha_material_do_alerta(pedido: dict) -> None:
         st.warning(f"⚠️ Não foi possível abrir a ficha do material: {e}")
 
 def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
+
+    # Reset de filtros globais (executa ANTES de instanciar widgets)
+    if st.session_state.get("__clear_global_filters"):
+        st.session_state["__clear_global_filters"] = False
+        # Reset multiselects
+        st.session_state["alertas_global_dept"] = []
+        st.session_state["alertas_global_forn"] = []
+        # Reset slider para range total (se possível)
+        try:
+            # 'valores' será calculado mais abaixo; então usamos um fallback neutro aqui.
+            # Atribuímos um placeholder e recalculamos após ter 'valores' usando um segundo flag.
+            st.session_state["__reset_valor_range"] = True
+        except Exception:
+            pass
+
     """Exibe a página completa de alertas com filtros e tabs."""
 
     def safe_text(txt):
@@ -827,6 +842,10 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     valores = [float(p.get("valor", 0.0) or 0.0) for p in pedidos_todos]
     vmin = float(min(valores)) if valores else 0.0
     vmax = float(max(valores)) if valores else 0.0
+    # Se o usuário pediu "Limpar", agora que temos vmin/vmax, resetamos o slider
+    if st.session_state.get("__reset_valor_range"):
+        st.session_state["__reset_valor_range"] = False
+        st.session_state["alertas_global_valor"] = (vmin, vmax)
 
     st.markdown("<div class='fu-bar'>", unsafe_allow_html=True)
     colg1, colg2, colg3, colg4 = st.columns([4,4,3.5,1.5])
@@ -866,20 +885,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         with colg4:
             st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:4px;text-align:right;'>Ações</div>", unsafe_allow_html=True)
             if st.button("🧹 Limpar", key="alertas_global_clear", use_container_width=True):
-                # reset widgets (antes de serem renderizados)
-                st.session_state["alertas_global_dept"] = []
-                st.session_state["alertas_global_forn"] = []
-                # tenta resetar slider para o intervalo total
-                try:
-                    _vmin = float(min(valores)) if valores else 0.0
-                    _vmax = float(max(valores)) if valores else 0.0
-                except Exception:
-                    _vmin, _vmax = 0.0, 0.0
-                st.session_state["alertas_global_valor"] = (_vmin, _vmax)
-                try:
-                    st.rerun()
-                except Exception:
-                    pass
+                st.session_state["__clear_global_filters"] = True
 
     st.markdown("</div>", unsafe_allow_html=True)
 
