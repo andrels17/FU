@@ -266,82 +266,6 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         msg = "✅ Tudo sob controle. Sem críticos/atrasos/vencimentos relevantes agora."
     st.markdown(f'<div class="fu-note"><p>{msg}</p></div>', unsafe_allow_html=True)
 
-    # Prioridades do dia (Top 5)
-    st.markdown('<div class="fu-section-title">🎯 Prioridades do dia</div>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        st.markdown('<div class="fu-mini"><h4>🚨 Críticos (Top 5)</h4>', unsafe_allow_html=True)
-        if criticos_top:
-            for p in _top_n(criticos_top, 5):
-                nr = _safe_str((p or {}).get("nr_oc"))
-                forn = _safe_str((p or {}).get("fornecedor"))
-                desc = _safe_str((p or {}).get("descricao"), default="")
-                valor = _moeda_br(_as_float((p or {}).get("valor", 0)))
-                st.markdown(
-                    f"""
-                    <div class="fu-item">
-                      <div class="fu-item-top">
-                        <div class="fu-item-oc">OC {nr}</div>
-                        <div class="fu-pill">R$ {valor}</div>
-                      </div>
-                      <div class="fu-item-desc">{forn}<br>{(desc[:90] + "…") if len(desc) > 90 else desc}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.caption("✅ Sem críticos agora.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with c2:
-        st.markdown('<div class="fu-mini"><h4>⚠️ Atrasados (Top 5)</h4>', unsafe_allow_html=True)
-        if atrasados_top:
-            for p in _top_n(atrasados_top, 5):
-                nr = _safe_str((p or {}).get("nr_oc"))
-                forn = _safe_str((p or {}).get("fornecedor"))
-                dias = _as_int((p or {}).get("dias_atraso", 0))
-                dept = _safe_str((p or {}).get("departamento"), default="—")
-                st.markdown(
-                    f"""
-                    <div class="fu-item">
-                      <div class="fu-item-top">
-                        <div class="fu-item-oc">OC {nr}</div>
-                        <div class="fu-pill">{dias} dia(s)</div>
-                      </div>
-                      <div class="fu-item-desc">{forn}<br>{dept}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.caption("✅ Sem atrasos agora.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with c3:
-        st.markdown('<div class="fu-mini"><h4>⏰ Vencendo (Top 5)</h4>', unsafe_allow_html=True)
-        if vencendo_top:
-            for p in _top_n(vencendo_top, 5):
-                nr = _safe_str((p or {}).get("nr_oc"))
-                forn = _safe_str((p or {}).get("fornecedor"))
-                dias = _as_int((p or {}).get("dias_restantes", 0))
-                prev = _safe_str((p or {}).get("previsao"), default="—")
-                st.markdown(
-                    f"""
-                    <div class="fu-item">
-                      <div class="fu-item-top">
-                        <div class="fu-item-oc">OC {nr}</div>
-                        <div class="fu-pill">{dias} dia(s)</div>
-                      </div>
-                      <div class="fu-item-desc">{forn}<br>Prev.: {prev}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.caption("✅ Sem vencimentos próximos.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
     def _sum_valor(lista: list[dict]) -> float:
         total = 0.0
         for p in (lista or []):
@@ -498,6 +422,82 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         st.info(f"⏰ Atenção: {vencendo_48h} pedido(s) vencendo em até 48h. Pode valer um follow-up preventivo.")
     elif maior_atraso >= 10:
         st.warning(f"⚠️ Maior atraso observado: {maior_atraso} dia(s). Recomendo priorizar tratativa com fornecedor.")
+
+    
+    st.markdown('<div class="fu-section-title">🎯 Prioridades do dia</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.markdown('<div class="fu-mini"><h4>🚨 Críticos (Top 5)</h4>', unsafe_allow_html=True)
+        if criticos_top:
+            for p in _top_n(criticos_top, 5):
+                nr = _safe_str((p or {}).get("nr_oc"))
+                forn = _safe_str((p or {}).get("fornecedor"))
+                desc = _safe_str((p or {}).get("descricao"), default="")
+                valor = _moeda_br(_as_float((p or {}).get("valor", 0)))
+                st.markdown(
+                    f"""
+                    <div class="fu-item">
+                      <div class="fu-item-top">
+                        <div class="fu-item-oc">OC {nr}</div>
+                        <div class="fu-pill">R$ {valor}</div>
+                      </div>
+                      <div class="fu-item-desc">{forn}<br>{(desc[:90] + "…") if len(desc) > 90 else desc}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("✅ Sem críticos agora.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with c2:
+        st.markdown('<div class="fu-mini"><h4>⚠️ Atrasados (Top 5)</h4>', unsafe_allow_html=True)
+        if atrasados_top:
+            for p in _top_n(atrasados_top, 5):
+                nr = _safe_str((p or {}).get("nr_oc"))
+                forn = _safe_str((p or {}).get("fornecedor"))
+                dias = _as_int((p or {}).get("dias_atraso", 0))
+                dept = _safe_str((p or {}).get("departamento"), default="—")
+                st.markdown(
+                    f"""
+                    <div class="fu-item">
+                      <div class="fu-item-top">
+                        <div class="fu-item-oc">OC {nr}</div>
+                        <div class="fu-pill">{dias} dia(s)</div>
+                      </div>
+                      <div class="fu-item-desc">{forn}<br>{dept}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("✅ Sem atrasos agora.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with c3:
+        st.markdown('<div class="fu-mini"><h4>⏰ Vencendo (Top 5)</h4>', unsafe_allow_html=True)
+        if vencendo_top:
+            for p in _top_n(vencendo_top, 5):
+                nr = _safe_str((p or {}).get("nr_oc"))
+                forn = _safe_str((p or {}).get("fornecedor"))
+                dias = _as_int((p or {}).get("dias_restantes", 0))
+                prev = _safe_str((p or {}).get("previsao"), default="—")
+                st.markdown(
+                    f"""
+                    <div class="fu-item">
+                      <div class="fu-item-top">
+                        <div class="fu-item-oc">OC {nr}</div>
+                        <div class="fu-pill">{dias} dia(s)</div>
+                      </div>
+                      <div class="fu-item-desc">{forn}<br>Prev.: {prev}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("✅ Sem vencimentos próximos.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # Ações rápidas
     st.markdown('<div class="fu-section-title">⚡ Ações rápidas</div>', unsafe_allow_html=True)
