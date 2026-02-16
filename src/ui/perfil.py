@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import mimetypes
-import uuid
 import streamlit as st
 
 
@@ -10,7 +9,7 @@ def exibir_perfil(supabase):
 
     Requisitos no Supabase:
     - Bucket Storage: avatars
-    - Políticas permitindo o usuário gravar no próprio arquivo (ver instruções).
+    - Políticas permitindo o usuário gravar no próprio arquivo (opcional se bucket público)
     - Tabela public.user_profiles com colunas: user_id (uuid), nome (text), avatar_url (text)
     """
 
@@ -22,7 +21,8 @@ def exibir_perfil(supabase):
 
     st.title("👤 Meu Perfil")
 
-    c1, c2 = st.columns([1, 2], vertical_alignment="top")
+    # Compatível com versões antigas do Streamlit (sem vertical_alignment)
+    c1, c2 = st.columns([1, 2])
     with c1:
         avatar_url = usuario.get("avatar_url")
         if avatar_url:
@@ -49,8 +49,7 @@ def exibir_perfil(supabase):
 
     st.divider()
     st.subheader("🖼 Avatar")
-
-    st.caption("Envie uma imagem (PNG/JPG). O avatar será salvo no Storage e persistido em user_profiles.avatar_url.")
+    st.caption("Envie uma imagem (PNG/JPG). O avatar será salvo no Storage e o link persistido em user_profiles.avatar_url.")
 
     arquivo = st.file_uploader("Escolher imagem", type=["png", "jpg", "jpeg"])
 
@@ -61,39 +60,39 @@ def exibir_perfil(supabase):
         st.error("Não foi possível identificar o usuário logado.")
         return
 
-    # define extensão e content-type
     mime = arquivo.type or mimetypes.guess_type(arquivo.name)[0] or "image/png"
     ext = "png"
     if "jpeg" in mime or arquivo.name.lower().endswith((".jpg", ".jpeg")):
         ext = "jpg"
 
-    # Caminho: avatars/<user_id>/avatar.<ext>
     object_path = f"{user_id}/avatar.{ext}"
-
     file_bytes = arquivo.getvalue()
 
+    # Upload com upsert (a assinatura pode variar por versão; esta é a mais comum)
     try:
-        # Upload (upsert=True)
         supabase.storage.from_("avatars").upload(
             object_path,
             file_bytes,
             file_options={"content-type": mime, "upsert": True},
         )
+    except TypeError:
+        # fallback: algumas libs usam 'options' ao invés de 'file_options'
+        supabase.storage.from_("avatars").upload(
+            object_path,
+            file_bytes,
+            {"content-type": mime, "upsert": True},
+        )
     except Exception as e:
         st.error(f"Erro ao enviar para o Storage: {e}")
-        st.stop()
+        return
 
-    try:
-        public_url = supabase.storage.from_("avatars").get_public_url(object_path)
-    except Exception:
-        # fallback (algumas versões retornam dict)
-        public_url = None
-
+    # URL pública (requer bucket público) — se bucket privado, você precisará assinar URL
+    public_url = supabase.storage.from_("avatars").get_public_url(object_path)
     if isinstance(public_url, dict):
         public_url = public_url.get("publicUrl") or public_url.get("public_url")
 
     if not public_url:
-        st.warning("Upload OK, mas não consegui obter URL pública. Verifique se o bucket está público ou ajuste as policies.")
+        st.warning("Upload OK, mas não consegui obter URL pública. Verifique bucket/policies.")
         return
 
     # Persiste no user_profiles
@@ -101,9 +100,8 @@ def exibir_perfil(supabase):
         supabase.table("user_profiles").update({"avatar_url": public_url}).eq("user_id", user_id).execute()
     except Exception as e:
         st.error(f"Avatar enviado, mas falhou ao salvar no perfil: {e}")
-        st.stop()
+        return
 
-    # Atualiza sessão
     st.session_state.usuario["avatar_url"] = public_url
     st.success("✅ Avatar atualizado!")
     st.rerun()
