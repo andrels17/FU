@@ -39,16 +39,32 @@ def _storage_headers() -> dict:
 
 
 def _upload_object_rest(bucket: str, object_path: str, data: bytes, mime: str) -> None:
-    """Upload via REST (garante Authorization no Storage)."""
-    base_url = st.secrets.get("SUPABASE_URL")
+    """Upload via REST (garante Authorization no Storage).
+
+    Algumas bordas/ambientes respondem 400 no POST; o endpoint do Storage aceita PUT também.
+    Tentamos PUT e, se falhar, tentamos POST.
+
+    Também fazemos URL-encode do path (mantendo '/').
+    """
+    base_url = st.secrets.get("SUPABASE_URL").rstrip("/")
     headers = _storage_headers()
-    headers.update({"Content-Type": mime, "x-upsert": "true"})
+    headers.update({"Content-Type": mime, "x-upsert": "true", "Accept": "application/json"})
 
-    url = f"{base_url}/storage/v1/object/{bucket}/{object_path}"
-    resp = requests.post(url, headers=headers, data=data, timeout=60)
+    safe_path = requests.utils.requote_uri(object_path)  # mantém / e encode de caracteres especiais
+    url = f"{base_url}/storage/v1/object/{bucket}/{safe_path}"
 
-    if resp.status_code not in (200, 201):
-        raise RuntimeError(f"Storage upload falhou ({resp.status_code}): {resp.text}")
+    # 1) PUT
+    resp = requests.put(url, headers=headers, data=data, timeout=60)
+    if resp.status_code in (200, 201):
+        return
+
+    # 2) POST (fallback)
+    resp2 = requests.post(url, headers=headers, data=data, timeout=60)
+    if resp2.status_code in (200, 201):
+        return
+
+    body = (resp2.text or resp.text or "")[:500]
+    raise RuntimeError(f"Storage upload falhou (PUT={resp.status_code}, POST={resp2.status_code}): {body}")
 
 
 def _signed_url_rest(bucket: str, object_path: str, expires_in: int = 3600) -> Optional[str]:
