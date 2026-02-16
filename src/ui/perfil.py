@@ -9,9 +9,6 @@ import requests
 import streamlit as st
 
 
-# =========================
-# Helpers Auth / Headers
-# =========================
 def _jwt_sub(token: str | None) -> str | None:
     if not token or token.count(".") < 2:
         return None
@@ -41,9 +38,6 @@ def _base_url() -> str:
     return str(st.secrets.get("SUPABASE_URL")).rstrip("/")
 
 
-# =========================
-# Storage REST (Privado)
-# =========================
 def _upload_object_rest(bucket: str, object_path: str, data: bytes, mime: str) -> None:
     base_url = _base_url()
     headers = _storage_headers()
@@ -52,12 +46,10 @@ def _upload_object_rest(bucket: str, object_path: str, data: bytes, mime: str) -
     safe_path = requests.utils.requote_uri(object_path)
     url = f"{base_url}/storage/v1/object/{bucket}/{safe_path}"
 
-    # PUT costuma ser o mais compatível
     r1 = requests.put(url, headers=headers, data=data, timeout=60)
     if r1.status_code in (200, 201):
         return
 
-    # fallback POST
     r2 = requests.post(url, headers=headers, data=data, timeout=60)
     if r2.status_code in (200, 201):
         return
@@ -75,11 +67,7 @@ def _delete_object_rest(bucket: str, object_path: str) -> None:
     url = f"{base_url}/storage/v1/object/{bucket}/{safe_path}"
 
     r = requests.delete(url, headers=headers, timeout=30)
-    if r.status_code in (200, 204):
-        return
-
-    # 404: já não existe → ok
-    if r.status_code == 404:
+    if r.status_code in (200, 204, 404):
         return
 
     body = (r.text or "")[:800]
@@ -102,17 +90,12 @@ def _get_object_bytes_authenticated(bucket: str, object_path: str) -> Optional[b
         return None
 
 
-# =========================
-# Perfil UI
-# =========================
 def _get_empresa_atual() -> str | None:
-    # tenta achar onde seu app guarda isso no session_state
     for k in ("empresa", "empresa_selecionada", "empresa_atual", "empresa_nome"):
         v = st.session_state.get(k)
         if isinstance(v, str) and v.strip():
             return v.strip()
 
-    # às vezes guardam como dict
     for k in ("empresa", "empresa_selecionada", "empresa_atual"):
         v = st.session_state.get(k)
         if isinstance(v, dict):
@@ -125,12 +108,6 @@ def _get_empresa_atual() -> str | None:
 
 
 def exibir_perfil(supabase_db):
-    """
-    Aba 'Meu Perfil' melhorada:
-    - Perfil: editar nome (user_profiles)
-    - Avatar: upload/preview + remover
-    - Segurança: ações rápidas
-    """
     DEBUG = str(st.secrets.get("DEBUG", "false")).lower() in ("1", "true", "yes", "y")
 
     token = st.session_state.get("auth_access_token")
@@ -138,12 +115,10 @@ def exibir_perfil(supabase_db):
 
     usuario = st.session_state.get("usuario") or {}
     user_id = uid or usuario.get("id") or st.session_state.get("auth_user_id")
-
     if not user_id:
         st.error("Não foi possível identificar o usuário logado.")
         return
 
-    # mantém alinhado
     if isinstance(st.session_state.get("usuario"), dict):
         st.session_state.usuario["id"] = user_id
 
@@ -151,7 +126,6 @@ def exibir_perfil(supabase_db):
     nome_sessao = usuario.get("nome") or "—"
     role = (usuario.get("perfil") or "user").upper()
 
-    # Puxa registro do user_profiles (fonte de verdade pro nome/avatar_path)
     try:
         prof = (
             supabase_db.table("user_profiles")
@@ -167,11 +141,9 @@ def exibir_perfil(supabase_db):
     nome_db = profile_row.get("nome") or nome_sessao
     avatar_path = profile_row.get("avatar_path") or usuario.get("avatar_path") or f"{user_id}/avatar.png"
 
-    # Header
     st.markdown("## 👤 Meu Perfil")
     empresa = _get_empresa_atual()
 
-    # Carrega avatar bytes (se existir)
     avatar_bytes = _get_object_bytes_authenticated("avatars", avatar_path) if avatar_path else None
 
     c1, c2 = st.columns([1, 2])
@@ -203,17 +175,14 @@ def exibir_perfil(supabase_db):
 
     tabs = st.tabs(["📝 Perfil", "🖼 Avatar", "🔐 Segurança"])
 
-    # =========================
-    # TAB: Perfil
-    # =========================
+    # ---- Perfil ----
     with tabs[0]:
         st.subheader("📝 Dados do perfil")
-
-        novo_nome = st.text_input("Nome", value=nome_db or "", placeholder="Seu nome completo")
+        novo_nome = st.text_input("Nome", value=nome_db or "", placeholder="Seu nome completo", key="perfil_nome_input")
 
         col_a, col_b = st.columns([1, 3])
         with col_a:
-            salvar_nome = st.button("💾 Salvar dados", use_container_width=True)
+            salvar_nome = st.button("💾 Salvar dados", use_container_width=True, key="perfil_salvar_dados_btn")
         with col_b:
             st.caption("Atualiza apenas o nome (sem campos extras).")
 
@@ -224,7 +193,6 @@ def exibir_perfil(supabase_db):
             else:
                 try:
                     supabase_db.table("user_profiles").update({"nome": nn}).eq("user_id", user_id).execute()
-                    # atualiza também na sessão pra refletir em outras telas
                     if isinstance(st.session_state.get("usuario"), dict):
                         st.session_state.usuario["nome"] = nn
                     st.success("✅ Perfil atualizado!")
@@ -232,20 +200,17 @@ def exibir_perfil(supabase_db):
                 except Exception as e:
                     st.error(f"Falha ao salvar: {e}")
 
-    # =========================
-    # TAB: Avatar
-    # =========================
+    # ---- Avatar ----
     with tabs[1]:
         st.subheader("🖼 Avatar")
 
-        # preview + upload com botão (evita loop)
         if "avatar_uploader_key" not in st.session_state:
             st.session_state.avatar_uploader_key = 0
 
         arquivo = st.file_uploader(
             "Escolher imagem (PNG/JPG)",
             type=["png", "jpg", "jpeg"],
-            key=f"avatar_uploader_{st.session_state.avatar_uploader_key}",
+            key=f"perfil_avatar_uploader_{st.session_state.avatar_uploader_key}",
         )
 
         if arquivo is not None:
@@ -253,12 +218,20 @@ def exibir_perfil(supabase_db):
             st.image(arquivo.getvalue(), width=180)
 
         b1, b2 = st.columns([1, 1])
-
         with b1:
-            salvar_avatar = st.button("💾 Salvar avatar", use_container_width=True, disabled=arquivo is None)
-
+            salvar_avatar = st.button(
+                "💾 Salvar avatar",
+                use_container_width=True,
+                disabled=arquivo is None,
+                key="perfil_salvar_avatar_btn",
+            )
         with b2:
-            remover_avatar = st.button("🗑️ Remover avatar", use_container_width=True, disabled=not bool(avatar_bytes))
+            remover_avatar = st.button(
+                "🗑️ Remover avatar",
+                use_container_width=True,
+                disabled=not bool(avatar_bytes),
+                key="perfil_remover_avatar_btn",
+            )
 
         if salvar_avatar:
             mime = arquivo.type or mimetypes.guess_type(arquivo.name)[0] or "image/png"
@@ -275,28 +248,23 @@ def exibir_perfil(supabase_db):
                 st.error(f"Erro ao enviar para o Storage: {e}")
                 st.stop()
 
-            # salva o path no user_profiles
             try:
                 supabase_db.table("user_profiles").update({"avatar_path": object_path}).eq("user_id", user_id).execute()
             except Exception as e:
                 st.error(f"Avatar enviado, mas falhou ao salvar no perfil: {e}")
                 st.stop()
 
-            # atualiza sessão e limpa uploader
             if isinstance(st.session_state.get("usuario"), dict):
                 st.session_state.usuario["avatar_path"] = object_path
-            st.session_state.avatar_uploader_key += 1
 
+            st.session_state.avatar_uploader_key += 1
             st.success("✅ Avatar atualizado!")
             st.rerun()
 
         if remover_avatar:
-            # apaga o arquivo e limpa avatar_path
             try:
-                # tenta apagar o atual
                 if avatar_path:
                     _delete_object_rest("avatars", avatar_path)
-                # (opcional) também apaga as variações comuns
                 _delete_object_rest("avatars", f"{user_id}/avatar.png")
                 _delete_object_rest("avatars", f"{user_id}/avatar.jpg")
             except Exception as e:
@@ -315,17 +283,14 @@ def exibir_perfil(supabase_db):
             st.success("✅ Avatar removido!")
             st.rerun()
 
-    # =========================
-    # TAB: Segurança
-    # =========================
+    # ---- Segurança ----
     with tabs[2]:
         st.subheader("🔐 Segurança")
         st.caption("Ações rápidas da conta.")
 
         col1, col2 = st.columns([1, 1])
         with col1:
-            if st.button("🚪 Sair", use_container_width=True):
-                # respeita seu fluxo atual (se existir um método de logout próprio)
+            if st.button("🚪 Sair", use_container_width=True, key="perfil_logout_btn"):
                 for k in [
                     "auth_access_token",
                     "auth_refresh_token",
@@ -340,7 +305,7 @@ def exibir_perfil(supabase_db):
                 st.rerun()
 
         with col2:
-            st.info("Se você quiser, eu adiciono aqui o botão **“Enviar link de troca de senha”** (depende do seu fluxo de auth).")
+            st.info("Posso adicionar aqui o botão “Enviar link de troca de senha” (depende do seu fluxo de auth).")
 
     if DEBUG:
         with st.expander("🧪 Debug (interno)", expanded=False):
