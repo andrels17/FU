@@ -550,9 +550,6 @@ def _ir_para_ficha_material_do_alerta(pedido: dict) -> None:
         st.session_state["current_page"] = "Ficha de Material"
         # Mantém o rádio sincronizado no próximo rerun
         st.session_state["_force_menu_sync"] = True
-        # Se existir menu_gestao, ajuda a refletir seleção
-        st.session_state["menu_gestao"] = "Ficha de Material"
-
         return
     except Exception as e:
         st.warning(f"⚠️ Não foi possível abrir a ficha do material: {e}")
