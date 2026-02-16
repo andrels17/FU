@@ -633,15 +633,45 @@ def main():
     # ===== Sidebar topo + menus (SEM botão sair/creditos aqui) =====
     with st.sidebar:
 
-        nome = st.session_state.usuario.get("nome", "Usuário")
-        perfil = str(st.session_state.usuario.get("perfil", "")).title() or "—"
+        usuario = st.session_state.usuario
+        nome = usuario.get("nome", "Usuário")
+        perfil = (usuario.get("perfil") or "user").lower()
+        avatar_url = usuario.get("avatar_url")
+
+        # saudação
+        hora = datetime.now().hour
+        if hora < 12:
+            saudacao = "Bom dia"
+        elif hora < 18:
+            saudacao = "Boa tarde"
+        else:
+            saudacao = "Boa noite"
+
+        # badge por perfil
+        if perfil == "admin":
+            badge_cor = "#ef4444"
+        elif perfil == "buyer":
+            badge_cor = "#3b82f6"
+        else:
+            badge_cor = "#10b981"
+
 
         st.markdown(
             textwrap.dedent(f"""<div class="fu-card">
   <p class="fu-user-label">👷 Sistema de Follow-Up</p>
   <div class="fu-bar"></div>
-  <p class="fu-user-name">{nome}</p>
-  <p class="fu-user-role">{perfil}</p>
+
+  <!-- Avatar -->
+  <div style="display:flex; align-items:center; gap:10px; margin: 6px 0 10px 0;">
+    {"<img src='" + (avatar_url or "") + "' style='width:52px;height:52px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.18);'/>" if avatar_url else "<div style='width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:white;border:1px solid rgba(255,255,255,0.14);'>" + (nome[:1].upper() if nome else "U") + "</div>"}
+    <div>
+      <p class="fu-user-name" style="margin:0;">{nome}</p>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+        <span style="background:{badge_cor};padding:2px 10px;border-radius:999px;font-size:11px;color:white;font-weight:900;letter-spacing:0.2px;">{perfil.upper()}</span>
+        <span style="font-size:11px; opacity:.72;">{saudacao}</span>
+      </div>
+    </div>
+  </div>
 
   <div class="fu-kpi-row">
     <div class="fu-kpi">
