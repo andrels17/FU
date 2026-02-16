@@ -215,6 +215,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
             alertas["pedidos_atrasados"].append({
                 "id": _pedido_id(pedido, i),
                 "nr_oc": pedido.get("nr_oc"),
+                "cod_material": pedido.get("cod_material"),
                 "descricao": pedido.get("descricao", ""),
                 "fornecedor": pedido.get("fornecedor_nome", "N/A"),
                 "dias_atraso": dias_atraso,
@@ -237,6 +238,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
             alertas["pedidos_vencendo"].append({
                 "id": _pedido_id(pedido, i),
                 "nr_oc": pedido.get("nr_oc"),
+                "cod_material": pedido.get("cod_material"),
                 "descricao": pedido.get("descricao", ""),
                 "fornecedor": pedido.get("fornecedor_nome", "N/A"),
                 "dias_restantes": dias_restantes,
@@ -290,6 +292,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
             alertas["pedidos_criticos"].append({
                 "id": _pedido_id(pedido, i),
                 "nr_oc": pedido.get("nr_oc"),
+                "cod_material": pedido.get("cod_material"),
                 "descricao": pedido.get("descricao", ""),
                 "valor": float(pedido.get("_valor_total", 0.0)),
                 "fornecedor": pedido.get("fornecedor_nome", "N/A"),
@@ -391,6 +394,21 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
                 """,
                 unsafe_allow_html=True
             )
+
+            # Ações rápidas (híbrido: operacional + executivo)
+            base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
+            cbtn1, cbtn2 = st.columns([1, 1])
+            with cbtn1:
+                if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
+                    _ir_para_ficha_material_do_alerta(pedido)
+            with cbtn2:
+                if st.button("📋 Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
+                    st.session_state["oc_copiada"] = str(pedido.get("nr_oc", "") or "")
+                    try:
+                        st.toast("OC copiada (salva em sessão).", icon="📋")
+                    except Exception:
+                        st.info("OC copiada (salva em sessão).")
+
     
     elif tipo == "vencendo":
         dias = pedido.get("dias_restantes", 0)
@@ -410,6 +428,21 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
                 """,
                 unsafe_allow_html=True
             )
+
+            # Ações rápidas (híbrido: operacional + executivo)
+            base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
+            cbtn1, cbtn2 = st.columns([1, 1])
+            with cbtn1:
+                if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
+                    _ir_para_ficha_material_do_alerta(pedido)
+            with cbtn2:
+                if st.button("📋 Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
+                    st.session_state["oc_copiada"] = str(pedido.get("nr_oc", "") or "")
+                    try:
+                        st.toast("OC copiada (salva em sessão).", icon="📋")
+                    except Exception:
+                        st.info("OC copiada (salva em sessão).")
+
     
     elif tipo == "critico":
         prev = safe_text(pedido.get("previsao", "N/A"))
@@ -429,6 +462,21 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br):
                 """,
                 unsafe_allow_html=True
             )
+
+            # Ações rápidas (híbrido: operacional + executivo)
+            base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}"
+            cbtn1, cbtn2 = st.columns([1, 1])
+            with cbtn1:
+                if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
+                    _ir_para_ficha_material_do_alerta(pedido)
+            with cbtn2:
+                if st.button("📋 Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
+                    st.session_state["oc_copiada"] = str(pedido.get("nr_oc", "") or "")
+                    try:
+                        st.toast("OC copiada (salva em sessão).", icon="📋")
+                    except Exception:
+                        st.info("OC copiada (salva em sessão).")
+
 
 
 def criar_card_fornecedor(fornecedor: dict, formatar_moeda_br):
@@ -473,6 +521,33 @@ def criar_card_fornecedor(fornecedor: dict, formatar_moeda_br):
             unsafe_allow_html=True
         )
 
+
+
+
+def _ir_para_ficha_material_do_alerta(pedido: dict) -> None:
+    """Navega para a Ficha de Material usando o contexto do alerta.
+
+    Compatível com a página ficha_material_page (usa st.session_state).
+    """
+    try:
+        cod = pedido.get("cod_material") or pedido.get("codigo_material") or pedido.get("material_cod")
+        desc = pedido.get("descricao") or pedido.get("material_desc") or pedido.get("material")
+
+        # Contexto mínimo para a ficha
+        st.session_state["material_fixo"] = {"cod": cod, "desc": desc}
+        st.session_state["tipo_busca_ficha"] = "alerta"
+        st.session_state["equipamento_ctx"] = ""
+        st.session_state["departamento_ctx"] = pedido.get("departamento", "") or ""
+        st.session_state["modo_ficha_material"] = True
+
+        # Se seu app usa navegação por st.session_state.pagina, tentamos direcionar.
+        if "pagina" in st.session_state:
+            # Ajuste este rótulo se no seu app o nome for diferente.
+            st.session_state["pagina"] = "Ficha de Material"
+
+        st.rerun()
+    except Exception as e:
+        st.warning(f"⚠️ Não foi possível abrir a ficha do material: {e}")
 
 def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     """Exibe a página completa de alertas com filtros e tabs."""
