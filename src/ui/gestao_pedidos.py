@@ -467,90 +467,175 @@ def exibir_gestao_pedidos(_supabase):
 
         st.markdown("---")
         with st.expander("🗑️ Ferramentas de Limpeza de Banco", expanded=False):
-            st.warning("⚠️ **ATENÇÃO:** Esta ferramenta permite limpar completamente o banco de dados de pedidos. Use com extremo cuidado!")
-            
-            col_limpar1, col_limpar2 = st.columns([3, 1])
-            
-            with col_limpar1:
-                st.markdown("""
-                **Quando usar:**
-                - Antes de importar uma nova base completa de dados
-                - Para resetar o sistema durante testes
-                - Para corrigir erros massivos de dados
-                
-                **O que será deletado:**
-                - ✅ Todos os pedidos existentes no banco
-                - ✅ Histórico e registros antigos
-                - ❌ **NÃO** afeta fornecedores, usuários ou configurações
-                """)
-            
-            with col_limpar2:
-                confirmacao_limpeza = st.checkbox(
-                    "Confirmo que entendo os riscos",
-                    key="confirmar_limpeza_banco",
-                    help="Marque esta caixa para habilitar o botão de limpeza"
-                )
-            
-            if confirmacao_limpeza:
-                col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
-                
-                with col_btn2:
-                    if st.button("🗑️ LIMPAR BANCO DE DADOS", type="primary", use_container_width=True):
-                        # Confirmação final com input de texto
-                        confirmacao_final = st.text_input(
-                            "Digite 'CONFIRMAR' para prosseguir com a limpeza:",
-                            key="confirmacao_texto_limpeza"
-                        )
-                        
-                        if confirmacao_final == "CONFIRMAR":
-                            try:
-                                with st.spinner("🗑️ Limpando banco de dados..."):
-                                    # Contar registros antes
-                                    try:
-                                        count_antes = _supabase.table("pedidos").select("id", count="exact").execute()
-                                        total_antes = count_antes.count if hasattr(count_antes, 'count') else 0
-                                    except:
-                                        total_antes = 0
-                                    
-                                    # Executar limpeza
-                                    tenant_id = st.session_state.get("tenant_id")
-                                    
-                                    _supabase.table("pedidos").delete().eq("tenant_id", tenant_id).execute()
-                                    
-                                    # Limpar cache
-                                    st.cache_data.clear()
-                                    
-                                    # Registrar auditoria
-                                    try:
-                                        ba.registrar_acao(
-                                            _supabase,
-                                            st.session_state.usuario.get("email"),
-                                            "limpar_banco",
-                                            {"registros_deletados": total_antes}
-                                        )
-                                    except:
-                                        pass
-                                    
-                                    st.success(f"✅ Banco limpo com sucesso! {total_antes} registros foram removidos.")
-                                    st.balloons()
-                                    
-                                    # Limpar confirmação
-                                    if 'confirmacao_texto_limpeza' in st.session_state:
-                                        del st.session_state['confirmacao_texto_limpeza']
-                                    
-                                    # Esperar 2 segundos e recarregar
-                                    import time
-                                    time.sleep(2)
-                                    st.rerun()
-                                    
-                            except Exception as e_limpeza:
-                                st.error(f"❌ Erro ao limpar banco: {e_limpeza}")
-                                st.error("Por favor, tente novamente ou contate o administrador.")
-                        
-                        elif confirmacao_final and confirmacao_final != "CONFIRMAR":
-                            st.warning("⚠️ Texto de confirmação incorreto. Digite exatamente 'CONFIRMAR' (em maiúsculas).")
+            st.warning("⚠️ **ATENÇÃO:** Esta ferramenta permite apagar dados. Use com extremo cuidado!")
+
+            tenant_id = st.session_state.get("tenant_id")
+            if not tenant_id:
+                st.error("❌ Não foi possível identificar a empresa (tenant). Faça login novamente ou selecione uma empresa.")
             else:
-                st.info("ℹ️ Marque a caixa de confirmação acima para habilitar a limpeza do banco.")
+                st.markdown(
+                    """
+**Boas práticas (recomendado):**
+- Faça **backup** antes de apagar
+- Use filtros (status / data) para reduzir risco
+- Limpeza total é indicada apenas para **reset** em testes ou reimportação completa
+"""
+                )
+
+                modo = st.radio(
+                    "Modo de limpeza",
+                    ["Somente por filtros (recomendado)", "Tudo (somente esta empresa)"],
+                    index=0,
+                    horizontal=True,
+                )
+
+                aplicar_filtros = modo.startswith("Somente")
+
+                # Status disponíveis
+                status_opts = []
+                try:
+                    status_opts = list(STATUS_VALIDOS)  # type: ignore[name-defined]
+                except Exception:
+                    status_opts = ["Sem OC", "Tem OC", "Em Transporte", "Entregue", "Cancelado"]
+
+                colf1, colf2, colf3 = st.columns([2, 2, 2])
+                with colf1:
+                    status_sel = st.multiselect(
+                        "Status (opcional)",
+                        options=status_opts,
+                        default=[s for s in ["Cancelado", "Entregue"] if s in status_opts],
+                        disabled=not aplicar_filtros,
+                        help="Se vazio, não filtra por status.",
+                    )
+
+                with colf2:
+                    usar_data = st.checkbox(
+                        "Filtrar por data",
+                        value=True if aplicar_filtros else False,
+                        disabled=not aplicar_filtros,
+                    )
+                    campo_data = st.selectbox(
+                        "Campo de data",
+                        options=["criado_em", "atualizado_em", "data_solicitacao", "data_oc", "previsao_entrega", "data_entrega"],
+                        index=0,
+                        disabled=not (aplicar_filtros and usar_data),
+                    )
+
+                with colf3:
+                    data_limite = st.date_input(
+                        "Apagar antes de (inclusive)",
+                        value=datetime.now().date(),
+                        disabled=not (aplicar_filtros and usar_data),
+                        help="Pedidos com data <= limite serão incluídos.",
+                    )
+
+                st.markdown("---")
+                st.subheader("📦 Backup antes de apagar")
+                fazer_backup = st.checkbox("Gerar backup CSV antes de apagar (recomendado)", value=True)
+                st.caption("O backup é gerado somente com os registros que serão apagados (empresa + filtros).")
+
+                def _query_pedidos_para_limpeza():
+                    q = _supabase.table("pedidos").select("*").eq("tenant_id", tenant_id)
+                    if aplicar_filtros:
+                        if status_sel:
+                            q = q.in_("status", status_sel)
+                        if usar_data and campo_data:
+                            try:
+                                q = q.lte(campo_data, data_limite.isoformat())
+                            except Exception:
+                                q = q.lt(campo_data, (data_limite + timedelta(days=1)).isoformat())
+                    return q.execute()
+
+                colp1, colp2 = st.columns([1, 1])
+                with colp1:
+                    if st.button("🔎 Pré-visualizar (contagem)", use_container_width=True):
+                        try:
+                            res = _query_pedidos_para_limpeza()
+                            dados = res.data or []
+                            st.session_state["limpeza_preview_rows"] = dados
+                            st.session_state["limpeza_preview_count"] = len(dados)
+                            st.success(f"Encontrados **{len(dados)}** pedidos para apagar.")
+                        except Exception as e_prev:
+                            st.error(f"❌ Erro ao pré-visualizar: {e_prev}")
+
+                with colp2:
+                    if fazer_backup:
+                        dados = st.session_state.get("limpeza_preview_rows")
+                        if dados:
+                            try:
+                                df_bkp = pd.DataFrame(dados)
+                                csv_bkp = df_bkp.to_csv(index=False, sep=";", encoding="utf-8-sig").encode("utf-8-sig")
+                                st.download_button(
+                                    "⬇️ Baixar backup (CSV)",
+                                    data=csv_bkp,
+                                    file_name=f"backup_pedidos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv",
+                                    use_container_width=True,
+                                )
+                            except Exception as e_bkp:
+                                st.error(f"❌ Não foi possível gerar o backup: {e_bkp}")
+                        else:
+                            st.info("Faça a pré-visualização para habilitar o backup.")
+
+                st.markdown("---")
+                st.subheader("🧨 Executar limpeza")
+                confirm_risco = st.checkbox("Confirmo que entendo os riscos", value=False)
+                texto_conf = st.text_input("Digite **CONFIRMAR LIMPEZA** para liberar o botão:", value="")
+                pode_apagar = confirm_risco and (texto_conf.strip() == "CONFIRMAR LIMPEZA")
+
+                if fazer_backup and not st.session_state.get("limpeza_preview_rows"):
+                    st.warning("⚠️ Para maior segurança, faça a **pré-visualização** antes de apagar (e baixe o backup).")
+                    pode_apagar = False
+
+                if st.button("🗑️ APAGAR AGORA", type="primary", use_container_width=True, disabled=not pode_apagar):
+                    try:
+                        with st.spinner("🗑️ Apagando registros..."):
+                            res = _query_pedidos_para_limpeza()
+                            rows = res.data or []
+                            ids = [str(r.get("id")) for r in rows if r.get("id")]
+                            total = len(ids)
+
+                            if total == 0:
+                                st.info("ℹ️ Nada para apagar com os filtros atuais.")
+                            else:
+                                # Tenta apagar tabelas dependentes (se existirem)
+                                for tb in ["anexos", "historico_pedidos", "historico"]:
+                                    try:
+                                        _supabase.table(tb).delete().in_("pedido_id", ids).eq("tenant_id", tenant_id).execute()
+                                    except Exception:
+                                        pass
+
+                                # Apaga pedidos por IDs (mais seguro)
+                                CHUNK = 500
+                                for i in range(0, total, CHUNK):
+                                    _supabase.table("pedidos").delete().in_("id", ids[i:i+CHUNK]).eq("tenant_id", tenant_id).execute()
+
+                                st.cache_data.clear()
+
+                                try:
+                                    ba.registrar_acao(
+                                        _supabase,
+                                        st.session_state.usuario.get("email"),
+                                        "limpar_banco",
+                                        {
+                                            "tenant_id": tenant_id,
+                                            "modo": modo,
+                                            "status": status_sel if aplicar_filtros else None,
+                                            "campo_data": campo_data if (aplicar_filtros and usar_data) else None,
+                                            "data_limite": data_limite.isoformat() if (aplicar_filtros and usar_data) else None,
+                                            "registros_deletados": total,
+                                        },
+                                    )
+                                except Exception:
+                                    pass
+
+                                st.success(f"✅ Limpeza concluída! **{total}** pedidos removidos.")
+                                st.session_state.pop("limpeza_preview_rows", None)
+                                st.session_state.pop("limpeza_preview_count", None)
+                                st.rerun()
+                    except Exception as e_limpeza:
+                        st.error(f"❌ Erro ao limpar banco: {e_limpeza}")
+                        st.error("Por favor, tente novamente ou contate o administrador.")
 
         st.markdown("---")
 
@@ -797,6 +882,7 @@ def exibir_gestao_pedidos(_supabase):
                         registros_atualizados = 0
                         registros_erro = 0
                         fornecedores_criados = 0
+                        log_rows: list[dict] = []  # log detalhado por linha
                         erros: list[str] = []
                         avisos: list[str] = []
 
@@ -871,6 +957,7 @@ def exibir_gestao_pedidos(_supabase):
                                 if nr_oc_row and nr_oc_row in oc_to_id:
                                     if pular_duplicados:
                                         avisos.append(f"Linha {idx + 2}: OC {nr_oc_row} já existe — pulado")
+                                        log_rows.append({"linha": idx + 2, "acao": "Pulado", "chave": f"OC:{nr_oc_row}", "mensagem": "Já existia (OC)"})
                                         registros_pulados_dup += 1
                                         registros_processados += 1
                                         if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
@@ -884,6 +971,7 @@ def exibir_gestao_pedidos(_supabase):
                                         avisos.append(
                                             f"Linha {idx + 2}: Solicitação {nr_sol_row} já possui OC no banco — ignorado para evitar sobrescrita"
                                         )
+                                        log_rows.append({"linha": idx + 2, "acao": "Pulado", "chave": f"SOL:{nr_sol_row}", "mensagem": "Solicitação já tem OC no banco"})
                                         registros_pulados_dup += 1
                                         registros_processados += 1
                                         if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
@@ -893,6 +981,7 @@ def exibir_gestao_pedidos(_supabase):
                                     if nr_sol_row in sol_to_id_sem_oc:
                                         if pular_duplicados:
                                             avisos.append(f"Linha {idx + 2}: SOL {nr_sol_row} já existe — pulado")
+                                            log_rows.append({"linha": idx + 2, "acao": "Pulado", "chave": f"SOL:{nr_sol_row}", "mensagem": "Já existia (SOL)"})
                                             registros_pulados_dup += 1
                                             registros_processados += 1
                                             if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
@@ -1039,10 +1128,12 @@ def exibir_gestao_pedidos(_supabase):
                                     # Atualiza por ID (mais seguro e rápido)
                                     _supabase.table("pedidos").update(pedido_data).eq("id", pedido_id_existente).eq("tenant_id", tenant_id).execute()
                                     registros_atualizados += 1
+                                    log_rows.append({"linha": idx + 2, "acao": "Atualizado", "chave": (f"OC:{nr_oc_row}" if nr_oc_row else (f"SOL:{nr_sol_row}" if nr_sol_row else "")), "id": pedido_id_existente, "mensagem": "Atualizado com sucesso"})
                                 else:
                                     pedido_data["tenant_id"] = tenant_id
                                     _supabase.table("pedidos").insert(pedido_data).execute()
                                     registros_inseridos += 1
+                                    log_rows.append({"linha": idx + 2, "acao": "Inserido", "chave": (f"OC:{nr_oc_row}" if nr_oc_row else (f"SOL:{nr_sol_row}" if nr_sol_row else "")), "id": None, "mensagem": "Inserido com sucesso"})
 
                                 registros_processados += 1
                                 if total_rows and (registros_processados % 10 == 0 or registros_processados == total_rows):
@@ -1052,6 +1143,7 @@ def exibir_gestao_pedidos(_supabase):
                             except Exception as e:
                                 registros_erro += 1
                                 erros.append(f"Linha {idx + 2}: {str(e)}")
+                                log_rows.append({"linha": idx + 2, "acao": "Erro", "chave": (f"OC:{nr_oc_row}" if 'nr_oc_row' in locals() and nr_oc_row else (f"SOL:{nr_sol_row}" if 'nr_sol_row' in locals() and nr_sol_row else "")), "mensagem": str(e)})
 
                         st.cache_data.clear()
 
@@ -1093,6 +1185,24 @@ def exibir_gestao_pedidos(_supabase):
                                     st.error(erro)
                                 if len(erros) > 50:
                                     st.warning(f"... e mais {len(erros) - 50} erros não exibidos")
+
+                        
+                        # Log detalhado (baixável)
+                        if log_rows:
+                            try:
+                                df_log = pd.DataFrame(log_rows)
+                                with st.expander("📄 Log detalhado da importação (baixar)", expanded=(registros_erro > 0)):
+                                    st.dataframe(df_log, use_container_width=True, hide_index=True)
+                                    csv_log = df_log.to_csv(index=False, sep=";", encoding="utf-8-sig").encode("utf-8-sig")
+                                    st.download_button(
+                                        "⬇️ Baixar log CSV",
+                                        data=csv_log,
+                                        file_name=f"log_import_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                        mime="text/csv",
+                                        use_container_width=True,
+                                    )
+                            except Exception:
+                                pass
 
                         try:
                             _supabase.table("log_importacoes").insert(
