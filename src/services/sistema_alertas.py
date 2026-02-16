@@ -1,4 +1,5 @@
 import streamlit as st
+
 import pandas as pd
 import re
 import html
@@ -375,6 +376,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
     desc_txt = safe_text(pedido.get("descricao", ""))
     fornecedor_txt = safe_text(pedido.get("fornecedor", "N/A"))
     valor = pedido.get("valor", 0.0)
+    status_badge = badge_alert_status(status)
     
     # Card de acordo com o tipo
     if tipo == "atrasado":
@@ -412,7 +414,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
                 )
                 if novo_status != status:
                     try:
-                        _set_status(str(pedido.get('id','')), novo_status)
+                        set_alert_status(str(pedido.get('id','')), novo_status)
                     except Exception:
                         pass
 
@@ -665,10 +667,10 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     if "alert_status" not in st.session_state:
         st.session_state["alert_status"] = {}  # {alert_id: status}
 
-    def _get_status(alert_id: str) -> str:
+    def get_alert_status(alert_id: str) -> str:
         return str(st.session_state["alert_status"].get(str(alert_id), "Novo"))
 
-    def _set_status(alert_id: str, status: str) -> None:
+    def set_alert_status(alert_id: str, status: str) -> None:
         st.session_state["alert_status"][str(alert_id)] = str(status)
 
     def _badge_status(status: str) -> str:
@@ -1066,13 +1068,13 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                     _nr = str(_p.get("nr_oc", "") or "")
                     _base_key = f"atrasado_{_aid}_{_nr}_{_i}"
                     if bool(st.session_state.get(f"sel_{_base_key}", False)):
-                        _set_status(_aid, bulk_status)
+                        set_alert_status(_aid, bulk_status)
 
             if pagina_itens:
                 for i, pedido in enumerate(pagina_itens):
                     aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
                     pedido['id'] = aid
-                    criar_card_pedido(pedido, "atrasado", formatar_moeda_br, idx=i, status=_get_status(aid))
+                    criar_card_pedido(pedido, "atrasado", formatar_moeda_br, idx=i, status=get_alert_status(aid))
             else:
                 st.info("📭 Nenhum pedido atrasado corresponde aos filtros selecionados")
         else:
@@ -1160,13 +1162,13 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                     _nr = str(_p.get("nr_oc", "") or "")
                     _base_key = f"vencendo_{_aid}_{_nr}_{_i}"
                     if bool(st.session_state.get(f"sel_{_base_key}", False)):
-                        _set_status(_aid, bulk_status)
+                        set_alert_status(_aid, bulk_status)
 
             if pagina_itens:
                 for i, pedido in enumerate(pagina_itens):
                     aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
                     pedido['id'] = aid
-                    criar_card_pedido(pedido, "vencendo", formatar_moeda_br, idx=i, status=_get_status(aid))
+                    criar_card_pedido(pedido, "vencendo", formatar_moeda_br, idx=i, status=get_alert_status(aid))
             else:
                 st.info("📭 Nenhum pedido vencendo corresponde aos filtros selecionados")
         else:
@@ -1269,7 +1271,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                     _nr = str(_p.get("nr_oc", "") or "")
                     _base_key = f"critico_{_aid}_{_nr}_{_i}"
                     if bool(st.session_state.get(f"sel_{_base_key}", False)):
-                        _set_status(_aid, bulk_status)
+                        set_alert_status(_aid, bulk_status)
             
             if pagina_itens:
                 st.warning("⚠️ Pedidos de alto valor com previsão de entrega próxima")
@@ -1277,7 +1279,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 for i, pedido in enumerate(pagina_itens):
                     aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
                     pedido['id'] = aid
-                    criar_card_pedido(pedido, "critico", formatar_moeda_br, idx=i, status=_get_status(aid))
+                    criar_card_pedido(pedido, "critico", formatar_moeda_br, idx=i, status=get_alert_status(aid))
             else:
                 st.info("📭 Nenhum pedido crítico corresponde aos filtros selecionados")
         else:
