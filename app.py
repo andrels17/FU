@@ -1,5 +1,20 @@
 import streamlit as st
-from auth_flows import handle_auth_callback
+# 🔑 Auth callback (robusto para diferentes estruturas de projeto)
+try:
+    # Se auth_flows.py estiver na raiz do projeto
+    from auth_flows import handle_auth_callback  # type: ignore
+except Exception:
+    try:
+        # Se estiver dentro do pacote src (ajuste comum em apps modularizados)
+        from src.auth_flows import handle_auth_callback  # type: ignore
+    except Exception:
+        try:
+            from src.core.auth_flows import handle_auth_callback  # type: ignore
+        except Exception:
+            # Fallback seguro: não quebra o app caso o módulo não exista
+            def handle_auth_callback(*_args, **_kwargs):  # type: ignore
+                return
+
 from src.core.auth import verificar_autenticacao, exibir_login, fazer_logout
 
 import json
@@ -25,7 +40,6 @@ from src.ui.admin_saas import exibir_admin_saas
 from src.ui.landing_public import render_landing
 from src.ui.home import exibir_home
 from src.core.superadmin import is_superadmin
-from src.ui.relatorios_whatsapp import render_relatorios_whatsapp
 
 st.set_page_config(
     page_title="Sistema de Follow-Up",
@@ -587,7 +601,6 @@ PAGE_LABELS = {
     "users": "Gestão de usuários",
     "backup": "Backup",
     "saas_admin": "Admin do SaaS",
-    "reports_whatsapp": "Relatórios WhatsApp",
 }
 
 LEGACY_PAGE_TO_ID = {
@@ -1327,11 +1340,11 @@ def main():
 
             # ---------- Gestão ----------
             if is_admin:
-                opcoes_gestao = ["material_sheet", "orders_manage", "map", "reports_whatsapp", "users", "backup"] + (
+                opcoes_gestao = ["material_sheet", "orders_manage", "map", "users", "backup"] + (
                     ["saas_admin"] if st.session_state.get("is_superadmin") else []
                 )
             else:
-                opcoes_gestao = ["material_sheet", "map", "reports_whatsapp"]
+                opcoes_gestao = ["material_sheet", "map"]
 
             # Fonte de verdade: página atual deve existir em algum grupo
             if st.session_state.current_page not in (opcoes_ops + opcoes_gestao):
@@ -1478,14 +1491,6 @@ def main():
     elif pagina == "profile":
         from src.ui.perfil import exibir_perfil
         exibir_perfil(supabase)
-
-    elif pagina == "reports_whatsapp":
-        usuario = st.session_state.get("usuario") or {}
-        render_relatorios_whatsapp(
-            supabase,
-            tenant_id=tenant_id,
-            created_by=usuario.get("id"),
-        )
 
     elif pagina == "saas_admin":
         exibir_admin_saas(supabase)
