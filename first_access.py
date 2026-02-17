@@ -8,5 +8,5 @@ from auth_flows import tela_primeiro_acesso_definir_senha
 
 
 def render_first_access(supabase_anon):
-    st.title("👋 Primeiro acesso")
+    st.title("Primeiro acesso")
     tela_primeiro_acesso_definir_senha(supabase_anon)
