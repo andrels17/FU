@@ -46,7 +46,7 @@ def _apply_dashboard_filters(df: pd.DataFrame) -> pd.DataFrame:
 
     # Form recolhível para não poluir
     expanded = bool(st.session_state.get("dash_filters_expanded", not st.session_state.get("dash_filters_applied", False)))
-    with st.expander("🔎 Filtros do Dashboard", expanded=expanded):
+    with st.expander("Filtros do Dashboard", expanded=expanded):
         with st.form("dash_filters_form", clear_on_submit=False):
             c1, c2, c3, c4, c5 = st.columns([1.2, 1.6, 1.6, 1.2, 1.2])
 
@@ -89,9 +89,9 @@ def _apply_dashboard_filters(df: pd.DataFrame) -> pd.DataFrame:
             # Botões
             b1, b2 = st.columns([1, 1])
             with b1:
-                gerar = st.form_submit_button("✅ Gerar dashboard", use_container_width=True)
+                gerar = st.form_submit_button("Gerar dashboard", use_container_width=True)
             with b2:
-                limpar = st.form_submit_button("🧹 Limpar filtros", use_container_width=True)
+                limpar = st.form_submit_button("Limpar filtros", use_container_width=True)
 
     # Limpar filtros
     if limpar:
