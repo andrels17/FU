@@ -1157,7 +1157,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 def _hit(p):
                     return (b in str(p.get('nr_oc','')).lower() or b in str(p.get('descricao','')).lower() or b in str(p.get('fornecedor','')).lower())
                 pedidos_filtrados = [p for p in pedidos_filtrados if _hit(p)]
-            st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos atrasados")
+            st.caption(f"Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos atrasados")
 
                         # Toolbar (paginação + lote) — compacto
             t1, t2, t3, t4, t5, t6 = st.columns([2, 1.1, 1.4, 1.1, 2.3, 6.1])
