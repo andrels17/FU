@@ -38,7 +38,7 @@ def _load_departamentos_from_pedidos(supabase, tenant_id: str):
     """
     res = (
         supabase.table("pedidos")
-        .select("departamento")
+        .select("*")
         .eq("tenant_id", tenant_id)
         .limit(5000)
         .execute()
@@ -57,7 +57,7 @@ def _load_departamentos_from_pedidos(supabase, tenant_id: str):
 def _load_links(supabase, tenant_id: str):
     return (
         supabase.table("gestor_departamentos")
-        .select("*")
+        .select("id, departamento, gestor_user_id")
         .eq("tenant_id", tenant_id)
         .order("departamento")
         .execute()
