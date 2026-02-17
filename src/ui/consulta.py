@@ -140,6 +140,26 @@ def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str 
     if "id" not in page.columns:
         return None
 
+    # CSS local: evita que descrições longas "invadam" outras colunas
+    st.markdown(
+        """
+        <style>
+          .fu-erp-list div[data-testid="stButton"] > button{
+            width: 100% !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            min-height: 38px !important;
+          }
+          .fu-erp-list [data-testid="stButton"]{ margin-bottom: 0 !important; }
+          .fu-erp-list .fu-erp-sep hr{ margin: 6px 0 !important; opacity: .25; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="fu-erp-list">', unsafe_allow_html=True)
+
     # Cabeçalho (sticky-like por CSS fica complexo; aqui deixamos simples e limpo)
     header_cols = st.columns([0.6, 1.4, 3.6, 1.2, 1.1, 1.2, 1.2])
     header_cols[0].markdown("**Ver**")
@@ -182,7 +202,7 @@ def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str 
 
         with c[2]:
             # descrição clicável — abre ações ao clicar (além do 👁️)
-            short = (desc[:120] + "…") if len(desc) > 120 else desc
+            short = (desc[:80] + "…") if len(desc) > 80 else desc
             label = short or "—"
             if st.button(label, key=f"row_{pid}", help="Abrir ações deste pedido", use_container_width=True):
                 return pid
@@ -199,8 +219,9 @@ def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str 
         with c[6]:
             st.caption(val_str or "—")
 
-        st.markdown('<hr style="margin:6px 0; opacity:.25;">', unsafe_allow_html=True)
+        st.markdown('<div class="fu-erp-sep"><hr></div>', unsafe_allow_html=True)
 
+    st.markdown('</div>', unsafe_allow_html=True)
     return None
 
 
