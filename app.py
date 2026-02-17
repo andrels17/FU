@@ -48,6 +48,7 @@ if "fu_sidebar_hidden" not in st.session_state:
     st.session_state.fu_sidebar_hidden = True if is_mobile_default else False
 
 def _fu_inject_global_css(sidebar_hidden: bool) -> None:
+    """Injeta CSS global e regras de sidebar colapsada sem usar f-string (evita NameError)."""
     collapsed_css = (
         textwrap.dedent(
             """
@@ -57,7 +58,6 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
               min-width: 78px !important;
               overflow: hidden !important;
             }
-            /* reduz padding interno para não “cortar” */
             section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
               padding-top: 10px !important;
               padding-left: 6px !important;
@@ -67,134 +67,101 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         ).strip()
     ) if sidebar_hidden else ""
 
-
-
-    st.markdown(
-        f'''
+    style = textwrap.dedent(
+        """
         <style>
+        /* ===== Compact sidebar nav (ícones only) ===== */
+        .fu-compact-nav{
+          display:flex;
+          flex-direction:column;
+          gap: 10px;
+          padding: 6px 4px 10px 4px;
+          align-items:center;
+        }
+        .fu-compact-row{
+          width: 100%;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          gap: 8px;
+        }
+        .fu-compact-dot{
+          width: 6px;
+          height: 20px;
+          border-radius: 999px;
+          background: rgba(245,158,11,0.95);
+          box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
+        }
+        .fu-compact-dot--off{
+          background: rgba(255,255,255,0.10);
+          box-shadow: none;
+          height: 10px;
+        }
 
-/* ===== Compact sidebar nav (ícones only) ===== */
-.fu-compact-nav{
-  display:flex;
-  flex-direction:column;
-  gap: 10px;
-  padding: 6px 4px 10px 4px;
-  align-items:center;
-}
-.fu-compact-row{
-  width: 100%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap: 8px;
-}
-.fu-compact-dot{
-  width: 6px;
-  height: 20px;
-  border-radius: 999px;
-  background: rgba(245,158,11,0.95);
-  box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
-}
-.fu-compact-dot--off{
-  background: rgba(255,255,255,0.10);
-  box-shadow: none;
-  height: 10px;
-}
-
-/* Botões somente na sidebar (não afeta botões do topo) */
-section[data-testid="stSidebar"] .stButton > button{
-  width: 54px !important;
-  height: 54px !important;
-  border-radius: 14px !important;
-  padding: 0 !important;
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  font-size: 18px !important;
-  line-height: 1 !important;
-  white-space: nowrap !important;
-}
-section[data-testid="stSidebar"] .stButton > button:hover{
-  border-color: rgba(245,158,11,0.35) !important;
-  background: rgba(255,255,255,0.05) !important;
-  transform: translateY(-1px);
-}
+        /* Botões somente na sidebar (não afeta botões do topo) */
+        section[data-testid="stSidebar"] .stButton > button{
+          width: 54px !important;
+          height: 54px !important;
+          border-radius: 14px !important;
+          padding: 0 !important;
+          display:flex !important;
+          align-items:center !important;
+          justify-content:center !important;
+          font-size: 18px !important;
+          line-height: 1 !important;
+          white-space: nowrap !important;
+        }
+        section[data-testid="stSidebar"] .stButton > button:hover{
+          border-color: rgba(245,158,11,0.35) !important;
+          background: rgba(255,255,255,0.05) !important;
+          transform: translateY(-1px);
+        }
 
         /* Conteúdo fluido em qualquer zoom */
-        .fu-wrap{{ width: min(1200px, calc(100% - 32px)); margin: 0 auto; }}
+        .fu-wrap{
+          width: min(1200px, calc(100% - 32px));
+          margin: 0 auto;
+        }
 
         /* Sidebar responsiva */
-        section[data-testid="stSidebar"]{{ width: clamp(260px, 20vw, 340px) !important; transition: transform .28s ease, opacity .28s ease, width .28s ease, margin .28s ease, padding .28s ease; }}
-        @media (max-width: 1100px){{ section[data-testid="stSidebar"]{{ width: 240px !important; }} }}
-        @media (max-width: 900px){{ section[data-testid="stSidebar"]{{ width: 100% !important; }} }}
+        section[data-testid="stSidebar"]{
+          width: clamp(260px, 20vw, 340px) !important;
+          transition: width .28s ease, transform .28s ease, opacity .28s ease, margin .28s ease, padding .28s ease;
+          overflow: hidden;
+        }
+        @media (max-width: 1100px){
+          section[data-testid="stSidebar"]{ width: 240px !important; }
+        }
+        @media (max-width: 900px){
+          section[data-testid="stSidebar"]{ width: 100% !important; }
+        }
 
-        /* Tipografia fluida (quando as classes existirem) */
-        .fu-title{{ font-size: clamp(1.15rem, 1.6vw, 1.55rem) !important; }}
-        .fu-sub{{ font-size: clamp(.90rem, 1.1vw, .98rem) !important; }}
+        /* Tipografia fluida */
+        .fu-title{ font-size: clamp(1.15rem, 1.6vw, 1.55rem) !important; }
+        .fu-sub{ font-size: clamp(.90rem, 1.1vw, .98rem) !important; }
 
         /* Paddings elásticos */
-        .fu-hero{{ padding: clamp(14px, 2vw, 22px) !important; }}
-        .fu-mini{{ padding: clamp(10px, 1.6vw, 14px) !important; }}
+        .fu-hero{ padding: clamp(14px, 2vw, 22px) !important; }
+        .fu-mini{ padding: clamp(10px, 1.6vw, 14px) !important; }
 
-        /* Empilha colunas em telas/zoom apertados */
-        @media (max-width: 900px){{
-          div[data-testid="column"]{{ width: 100% !important; flex: 1 1 100% !important; }}
-        }}
+        /* Colunas empilháveis */
+        @media (max-width: 900px){
+          div[data-testid="column"]{
+            width: 100% !important;
+            flex: 1 1 100% !important;
+          }
+        }
 
-        /* Botões mais consistentes */
+        /* Botões: não quebrar texto */
+        .stButton button{ white-space: nowrap !important; }
 
-    /* Evita quebra de texto em botões (zoom/telas menores) */
-    .stButton button{{ white-space: nowrap !important; }}
-    @media (max-width: 1100px){{
-      .stButton button{{ font-size: 0.85rem !important; padding: 0.35rem 0.6rem !important; }}
-    }}
-    @media (max-width: 900px){{
-      .stButton button{{ font-size: 0.82rem !important; padding: 0.32rem 0.55rem !important; }}
-    }}
+        /* ====== COLLAPSED CSS INJECT ====== */
+        __FU_COLLAPSED_CSS__
+        </style>
+        """
+    ).replace("__FU_COLLAPSED_CSS__", collapsed_css)
 
-        .stButton button{{ border-radius: 12px !important; }}
-
-        /* Sidebar colapsada (modo compacto) */
-        {collapsed_css}
-        
-.stButton button{ white-space: nowrap !important; }
-</style>
-        ''',
-        unsafe_allow_html=True,
-    )
-
-_fu_inject_global_css(bool(st.session_state.fu_sidebar_hidden))
-
-
-from datetime import datetime, timezone
-
-import src.services.sistema_alertas as sa
-import src.services.backup_auditoria as ba
-from src.repositories.fornecedores import carregar_fornecedores
-from src.core.config import configure_page  # noqa: F401
-from src.core.db import init_supabase_admin, init_supabase_anon, get_supabase_user_client
-
-# Cliente ANON (RLS + Auth)
-supabase_anon = init_supabase_anon()
-# ✅ Consome links do Supabase (invite/magic/recovery) antes de checar login
-handle_auth_callback(supabase_anon)
-
-
-from src.core.auth import verificar_autenticacao, exibir_login, fazer_logout
-from src.repositories.pedidos import carregar_pedidos
-from src.utils.formatting import formatar_moeda_br
-
-from src.ui.dashboard import exibir_dashboard
-from src.ui.mapa import exibir_mapa
-from src.ui.consulta import exibir_consulta_pedidos
-from src.ui.gestao_pedidos import exibir_gestao_pedidos
-from src.ui.ficha_material_page import exibir_ficha_material
-from src.ui.gestao_usuarios import exibir_gestao_usuarios
-from src.ui.admin_saas import exibir_admin_saas
-from src.ui.landing_public import render_landing
-from src.ui.home import exibir_home
-from src.core.superadmin import is_superadmin
-
+    st.markdown(style, unsafe_allow_html=True)
 
 def _jwt_claim_exp(token: str):
     """Extrai 'exp' (epoch seconds) do JWT sem validar assinatura."""
