@@ -968,7 +968,7 @@ def main():
 
             with st.expander("Conta"):
                 if st.button("Meu Perfil", use_container_width=True):
-                    st.session_state.current_page = "Meu Perfil"
+                    st.session_state.current_page = "profile"
                     st.session_state["menu_ops"] = "Meu Perfil"
                     st.session_state.exp_ops_open = True
                     st.session_state.exp_gestao_open = False
@@ -1051,7 +1051,7 @@ def main():
             is_admin = st.session_state.usuario.get("perfil") == "admin"
             # ✅ Controle de navegação (seleção única + expander inteligente)
             if "current_page" not in st.session_state:
-                st.session_state.current_page = "Início"
+                st.session_state.current_page = "home"
 
             # Memoriza qual box ficou aberto por último
             if "exp_ops_open" not in st.session_state:
@@ -1147,6 +1147,10 @@ def main():
 
         # Página atual (fonte de verdade)
         pagina = st.session_state.current_page
+        # Normaliza (caso ainda exista valor antigo por label/emoji)
+        if 'LEGACY_PAGE_TO_ID' in globals() and pagina in LEGACY_PAGE_TO_ID:
+            pagina = LEGACY_PAGE_TO_ID[pagina]
+            st.session_state.current_page = pagina
 
     st.markdown(
         """
@@ -1185,12 +1189,12 @@ def main():
 
     with b3:
         if st.button("➕ Novo", use_container_width=True, key="qa_new", help="Criar novo pedido"):
-            st.session_state.current_page = "Gestão de Pedidos"
+            st.session_state.current_page = "orders_manage"
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    if pagina == "Início":
+    if pagina == "home":
         exibir_home(alertas, usuario_nome=st.session_state.usuario.get("nome", "Usuário"))
     elif pagina == "dashboard":
         exibir_dashboard(supabase)
@@ -1204,9 +1208,9 @@ def main():
         exibir_gestao_pedidos(supabase)
     elif pagina == "map":
         exibir_mapa(supabase)
-    elif pagina == "Gestão de Usuários":
+    elif pagina == "users":
         exibir_gestao_usuarios(supabase)
-    elif pagina == "Backup":
+    elif pagina == "backup":
         ba.realizar_backup_manual(supabase)
     
     elif pagina == "profile":
