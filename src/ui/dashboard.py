@@ -166,7 +166,7 @@ def exibir_dashboard(_supabase):
     df_view = _apply_dashboard_filters(df_export)
 
     if df_view.empty:
-        st.info("🔍 Nenhum pedido encontrado com os filtros atuais.")
+        st.info("Nenhum pedido encontrado com os filtros atuais.")
         return
 
     # =========================
