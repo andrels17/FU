@@ -625,14 +625,19 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
 
     for ico, page_id, tip in items:
         active = (page_id == current)
-        dot = '<div class="fu-compact-dot"></div>' if active else '<div class="fu-compact-dot fu-compact-dot--off"></div>'
-        st.markdown(f'<div class="fu-compact-row">{dot}', unsafe_allow_html=True)
+
+        st.markdown('<div class="fu-compact-row">', unsafe_allow_html=True)
+        if active:
+            st.markdown('<div class="fu-compact-active">', unsafe_allow_html=True)
 
         if st.button(ico, help=tip, key=f"fu_nav_btn_{page_id}"):
             if page_id != st.session_state.get("current_page"):
                 st.session_state.current_page = page_id
                 st.session_state["_force_menu_sync"] = True
                 st.rerun()
+
+        if active:
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -658,6 +663,10 @@ def _sidebar_footer(supabase_client) -> None:
         except Exception:
             pass
         st.rerun()
+
+    # Oculta o rodapé no modo colapsado (evita ficar prensado)
+    if st.session_state.get("fu_sidebar_hidden"):
+        return
 
     st.markdown(
         """
