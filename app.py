@@ -84,6 +84,10 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
               padding-left: 6px !important;
               padding-right: 6px !important;
             }
+            section[data-testid="stSidebar"]:hover{
+              width: 260px !important;
+              min-width: 260px !important;
+            }
             """
         ).strip()
     ) if sidebar_hidden else ""
@@ -183,6 +187,9 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
     ).replace("__FU_COLLAPSED_CSS__", collapsed_css)
 
     st.markdown(style, unsafe_allow_html=True)
+
+# Aplica CSS global (inclui modo colapsado/expandido da sidebar)
+_fu_inject_global_css(bool(st.session_state.get("fu_sidebar_hidden", False)))
 
 def _jwt_claim_exp(token: str):
     """Extrai 'exp' (epoch seconds) do JWT sem validar assinatura."""
