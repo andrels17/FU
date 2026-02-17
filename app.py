@@ -138,7 +138,7 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         }
 
         /* Botões somente na sidebar (não afeta botões do topo) */
-        section[data-testid="stSidebar"] .stButton > button{
+        .fu-compact-nav .stButton > button{
           width: 54px !important;
           height: 54px !important;
           border-radius: 14px !important;
@@ -150,7 +150,7 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           line-height: 1 !important;
           white-space: nowrap !important;
         }
-        section[data-testid="stSidebar"] .stButton > button:hover{
+        .fu-compact-nav .stButton > button:hover{
           border-color: rgba(245,158,11,0.35) !important;
           background: rgba(255,255,255,0.05) !important;
           transform: translateY(-1px);
@@ -193,6 +193,20 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
 
         /* Botões: não quebrar texto */
         .stButton button{ white-space: nowrap !important; }
+
+        /* Conta: botões full-width e alinhados */
+        section[data-testid="stSidebar"] [data-testid="stExpander"] .stButton > button{
+          width: 100% !important;
+          height: 44px !important;
+          border-radius: 12px !important;
+          padding: 0 14px !important;
+          justify-content: flex-start !important;
+          font-size: 0.95rem !important;
+        }
+        section[data-testid="stSidebar"] [data-testid="stExpander"] .stButton > button:hover{
+          transform: translateY(-1px);
+        }
+
 
         /* ====== COLLAPSED CSS INJECT ====== */
         __FU_COLLAPSED_CSS__
