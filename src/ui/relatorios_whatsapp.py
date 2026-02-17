@@ -12,20 +12,28 @@ def _dt_range_utc(d_ini, d_fim):
     return dt_ini, dt_fim
 
 
-def _load_gestores(supabase, tenant_id: str):
+def _load_gestores(supabase, tenant_id: str, roles=None):
     """
-    Gestores = tenant_users.role='gestor' no tenant atual.
+    Destinatários = usuários do tenant filtrados por role(s) em tenant_users.
+    Por padrão, considera roles comuns no app: gestor/buyer/admin.
     Junta com user_profiles (nome/email/whatsapp_e164).
     """
-    tus = (
+    roles = roles or ["gestor", "buyer", "admin"]
+
+    q = (
         supabase.table("tenant_users")
         .select("user_id, role")
         .eq("tenant_id", tenant_id)
-        .eq("role", "gestor")
-        .execute()
-        .data
-        or []
     )
+
+    # Algumas versões do client suportam .in_ diretamente.
+    try:
+        q = q.in_("role", roles)
+        tus = q.execute().data or []
+    except Exception:
+        tus = q.execute().data or []
+        tus = [r for r in tus if (r.get("role") in roles)]
+
     ids = [r.get("user_id") for r in tus if r.get("user_id")]
     if not ids:
         return []
@@ -153,7 +161,9 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
     tab_send, tab_link = st.tabs(["Enviar relatório", "Vincular gestores"])
 
-    gestores = _load_gestores(supabase, tenant_id)
+    roles_destino = ["gestor", "buyer", "admin"]
+
+    gestores = _load_gestores(supabase, tenant_id, roles=roles_destino)
     gestores_by_id = {g["user_id"]: g for g in gestores}
     labels_g = {
         g["user_id"]: f'{g.get("nome") or "Sem nome"} — {g.get("email") or ""}'
@@ -163,60 +173,66 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
     with tab_link:
         st.subheader("Vincular gestor por departamento")
         deps = _load_departamentos_from_pedidos(supabase, tenant_id)
+
         if not deps:
             st.info("Não encontrei departamentos em pedidos (coluna 'departamento').")
-            return
-        if not gestores:
-            st.warning("Nenhum gestor encontrado (tenant_users.role='gestor').")
-            return
-
-        c1, c2 = st.columns([1.2, 1])
-        with c1:
-            dep = st.selectbox("Departamento", options=deps, key="rep_link_dep")
-        with c2:
-            gestor_id = st.selectbox(
-                "Gestor",
-                options=list(labels_g.keys()),
-                format_func=lambda uid: labels_g.get(uid, uid),
-                key="rep_link_gestor",
+            st.caption("Cadastre ao menos um pedido com departamento preenchido para habilitar os vínculos.")
+        elif not gestores:
+            st.warning(
+                "Nenhum destinatário encontrado para este tenant. "
+                "Estou procurando roles em tenant_users: " + ", ".join(roles_destino) + "."
             )
-
-        if st.button("Salvar vínculo", type="primary", use_container_width=True, key="rep_link_save"):
-            _upsert_link(supabase, tenant_id, dep, gestor_id)
-            st.success("Vínculo salvo.")
-            st.rerun()
-
-        st.divider()
-        links = _load_links(supabase, tenant_id)
-
-        if links:
-            rows = []
-            for l in links:
-                g = gestores_by_id.get(l["gestor_user_id"], {})
-                rows.append(
-                    {
-                        "departamento": l["departamento"],
-                        "gestor": g.get("nome") or g.get("email") or l["gestor_user_id"],
-                        "id": l["id"],
-                    }
-                )
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
-            rm_id = st.selectbox(
-                "Remover vínculo",
-                options=[r["id"] for r in rows],
-                format_func=lambda x: next((r["departamento"] for r in rows if r["id"] == x), x),
-                key="rep_link_rm",
-            )
-            if st.button("Remover", use_container_width=True, key="rep_link_rm_btn"):
-                _delete_link(supabase, rm_id)
-                st.success("Removido.")
-                st.rerun()
+            st.caption("Se seu sistema usa outro nome de role (ex.: 'manager'), ajuste roles_destino no código.")
         else:
-            st.caption("Nenhum vínculo cadastrado ainda.")
 
+            c1, c2 = st.columns([1.2, 1])
+            with c1:
+                dep = st.selectbox("Departamento", options=deps, key="rep_link_dep")
+            with c2:
+                gestor_id = st.selectbox(
+                    "Gestor",
+                    options=list(labels_g.keys()),
+                    format_func=lambda uid: labels_g.get(uid, uid),
+                    key="rep_link_gestor",
+                )
+
+            if st.button("Salvar vínculo", type="primary", use_container_width=True, key="rep_link_save"):
+                _upsert_link(supabase, tenant_id, dep, gestor_id)
+                st.success("Vínculo salvo.")
+                st.rerun()
+
+            st.divider()
+            links = _load_links(supabase, tenant_id)
+
+            if links:
+                rows = []
+                for l in links:
+                    g = gestores_by_id.get(l["gestor_user_id"], {})
+                    rows.append(
+                        {
+                            "departamento": l["departamento"],
+                            "gestor": g.get("nome") or g.get("email") or l["gestor_user_id"],
+                            "id": l["id"],
+                        }
+                    )
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                rm_id = st.selectbox(
+                    "Remover vínculo",
+                    options=[r["id"] for r in rows],
+                    format_func=lambda x: next((r["departamento"] for r in rows if r["id"] == x), x),
+                    key="rep_link_rm",
+                )
+                if st.button("Remover", use_container_width=True, key="rep_link_rm_btn"):
+                    _delete_link(supabase, rm_id)
+                    st.success("Removido.")
+                    st.rerun()
+            else:
+                st.caption("Nenhum vínculo cadastrado ainda.")
     with tab_send:
         st.subheader("Enviar relatório de entregues (sob demanda)")
+
+        st.caption("Destinatários são usuários do tenant com roles: " + ", ".join(roles_destino))
 
         c1, c2 = st.columns([1, 1])
         with c1:
@@ -261,9 +277,26 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                 return
 
             destinos = sorted({g for g in mapa.values() if g})
+
+            # Se não houver vínculos por departamento, permite escolher manualmente (se houver destinatários)
             if not destinos:
-                st.error("Nenhum destino encontrado. Vincule gestores aos departamentos primeiro.")
-                return
+                if not gestores:
+                    st.error(
+                        "Nenhum destinatário disponível. Verifique roles em tenant_users "
+                        f"(procurando: {', '.join(roles_destino)})."
+                    )
+                    return
+
+                st.warning("Nenhum vínculo de departamento encontrado. Selecione destinatários manualmente abaixo.")
+                destinos = st.multiselect(
+                    "Enviar para",
+                    options=[g["user_id"] for g in gestores],
+                    format_func=lambda uid: labels_g.get(uid, uid),
+                    key="rep_manual_destinos",
+                )
+                if not destinos:
+                    st.error("Selecione ao menos um destinatário.")
+                    return
 
             buf = io.StringIO()
             (df if isinstance(df, pd.DataFrame) else pd.DataFrame()).to_csv(buf, index=False)
