@@ -1199,7 +1199,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             end_i = start_i + per_page
             pagina_itens = pedidos_filtrados[start_i:end_i]
 
-            st.caption(f"📄 Página {page}/{total_pages} — exibindo {len(pagina_itens)} de {total}")
+            st.caption(f"Página {page}/{total_pages} — exibindo {len(pagina_itens)} de {total}")
 
             if marcar_pagina or limpar_sel:
                 for _i, _p in enumerate(pagina_itens):
@@ -1271,7 +1271,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 pedidos_filtrados = [p for p in pedidos_filtrados if _hit(p)]
                 pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get("fornecedor", "N/A")) in fornecedor_venc_filtro]
 
-            st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos vencendo")
+            st.caption(f"Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos vencendo")
 
                         # Toolbar (paginação + lote) — compacto
             t1, t2, t3, t4, t5, t6 = st.columns([2, 2, 2, 2, 3, 5])
