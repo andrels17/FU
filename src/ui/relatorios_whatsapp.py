@@ -14,40 +14,21 @@ def _dt_range_utc(d_ini, d_fim):
 
 def _load_gestores(supabase, tenant_id: str, roles=None):
     """
-    Destinatários = usuários do tenant filtrados por role(s) em tenant_users.
-    Por padrão, considera roles comuns no app: gestor/buyer/admin.
-    Junta com user_profiles (nome/email/whatsapp_e164).
+    Destinatários = membros do tenant (todas as roles por padrão).
+    Para evitar problemas com RLS (usuário vendo só a si mesmo), usa RPC SECURITY DEFINER.
+    Requer criar a função no Supabase: public.rpc_tenant_members(p_tenant_id uuid).
     """
-    roles = roles or ["gestor", "buyer", "admin"]
+    roles = roles  # None => todas as roles
 
-    q = (
-        supabase.table("tenant_users")
-        .select("user_id, role")
-        .eq("tenant_id", tenant_id)
-    )
+    res = supabase.rpc("rpc_tenant_members", {"p_tenant_id": tenant_id}).execute()
+    rows = res.data or []
 
-    # Algumas versões do client suportam .in_ diretamente.
-    try:
-        q = q.in_("role", roles)
-        tus = q.execute().data or []
-    except Exception:
-        tus = q.execute().data or []
-        tus = [r for r in tus if (r.get("role") in roles)]
+    if roles:
+        roles_set = set(roles)
+        rows = [r for r in rows if (r.get("role") in roles_set)]
 
-    ids = [r.get("user_id") for r in tus if r.get("user_id")]
-    if not ids:
-        return []
-
-    prof = (
-        supabase.table("user_profiles")
-        .select("user_id, nome, email, whatsapp_e164")
-        .in_("user_id", ids)
-        .execute()
-        .data
-        or []
-    )
-    prof.sort(key=lambda x: (x.get("nome") or x.get("email") or ""))
-    return prof
+    rows.sort(key=lambda x: (x.get("nome") or x.get("email") or ""))
+    return rows
 
 
 def _load_departamentos_from_pedidos(supabase, tenant_id: str):
@@ -161,7 +142,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
     tab_send, tab_link = st.tabs(["Enviar relatório", "Vincular gestores"])
 
-    roles_destino = ["gestor", "buyer", "admin", "user"]
+    roles_destino = None  # None = todas as roles do tenant
 
     gestores = _load_gestores(supabase, tenant_id, roles=roles_destino)
     gestores_by_id = {g["user_id"]: g for g in gestores}
@@ -180,7 +161,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
         elif not gestores:
             st.warning(
                 "Nenhum destinatário encontrado para este tenant. "
-                "Estou procurando roles em tenant_users: " + ", ".join(roles_destino) + "."
+                "Não encontrei nenhum usuário retornado pela RPC rpc_tenant_members para este tenant."
             )
             st.caption("Se seu sistema usa outro nome de role (ex.: 'manager'), ajuste roles_destino no código.")
         else:
@@ -232,7 +213,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
     with tab_send:
         st.subheader("Enviar relatório de entregues (sob demanda)")
 
-        st.caption("Destinatários são usuários do tenant com roles: " + ", ".join(roles_destino))
+        st.caption("Destinatários: todos os usuários do tenant (todas as roles).")
 
         c1, c2 = st.columns([1, 1])
         with c1:
@@ -283,7 +264,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                 if not gestores:
                     st.error(
                         "Nenhum destinatário disponível. Verifique roles em tenant_users "
-                        f"(procurando: {', '.join(roles_destino)})."
+                        "(RPC não retornou usuários)."
                     )
                     return
 
