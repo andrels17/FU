@@ -216,14 +216,22 @@ def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str 
             st.caption(cod_eq or "—")
 
         with c[2]:
-            # descrição clicável — abre ações ao clicar (além do 👁️)
+            # descrição (curta) + botão de info (abre modal com texto completo)
             desc = str(desc or "").replace("\n", " ").replace("\r", " ").strip()
             desc = re.sub(r"\s+", " ", desc)
+
             MAX_DESC = 55  # limita visual para não invadir outras colunas
             short = (desc[: MAX_DESC - 1] + "…") if len(desc) > MAX_DESC else desc
             label = short or "—"
-            if st.button(label, key=f"row_{pid}", help="Abrir ações deste pedido", use_container_width=True):
-                return pid
+
+            cc = st.columns([0.88, 0.12])
+            with cc[0]:
+                if st.button(label, key=f"row_{pid}", help="Abrir ações deste pedido", use_container_width=True):
+                    return pid
+            with cc[1]:
+                if st.button("⋯", key=f"desc_{pid}", help="Ver descrição completa", use_container_width=True):
+                    meta = f"OC: {oc or '—'} • Solic.: {sol or '—'} • Dept.: {depto or '—'}"
+                    _fu_show_desc_dialog(desc, meta)
 
         with c[3]:
             st.caption(f"{oc or '—'} / {sol or '—'}")
