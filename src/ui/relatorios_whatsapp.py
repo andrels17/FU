@@ -143,15 +143,83 @@ def _load_entregues(supabase, tenant_id: str, dt_ini, dt_fim, departamentos=None
     return df
 
 
-def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
-    total_itens = int(len(df)) if df is not None else 0
-    if isinstance(df, pd.DataFrame) and (not df.empty) and ("quantidade" in df.columns):
-        total_qtd = int(pd.to_numeric(df["quantidade"], errors="coerce").fillna(0).sum())
-    else:
-        total_qtd = 0
+def _build_message(d_ini, d_fim, df, deps_sel):
+    """Monta mensagem agrupada por departamento, ordenada por equipamento (sem valores e sem emojis)."""
+    if df is None or df.empty:
+        return f"Relatório de Entregas
+Período: {d_ini} a {d_fim}
 
-    deps_txt = ", ".join(departamentos_sel) if departamentos_sel else "Todos"
-    return (
+Nenhum item entregue no período."
+
+    def pick(cands):
+        for c in cands:
+            if c in df.columns:
+                return c
+        return None
+
+    col_desc = pick(["descricao", "descrição"])
+    col_qtd = pick(["qtde_entregue", "quantidade_entregue", "qtde", "quantidade"])
+    col_equip = pick(["cod_equipamento", "equipamento", "codigo_equipamento"])
+    col_mat = pick(["cod_material", "material", "codigo_material"])
+    col_dep = pick(["departamento"])
+
+    # Ordenação por equipamento (se existir)
+    if col_equip:
+        try:
+            df = df.sort_values(by=col_equip, kind="mergesort")
+        except Exception:
+            pass
+
+    total_geral = int(len(df))
+
+    cabecalho = (
+        "Relatório de Entregas
+"
+        f"Período: {d_ini} a {d_fim}
+"
+        f"Departamentos: {', '.join(deps_sel) if deps_sel else 'Todos'}
+"
+        f"Total geral de itens: {total_geral}
+
+"
+    )
+
+    linhas = []
+
+    if col_dep:
+        # groupby preservando ordem de ocorrência
+        for dep, grupo in df.groupby(col_dep, sort=False):
+            linhas.append(f"Departamento: {dep}")
+            linhas.append(f"Total no departamento: {int(len(grupo))}")
+
+            for i, (_, row) in enumerate(grupo.iterrows(), start=1):
+                partes = []
+                if col_desc:
+                    partes.append(str(row.get(col_desc, "")))
+                if col_qtd:
+                    partes.append(f"Qtd: {row.get(col_qtd, '')}")
+                if col_equip:
+                    partes.append(f"Eqp: {row.get(col_equip, '')}")
+                if col_mat:
+                    partes.append(f"Mat: {row.get(col_mat, '')}")
+
+                linhas.append(f"  {i}. " + " | ".join(partes))
+
+            linhas.append("")  # linha em branco entre departamentos
+    else:
+        for i, (_, row) in enumerate(df.iterrows(), start=1):
+            partes = []
+            partes.append(str(row.get(col_desc, "")) if col_desc else "")
+            if col_qtd:
+                partes.append(f"Qtd: {row.get(col_qtd, '')}")
+            if col_equip:
+                partes.append(f"Eqp: {row.get(col_equip, '')}")
+            if col_mat:
+                partes.append(f"Mat: {row.get(col_mat, '')}")
+            linhas.append(f"{i}. " + " | ".join([p for p in partes if p]))
+
+    return cabecalho + "
+".join(linhas)
         f"📦 Entregues — {d_ini.strftime('%d/%m/%Y')} a {d_fim.strftime('%d/%m/%Y')}\n"
         f"• {total_itens} itens • {total_qtd} unidades\n"
         f"• Departamentos: {deps_txt}\n"
