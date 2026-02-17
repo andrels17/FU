@@ -67,11 +67,6 @@ section[data-testid="stSidebar"] .stButton button{
   border-radius: 12px !important;
 }
 
-.stButton button{
-              width: 44px !important;
-              padding-left: 0 !important;
-              padding-right: 0 !important;
-            }
             section[data-testid="stSidebar"]:hover{
               width: 240px !important;
               min-width: 240px !important;
@@ -360,15 +355,6 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
     current = st.session_state.get("current_page") or "🏠 Início"
     if str(current).startswith("🔔"):
         current = "🔔 Alertas e Notificações"
-
-    # Badge de alertas (compacto)
-    if total_alertas and total_alertas > 0:
-        st.markdown(
-            f"""<div class="fu-compact-badge-wrap">
-                  <div class="fu-compact-badge">{int(total_alertas)}</div>
-                </div>""",
-            unsafe_allow_html=True,
-        )
 
     st.markdown('<div class="fu-compact-nav">', unsafe_allow_html=True)
 
