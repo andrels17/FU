@@ -1053,7 +1053,7 @@ def main():
                     st.caption("Sugestões:")
                     for destino in sugestoes[:8]:
                         if st.button(f"➡️ Ir para {destino}", key=f"goto_{destino}", use_container_width=True):
-                            st.session_state.current_page = destino
+                            st.session_state.current_page = LEGACY_PAGE_TO_ID.get(destino, destino)
                             st.rerun()
 
             st.markdown("---")
@@ -1114,10 +1114,23 @@ def main():
             is_gestao_page = st.session_state.current_page in opcoes_gestao
             index_gestao = opcoes_gestao.index(st.session_state.current_page) if is_gestao_page else None
 
-            # Auto-abrir o box do grupo ativo (e lembrar o estado do último aberto)
-            expanded_ops = True if is_ops_page else bool(st.session_state.exp_ops_open)
-            expanded_gestao = True if is_gestao_page else bool(st.session_state.exp_gestao_open)
-
+            # Auto-abrir o box do grupo ativo (e manter seleção única)
+            if is_ops_page:
+                expanded_ops = True
+                expanded_gestao = False
+                st.session_state.exp_ops_open = True
+                st.session_state.exp_gestao_open = False
+            elif is_gestao_page:
+                expanded_ops = False
+                expanded_gestao = True
+                st.session_state.exp_ops_open = False
+                st.session_state.exp_gestao_open = True
+            else:
+                expanded_ops = bool(st.session_state.exp_ops_open)
+                expanded_gestao = bool(st.session_state.exp_gestao_open)
+                # Segurança: nunca deixar os dois ativos no servidor (melhora mobile)
+                if expanded_ops and expanded_gestao:
+                    expanded_gestao = False
             # Renderiza expanders + menus
             
             # 🔁 Sincroniza o valor dos rádios (menu_ops/menu_gestao) ANTES de criar os widgets
@@ -1131,6 +1144,9 @@ def main():
                 except Exception:
                     pass
                 st.session_state["_force_menu_sync"] = False
+
+            prev_ops = st.session_state.get("_prev_menu_ops", st.session_state.get("menu_ops"))
+            prev_gestao = st.session_state.get("_prev_menu_gestao", st.session_state.get("menu_gestao"))
 
             with st.expander("Operações", expanded=expanded_ops):
                 if is_ops_page:
@@ -1164,23 +1180,61 @@ def main():
                 if is_gestao_page:
                     st.markdown("</div>", unsafe_allow_html=True)
 
-            # Atualiza página + estado dos expanders (evita "ping-pong" entre rádios)
+            # Atualiza página + estado dos expanders (mobile-safe: usa mudança real do usuário)
+
+
             nova_pagina = None
 
-            # Só permite que o rádio do expander ABERTO dirija a navegação
-            if expanded_ops and (escolha_ops in opcoes_ops) and (escolha_ops != st.session_state.current_page):
+
+
+            changed_ops = (escolha_ops != prev_ops)
+
+
+            changed_gestao = (escolha_gestao != prev_gestao)
+
+
+
+            st.session_state["_prev_menu_ops"] = escolha_ops
+
+
+            st.session_state["_prev_menu_gestao"] = escolha_gestao
+
+
+
+            if changed_ops and (escolha_ops in opcoes_ops) and (escolha_ops != st.session_state.current_page):
+
+
                 nova_pagina = escolha_ops
+
+
                 st.session_state.exp_ops_open = True
+
+
                 st.session_state.exp_gestao_open = False
 
-            if expanded_gestao and (escolha_gestao in opcoes_gestao) and (escolha_gestao != st.session_state.current_page):
+
+            elif changed_gestao and (escolha_gestao in opcoes_gestao) and (escolha_gestao != st.session_state.current_page):
+
+
                 nova_pagina = escolha_gestao
+
+
                 st.session_state.exp_ops_open = False
+
+
                 st.session_state.exp_gestao_open = True
 
+
+
             if nova_pagina:
+
+
                 st.session_state.current_page = nova_pagina
+
+
                 st.session_state["_force_menu_sync"] = True
+
+
                 st.rerun()
 
         # Página atual (fonte de verdade)
