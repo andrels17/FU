@@ -63,11 +63,11 @@ def _has_cols(df: pd.DataFrame, cols: list[str]) -> bool:
 def criar_grafico_evolucao_temporal(df_pedidos, formatar_moeda_br):
     """Cria gráfico de linha com evolução de pedidos e valores ao longo do tempo"""
     
-    st.subheader("📈 Evolução Temporal de Pedidos e Valores")
+    st.subheader("Evolução Temporal de Pedidos e Valores")
     
     # Validar se há dados
     if df_pedidos.empty or 'data_solicitacao' not in df_pedidos.columns:
-        st.info("📭 Dados insuficientes para gerar o gráfico de evolução temporal")
+        st.info("Dados insuficientes para gerar o gráfico de evolução temporal")
         return
     
     # Preparar dados
@@ -191,7 +191,7 @@ def criar_grafico_evolucao_temporal(df_pedidos, formatar_moeda_br):
         with col2:
             delta_valor = f"+{variacao_valor:.1f}%" if variacao_valor > 0 else f"{variacao_valor:.1f}%"
             st.metric(
-                "💰 Variação de Valor (mês anterior)",
+                "Variação de Valor (mês anterior)",
                 formatar_moeda_br(df_agrupado['valor_total'].iloc[-1]),
                 delta=delta_valor.replace('.', ',')
             )
@@ -199,10 +199,10 @@ def criar_grafico_evolucao_temporal(df_pedidos, formatar_moeda_br):
 def criar_funil_conversao(df_pedidos: pd.DataFrame):
     """Cria gráfico de funil de conversão de pedidos (com validações)."""
 
-    st.subheader("🎯 Funil de Conversão de Pedidos")
+    st.subheader("Funil de Conversão de Pedidos")
 
     if df_pedidos is None or df_pedidos.empty:
-        st.info("📭 Sem dados para montar o funil.")
+        st.info("Sem dados para montar o funil.")
         return
 
     if not _has_cols(df_pedidos, ["status", "entregue"]):
@@ -260,20 +260,20 @@ def criar_funil_conversao(df_pedidos: pd.DataFrame):
 def criar_heatmap_pedidos(df_pedidos):
     """Cria heatmap de pedidos por dia da semana e hora"""
     
-    st.subheader("🔥 Mapa de Calor - Pedidos por Dia e Período")
+    st.subheader("Mapa de Calor - Pedidos por Dia e Período")
     
     df_heat = df_pedidos.copy()
     
     # Validar se há dados
     if df_heat.empty or 'data_solicitacao' not in df_heat.columns:
-        st.info("📭 Dados insuficientes para gerar o mapa de calor")
+        st.info("Dados insuficientes para gerar o mapa de calor")
         return
     
     # Remover valores nulos
     df_heat = df_heat[df_heat['data_solicitacao'].notna()].copy()
     
     if df_heat.empty:
-        st.info("📭 Não há pedidos com data de solicitação válida")
+        st.info("Não há pedidos com data de solicitação válida")
         return
     
     # Converter para datetime se ainda não for
@@ -284,7 +284,7 @@ def criar_heatmap_pedidos(df_pedidos):
             df_heat = df_heat[df_heat['data_solicitacao'].notna()].copy()
             
         if df_heat.empty:
-            st.info("📭 Não há pedidos com data de solicitação válida")
+            st.info("Não há pedidos com data de solicitação válida")
             return
     except Exception as e:
         st.error(f"Erro ao processar datas: {e}")
@@ -364,11 +364,11 @@ def criar_heatmap_pedidos(df_pedidos):
 def criar_comparativo_periodos(df_pedidos, formatar_moeda_br):
     """Cria comparativo entre períodos (mensal/trimestral)"""
     
-    st.subheader("📊 Comparativo de Períodos")
+    st.subheader("Comparativo de Períodos")
     
     # Validar se há dados
     if df_pedidos.empty or 'data_solicitacao' not in df_pedidos.columns:
-        st.info("📭 Dados insuficientes para gerar o comparativo de períodos")
+        st.info("Dados insuficientes para gerar o comparativo de períodos")
         return
     
     col1, col2 = st.columns(2)
@@ -394,7 +394,7 @@ def criar_comparativo_periodos(df_pedidos, formatar_moeda_br):
     df_comp = df_comp[df_comp['data_solicitacao'].notna()].copy()
     
     if df_comp.empty:
-        st.info("📭 Não há pedidos com data de solicitação válida")
+        st.info("Não há pedidos com data de solicitação válida")
         return
     
     # Converter para datetime se ainda não for
@@ -405,7 +405,7 @@ def criar_comparativo_periodos(df_pedidos, formatar_moeda_br):
             df_comp = df_comp[df_comp['data_solicitacao'].notna()].copy()
             
         if df_comp.empty:
-            st.info("📭 Não há pedidos com data de solicitação válida")
+            st.info("Não há pedidos com data de solicitação válida")
             return
     except Exception as e:
         st.error(f"Erro ao processar datas: {e}")
@@ -466,22 +466,22 @@ def criar_comparativo_periodos(df_pedidos, formatar_moeda_br):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("📈 Máximo", formatar_moeda_br(df_agrupado['valor'].max()) if metrica == "Valor Total" else f"{int(df_agrupado['valor'].max())}")
+        st.metric("Máximo", formatar_moeda_br(df_agrupado['valor'].max()) if metrica == "Valor Total" else f"{int(df_agrupado['valor'].max())}")
     
     with col2:
-        st.metric("📉 Mínimo", formatar_moeda_br(df_agrupado['valor'].min()) if metrica == "Valor Total" else f"{int(df_agrupado['valor'].min())}")
+        st.metric("Mínimo", formatar_moeda_br(df_agrupado['valor'].min()) if metrica == "Valor Total" else f"{int(df_agrupado['valor'].min())}")
     
     with col3:
-        st.metric("📊 Média", formatar_moeda_br(df_agrupado['valor'].mean()) if metrica == "Valor Total" else f"{int(df_agrupado['valor'].mean())}")
+        st.metric("Média", formatar_moeda_br(df_agrupado['valor'].mean()) if metrica == "Valor Total" else f"{int(df_agrupado['valor'].mean())}")
     
     with col4:
         desvio = df_agrupado['valor'].std()
-        st.metric("📏 Desvio Padrão", formatar_moeda_br(desvio) if metrica == "Valor Total" else f"{int(desvio)}")
+        st.metric("Desvio Padrão", formatar_moeda_br(desvio) if metrica == "Valor Total" else f"{int(desvio)}")
 
 def exibir_dashboard_avancado(df_pedidos: pd.DataFrame, formatar_moeda_br):
     """Exibe o dashboard avançado completo (usando o mesmo recorte do Dashboard)."""
 
-    st.title("📈 Dashboard Avançado")
+    st.title("Dashboard Avançado")
 
     # Se você está usando o fluxo "Gerar dashboard", respeita isso aqui também
     if st.session_state.get("dash_filters_applied") is False:
@@ -489,25 +489,25 @@ def exibir_dashboard_avancado(df_pedidos: pd.DataFrame, formatar_moeda_br):
         return
 
     if df_pedidos is None or df_pedidos.empty:
-        st.info("📭 Nenhum pedido no recorte atual.")
+        st.info("Nenhum pedido no recorte atual.")
         return
 
     # Seções visíveis (mesmo estilo do dashboard)
-    with st.expander("⚙️ Personalizar (avançado)", expanded=False):
+    with st.expander("Personalizar (avançado)", expanded=False):
         a, b, c = st.columns(3)
         with a:
-            show_evol = st.checkbox("📈 Evolução temporal", value=True, key="adv_show_evol")
-            show_funil = st.checkbox("🎯 Funil de conversão", value=True, key="adv_show_funil")
+            show_evol = st.checkbox("Evolução temporal", value=True, key="adv_show_evol")
+            show_funil = st.checkbox("Funil de conversão", value=True, key="adv_show_funil")
         with b:
-            show_heat = st.checkbox("🔥 Heatmap", value=True, key="adv_show_heat")
-            show_comp = st.checkbox("📊 Comparativo períodos", value=True, key="adv_show_comp")
+            show_heat = st.checkbox("Heatmap", value=True, key="adv_show_heat")
+            show_comp = st.checkbox("Comparativo períodos", value=True, key="adv_show_comp")
         with c:
             st.caption(f"Linhas no recorte: **{len(df_pedidos):,}**".replace(",", "."))
 
     # =========================
     # Visão híbrida: Insights + ações (operacional)
     # =========================
-    st.subheader("🧠 Insights do recorte")
+    st.subheader("Insights do recorte")
 
     col_val = _safe_col(df_pedidos, "valor_total", "valor")
     col_for = _safe_col(df_pedidos, "fornecedor_nome", "fornecedor")
@@ -569,23 +569,23 @@ def exibir_dashboard_avancado(df_pedidos: pd.DataFrame, formatar_moeda_br):
 
     st.caption(f"• {top_for_txt}  |  • {top_dep_txt}")
 
-    st.subheader("⚡ Ações rápidas (drilldown)")
+    st.subheader("Ações rápidas (drilldown)")
     a1, a2, a3, a4 = st.columns(4)
     with a1:
-        if st.button("📦 Ver atrasados", use_container_width=True, key="adv_go_atrasados"):
+        if st.button("Ver atrasados", use_container_width=True, key="adv_go_atrasados"):
             _go_consulta(q="", depto="Todos", status="Todos", somente_atrasados=True)
     with a2:
-        if st.button("🧾 Ver sem OC", use_container_width=True, key="adv_go_semoc"):
+        if st.button("Ver sem OC", use_container_width=True, key="adv_go_semoc"):
             _go_consulta(q="", depto="Todos", status="Sem OC", somente_atrasados=False)
     with a3:
-        if st.button("🚚 Ver em transporte", use_container_width=True, key="adv_go_transp"):
+        if st.button("Ver em transporte", use_container_width=True, key="adv_go_transp"):
             _go_consulta(q="", depto="Todos", status="Em Transporte", somente_atrasados=False)
     with a4:
-        if st.button("🏁 Ver entregues", use_container_width=True, key="adv_go_entregues"):
+        if st.button("Ver entregues", use_container_width=True, key="adv_go_entregues"):
             _go_consulta(q="", depto="Todos", status="Entregue", somente_atrasados=False)
 
     # Investigação guiada (híbrido): mantém gráficos, mas adiciona botões por fornecedor/depto
-    with st.expander("🔎 Investigar (top fornecedores / deptos)", expanded=False):
+    with st.expander("Investigar (top fornecedores / deptos)", expanded=False):
         cL, cR = st.columns(2)
 
         with cL:
@@ -623,7 +623,7 @@ def exibir_dashboard_avancado(df_pedidos: pd.DataFrame, formatar_moeda_br):
     # =====================================================
     # 📈 Performance & Inteligência (Gestão)
     # =====================================================
-    st.subheader("📈 Performance & Inteligência")
+    st.subheader("Performance & Inteligência")
 
     dfp = df_pedidos.copy()
     hoje = pd.Timestamp.now().normalize()
@@ -688,7 +688,7 @@ def exibir_dashboard_avancado(df_pedidos: pd.DataFrame, formatar_moeda_br):
         )
 
         if not rank.empty:
-            st.markdown("#### 🏆 Fornecedores mais eficientes")
+            st.markdown("#### Fornecedores mais eficientes")
             for idx, (nm, v) in enumerate(rank.items()):
                 st.write(f"{idx+1}. {nm} — {v:.1f} dias")
 
