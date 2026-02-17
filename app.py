@@ -1,5 +1,6 @@
 import streamlit as st
 from auth_flows import handle_auth_callback
+from src.core.auth import verificar_autenticacao, exibir_login, fazer_logout
 
 import json
 import base64
