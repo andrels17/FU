@@ -678,7 +678,7 @@ def _sidebar_footer(supabase_client) -> None:
     if st.button("Sair", use_container_width=True, key="btn_logout_sidebar"):
         try:
             ba.registrar_acao(
-                (st.session_state.get("usuario") or {}),
+                st.session_state.usuario,
                 "Logout",
                 {"timestamp": datetime.now().isoformat()},
                 supabase_client,
@@ -795,20 +795,6 @@ def main():
         st.session_state.autenticado = False
 
 
-
-
-def _ss_user() -> dict:
-    """Retorna o dict do usuário da sessão (sempre dict)."""
-    u = st.session_state.get("usuario")
-    return u if isinstance(u, dict) else {}
-
-def _ss_user_perfil() -> str:
-    return str((_ss_user().get("perfil") or "")).lower()
-
-def _is_admin() -> bool:
-    # Admin "clássico" e, se quiser, trate superadmin como admin também
-    return _ss_user_perfil() in ("admin", "superadmin")
-
     qp_page = st.query_params.get("page")
     if qp_page:
         st.session_state["fu_route"] = qp_page
@@ -817,19 +803,18 @@ def _is_admin() -> bool:
 
 
 
-# 🧪 Debug rápido (ative com ?debug=1)
-if st.query_params.get("debug") in ("1", "true", "yes"):
-    st.sidebar.markdown("### 🧪 Debug (sessão)")
-    st.sidebar.json({
-        "route": st.session_state.get("fu_route"),
-        "page_param": st.query_params.get("page"),
-        "auth_ok": bool(verificar_autenticacao()),
-        "tenant_id": st.session_state.get("tenant_id"),
-        "tenant_opts_len": len(st.session_state.get("tenant_options", []) or []),
-        "has_tokens": bool(st.session_state.get("auth_access_token")),
-        "usuario_keys": list((st.session_state.get("usuario") or {}).keys()) if isinstance(st.session_state.get("usuario"), dict) else str(type(st.session_state.get("usuario"))),
-    })
-
+    # 🧪 Debug rápido (ative com ?debug=1)
+    if st.query_params.get("debug") in ("1", "true", "yes"):
+        st.sidebar.markdown("### 🧪 Debug (sessão)")
+        st.sidebar.json({
+            "route": st.session_state.get("fu_route"),
+            "page_param": st.query_params.get("page"),
+            "auth_ok": bool(verificar_autenticacao()),
+            "tenant_id": st.session_state.get("tenant_id"),
+            "tenant_opts_len": len(st.session_state.get("tenant_options", []) or []),
+            "has_tokens": bool(st.session_state.get("auth_access_token")),
+            "usuario_keys": list((st.session_state.get("usuario") or {}).keys()) if isinstance(st.session_state.get("usuario"), dict) else str(type(st.session_state.get("usuario"))),
+        })
     # Se já estiver autenticado, não mantenha "page=login" (isso prende o app no modo login em todo rerun)
     if verificar_autenticacao():
         if st.query_params.get("page") in ("login", "landing"):
@@ -1056,19 +1041,25 @@ if st.query_params.get("debug") in ("1", "true", "yes"):
     # Client do usuário autenticado (RLS ativo)
     # Renova JWT automaticamente se expirou
 
-    
     if _jwt_expirou():
+
         ok = _refresh_session()
+
         if not ok:
-            # Evita loop infinito de rerun em sessão inválida
+
             st.warning("Sessão expirada. Faça login novamente.")
+
             try:
+
                 fazer_logout(supabase_anon)
+
             except Exception:
+
                 pass
-            st.session_state["fu_route"] = "login"
-            st.query_params["page"] = "login"
-            st.stop()
+
+            st.rerun()
+
+
     supabase = get_supabase_user_client(st.session_state.auth_access_token)
     st.session_state["supabase_client"] = supabase
     handle_auth_callback(supabase)
@@ -1160,7 +1151,7 @@ if st.query_params.get("debug") in ("1", "true", "yes"):
 
         usuario = st.session_state.get("usuario") or {}
         perfil = (usuario.get("perfil") or "").lower()
-        is_admin = _is_admin()
+        is_admin = perfil == "admin"
         if st.session_state.get("fu_sidebar_hidden"):
             _fu_render_compact_sidebar(
                 total_alertas=total_alertas,
@@ -1169,7 +1160,7 @@ if st.query_params.get("debug") in ("1", "true", "yes"):
             )
 
         if not st.session_state.get("fu_sidebar_hidden"):
-            usuario = _ss_user()
+            usuario = st.session_state.get("usuario") or {}
             nome = usuario.get("nome", "Usuário")
             perfil = (usuario.get("perfil") or "user").lower()
             avatar_url = usuario.get("avatar_url")
@@ -1318,7 +1309,7 @@ if st.query_params.get("debug") in ("1", "true", "yes"):
 
             usuario = st.session_state.get("usuario") or {}
             perfil = (usuario.get("perfil") or "").lower()
-            is_admin = _is_admin()
+            is_admin = perfil == "admin"
             # ✅ Controle de navegação (seleção única) — visual separado por grupos
             if "current_page" not in st.session_state:
                 st.session_state.current_page = "home"
@@ -1463,7 +1454,7 @@ if st.query_params.get("debug") in ("1", "true", "yes"):
     st.markdown("</div>", unsafe_allow_html=True)
 
     if pagina == "home":
-        usuario = _ss_user()
+        usuario = st.session_state.get("usuario") or {}
         exibir_home(alertas, usuario_nome=usuario.get("nome", "Usuário"))
     elif pagina == "dashboard":
         exibir_dashboard(supabase)
