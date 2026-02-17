@@ -144,6 +144,21 @@ def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str 
     st.markdown(
         """
         <style>
+
+          .fu-erp-list [data-testid="column"]{ min-width: 0 !important; }
+          .fu-erp-list [data-testid="stHorizontalBlock"]{ gap: 0.5rem !important; }
+          .fu-erp-list div[data-testid="stButton"]{ width: 100% !important; }
+          .fu-erp-list div[data-testid="stButton"] > button{
+            max-width: 100% !important;
+            display: block !important;
+          }
+          .fu-erp-list div[data-testid="stButton"] > button *{
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            max-width: 100% !important;
+          }
+
           .fu-erp-list div[data-testid="stButton"] > button{
             width: 100% !important;
             overflow: hidden !important;
