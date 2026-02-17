@@ -19,16 +19,17 @@ from src.utils.formatting import formatar_moeda_br, formatar_numero_br  # noqa: 
 # Helpers de performance / UX
 # -------------------------------
 def _make_df_stamp(df: pd.DataFrame, col: str = "atualizado_em") -> tuple:
-    """Carimbo simples para invalidar caches quando os dados mudam."""
     if df is None or df.empty:
         return (0, "empty")
-    mx = None
-    if col in df.columns:
-        try:
-            mx = str(pd.to_datetime(df[col], errors="coerce").max())
-        except Exception:
-            mx = str(df[col].max())
-    return (int(len(df)), mx or "none")
+
+    if col not in df.columns:
+        return (int(len(df)), "none")
+
+    serie = pd.to_datetime(df[col], errors="coerce", utc=True)
+    mx = serie.max()
+
+    return (int(len(df)), mx.isoformat() if pd.notna(mx) else "none")
+
 
 
 @st.cache_data(ttl=120)
