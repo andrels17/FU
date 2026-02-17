@@ -322,11 +322,11 @@ def _label_alertas(total_alertas: int) -> str:
 
 
 def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin: bool) -> None:
-    """Sidebar compacta (ícones only) para modo colapsado.
+    """Sidebar compacta (ícones only) para modo colapsado (limpa e legível).
 
-    Implementa:
-      - Tooltips via `help=` nos botões
-      - Destaque do item ativo via indicador lateral
+    - Ícones centralizados
+    - Tooltip via help=
+    - Indicador ativo só no item atual (sem linhas repetidas)
     """
     items: list[tuple[str, str, str]] = [
         ("🏠", "🏠 Início", "Início"),
@@ -351,41 +351,33 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
     if str(current).startswith("🔔"):
         current = "🔔 Alertas e Notificações"
 
-    # Badge de alertas
+    # Badge de alertas (compacto)
     if total_alertas and total_alertas > 0:
         st.markdown(
-            f"""<div style="display:flex;justify-content:center;margin:6px 0 10px 0;">
-              <div style="background:rgba(239,68,68,0.95);color:white;padding:2px 8px;border-radius:999px;font-weight:900;font-size:11px;">
-                {int(total_alertas)}
-              </div>
-            </div>""",
+            f"""<div class="fu-compact-badge-wrap">
+                  <div class="fu-compact-badge">{int(total_alertas)}</div>
+                </div>""",
             unsafe_allow_html=True,
         )
 
-    # Render: indicador + botão ícone (tooltip no help)
+    st.markdown('<div class="fu-compact-nav">', unsafe_allow_html=True)
+
     for ico, page, tip in items:
         active = (page == current)
 
-        # indicador lateral do item ativo
-        ind_col, btn_col = st.columns([0.22, 0.78], gap="small")
-        with ind_col:
-            st.markdown(
-                f"""<div style="height:40px;display:flex;align-items:center;justify-content:center;">
-                      <div style="width:6px;height:{'22px' if active else '10px'};
-                                  border-radius:999px;
-                                  background:{'rgba(245,158,11,0.95)' if active else 'rgba(255,255,255,0.12)'};">
-                      </div>
-                    </div>""",
-                unsafe_allow_html=True,
-            )
+        # O "dot" só aparece no item ativo (evita visual poluído)
+        dot = '<div class="fu-compact-dot"></div>' if active else '<div class="fu-compact-dot fu-compact-dot--off"></div>'
+        st.markdown(f'<div class="fu-compact-row">{dot}', unsafe_allow_html=True)
 
-        with btn_col:
-            # Botão do ícone (somente)
-            if st.button(ico, help=tip, key=f"fu_nav_btn_{page}", use_container_width=True):
-                if page != st.session_state.get("current_page"):
-                    st.session_state.current_page = page
-                    st.session_state["_force_menu_sync"] = True
-                    st.rerun()
+        if st.button(ico, help=tip, key=f"fu_nav_btn_{page}"):
+            if page != st.session_state.get("current_page"):
+                st.session_state.current_page = page
+                st.session_state["_force_menu_sync"] = True
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)  # row
+
+    st.markdown("</div>", unsafe_allow_html=True)  # nav
 
 def _sidebar_footer(supabase_client) -> None:
     """Renderiza Sair + créditos (sempre por último na sidebar)."""
