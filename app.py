@@ -858,11 +858,12 @@ def main():
             st.rerun()
 
         is_admin = st.session_state.usuario.get("perfil") == "admin"
-        _fu_render_compact_sidebar(
-            total_alertas=total_alertas,
-            is_admin=is_admin,
-            is_superadmin=bool(st.session_state.get("is_superadmin")),
-        ) if st.session_state.get("fu_sidebar_hidden") else None
+        if st.session_state.get("fu_sidebar_hidden"):
+            _fu_render_compact_sidebar(
+                total_alertas=total_alertas,
+                is_admin=is_admin,
+                is_superadmin=bool(st.session_state.get("is_superadmin")),
+            )
 
         if not st.session_state.get("fu_sidebar_hidden"):
             usuario = st.session_state.usuario
