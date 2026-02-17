@@ -145,7 +145,7 @@ def tela_primeiro_acesso_definir_senha(supabase_anon) -> None:
     Tela opcional para primeiro acesso: usuário já está autenticado (via convite/magic link),
     e quer definir senha para poder entrar também por e-mail+senha.
     """
-    st.subheader("🔐 Definir senha (primeiro acesso)")
+    st.subheader("Definir senha (primeiro acesso)")
     st.caption("Você já entrou pelo link. Aqui você pode definir uma senha para logins futuros (opcional).")
 
     s1, s2 = st.columns(2)
@@ -163,7 +163,7 @@ def tela_primeiro_acesso_definir_senha(supabase_anon) -> None:
             return
         try:
             supabase_anon.auth.update_user({"password": nova})
-            st.success("✅ Senha definida com sucesso! Você poderá entrar por e-mail e senha.")
+            st.success("Senha definida com sucesso! Você poderá entrar por e-mail e senha.")
             st.session_state["auth_flow_type"] = None
         except Exception as e:
             st.error(f"❌ Falha ao definir senha: {e}")
@@ -217,12 +217,12 @@ def enviar_link_redefinicao_senha(supabase_anon, email: str) -> tuple[bool, str]
                     fn(email, **kwargs)
                 except TypeError:
                     fn(email=email, **kwargs)
-                return True, "✅ Enviamos um link de redefinição para o seu e-mail."
+                return True, "Enviamos um link de redefinição para o seu e-mail."
             except Exception as e:
                 last_err = e
                 continue
 
-    return False, f"❌ Falha ao enviar link: {last_err}"
+    return False, f"Falha ao enviar link: {last_err}"
 
 
 def tela_redefinir_senha(supabase_anon) -> None:
@@ -230,7 +230,7 @@ def tela_redefinir_senha(supabase_anon) -> None:
     Tela de redefinição de senha (recovery):
     - O usuário chega aqui via link recovery, já autenticado após handle_auth_callback().
     """
-    st.subheader("♻️ Redefinir senha")
+    st.subheader("Redefinir senha")
     st.caption("Defina uma nova senha para sua conta.")
 
     s1, s2 = st.columns(2)
