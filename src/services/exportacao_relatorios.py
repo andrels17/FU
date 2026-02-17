@@ -206,8 +206,8 @@ def ui_filtro_periodo(
 def gerar_botoes_exportacao(df_pedidos, formatar_moeda_br):
     """Gera botões de exportação em múltiplos formatos"""
     
-    st.markdown("### 📄 Exportar Relatório Completo")
-    st.info("📊 Exporte todos os pedidos em formatos profissionais")
+    st.markdown("### Exportar Relatório Completo")
+    st.info("Exporte todos os pedidos em formatos profissionais")
     
 
     # Filtro de período (opcional)
@@ -232,7 +232,7 @@ def gerar_botoes_exportacao(df_pedidos, formatar_moeda_br):
             df_export.to_excel(writer, index=False, sheet_name='Pedidos')
         
         st.download_button(
-            label="📊 Download Excel",
+            label="Download Excel",
             data=buffer.getvalue(),
             file_name=f"relatorio_pedidos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -241,46 +241,46 @@ def gerar_botoes_exportacao(df_pedidos, formatar_moeda_br):
     
     with col3:
         if PDF_DISPONIVEL:
-            if st.button("📑 PDF Premium", use_container_width=True, type="primary"):
-                with st.spinner("🎨 Gerando PDF profissional..."):
+            if st.button("PDF Premium", use_container_width=True, type="primary"):
+                with st.spinner("Gerando PDF profissional..."):
                     pdf_buffer = gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br)
                     if pdf_buffer:
-                        st.success("✅ PDF gerado!")
+                        st.success("PDF gerado!")
                         st.download_button(
-                            label="💾 Download PDF",
+                            label="Download PDF",
                             data=pdf_buffer.getvalue(),
                             file_name=f"relatorio_premium_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
                             mime="application/pdf",
                             use_container_width=True
                         )
         else:
-            st.error("❌ PDF indisponível")
+            st.error("PDF indisponível")
     
     # Estatísticas
     st.markdown("---")
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.metric("📦 Pedidos", f"{len(df_pedidos):,}".replace(',', '.'))
+        st.metric("Pedidos", f"{len(df_pedidos):,}".replace(',', '.'))
     
     with col2:
-        st.metric("💰 Valor Total", formatar_moeda_br(df_pedidos['valor_total'].sum()))
+        st.metric("Valor Total", formatar_moeda_br(df_pedidos['valor_total'].sum()))
     
     with col3:
         entregues = (df_pedidos['entregue'] == True).sum()
-        st.metric("✅ Entregues", entregues)
+        st.metric("Entregues", entregues)
     
     with col4:
-        st.metric("⚠️ Atrasados", (df_pedidos['atrasado'] == True).sum())
+        st.metric("Atrasados", (df_pedidos['atrasado'] == True).sum())
     
     with col5:
-        st.metric("🏭 Fornecedores", df_pedidos['fornecedor_nome'].nunique())
+        st.metric("Fornecedores", df_pedidos['fornecedor_nome'].nunique())
 
 
 def criar_relatorio_executivo(df_pedidos, formatar_moeda_br):
     """Cria relatório executivo"""
     
-    st.markdown("### 📊 Relatório Executivo Premium")
+    st.markdown("### Relatório Executivo Premium")
     
 
     # Filtro de período (opcional)
@@ -288,21 +288,21 @@ def criar_relatorio_executivo(df_pedidos, formatar_moeda_br):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("📦 Pedidos", len(df_pedidos))
+        st.metric("Pedidos", len(df_pedidos))
     
     with col2:
-        st.metric("💰 Valor Total", formatar_moeda_br(df_pedidos['valor_total'].sum()))
+        st.metric("Valor Total", formatar_moeda_br(df_pedidos['valor_total'].sum()))
     
     with col3:
         taxa = (df_pedidos['entregue'] == True).sum() / len(df_pedidos) * 100 if len(df_pedidos) > 0 else 0
-        st.metric("📈 Taxa Entrega", f"{taxa:.1f}%".replace('.', ','))
+        st.metric("Taxa Entrega", f"{taxa:.1f}%".replace('.', ','))
     
     with col4:
         ticket = df_pedidos['valor_total'].sum() / len(df_pedidos) if len(df_pedidos) > 0 else 0
-        st.metric("🎯 Ticket Médio", formatar_moeda_br(ticket))
+        st.metric("Ticket Médio", formatar_moeda_br(ticket))
     
     st.markdown("---")
-    st.markdown("#### 🏢 Análise por Departamento")
+    st.markdown("#### Análise por Departamento")
     
     df_dept = df_pedidos.groupby('departamento').agg({
         'id': 'count',
@@ -322,26 +322,26 @@ def criar_relatorio_executivo(df_pedidos, formatar_moeda_br):
     
     with col1:
         csv = df_dept.to_csv(index=False, encoding='utf-8-sig', sep=';', decimal=',')
-        st.download_button("📥 CSV", csv, f"exec_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+        st.download_button("CSV", csv, f"exec_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
     
     with col2:
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             df_dept.to_excel(writer, index=False, sheet_name='Resumo')
-        st.download_button("📊 Excel", buffer.getvalue(), f"exec_{datetime.now().strftime('%Y%m%d')}.xlsx", use_container_width=True)
+        st.download_button("Excel", buffer.getvalue(), f"exec_{datetime.now().strftime('%Y%m%d')}.xlsx", use_container_width=True)
     
     with col3:
-        if PDF_DISPONIVEL and st.button("📑 PDF Premium", key="pdf_exec", use_container_width=True, type="primary"):
+        if PDF_DISPONIVEL and st.button("PDF", key="pdf_exec", use_container_width=True, type="primary"):
             with st.spinner("Gerando..."):
                 pdf = gerar_pdf_executivo_premium(df_pedidos, df_dept, formatar_moeda_br)
                 if pdf:
-                    st.download_button("💾 Download", pdf.getvalue(), f"exec_{datetime.now().strftime('%Y%m%d')}.pdf", "application/pdf", use_container_width=True)
+                    st.download_button("Download", pdf.getvalue(), f"exec_{datetime.now().strftime('%Y%m%d')}.pdf", "application/pdf", use_container_width=True)
 
 
 def gerar_relatorio_fornecedor(df_pedidos, fornecedor, formatar_moeda_br):
     """Relatório de fornecedor"""
     
-    st.markdown(f"### 🏭 {fornecedor}")
+    st.markdown(f"### {fornecedor}")
     
     df_forn = df_pedidos[df_pedidos['fornecedor_nome'] == fornecedor]
     
@@ -355,16 +355,16 @@ def gerar_relatorio_fornecedor(df_pedidos, fornecedor, formatar_moeda_br):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("📦 Pedidos", len(df_forn))
+        st.metric("Pedidos", len(df_forn))
     
     with col2:
-        st.metric("💰 Valor", formatar_moeda_br(df_forn['valor_total'].sum()))
+        st.metric("Valor", formatar_moeda_br(df_forn['valor_total'].sum()))
     
     with col3:
-        st.metric("✅ Entregues", (df_forn['entregue'] == True).sum())
+        st.metric("Entregues", (df_forn['entregue'] == True).sum())
     
     with col4:
-        st.metric("⚠️ Atrasados", (df_forn['atrasado'] == True).sum())
+        st.metric("Atrasados", (df_forn['atrasado'] == True).sum())
     
     st.markdown("---")
     st.dataframe(preparar_dados_exportacao(df_forn), use_container_width=True, hide_index=True)
@@ -376,26 +376,26 @@ def gerar_relatorio_fornecedor(df_pedidos, fornecedor, formatar_moeda_br):
     
     with col1:
         csv = df_export.to_csv(index=False, encoding='utf-8-sig', sep=';', decimal=',')
-        st.download_button("📥 CSV", csv, f"forn_{datetime.now().strftime('%Y%m%d')}.csv", use_container_width=True)
+        st.download_button("CSV", csv, f"forn_{datetime.now().strftime('%Y%m%d')}.csv", use_container_width=True)
     
     with col2:
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             df_export.to_excel(writer, index=False)
-        st.download_button("📊 Excel", buffer.getvalue(), f"forn_{datetime.now().strftime('%Y%m%d')}.xlsx", use_container_width=True)
+        st.download_button("Excel", buffer.getvalue(), f"forn_{datetime.now().strftime('%Y%m%d')}.xlsx", use_container_width=True)
     
     with col3:
-        if PDF_DISPONIVEL and st.button("📑 PDF", key=f"pdf_f_{fornecedor}", use_container_width=True, type="primary"):
+        if PDF_DISPONIVEL and st.button("PDF", key=f"pdf_f_{fornecedor}", use_container_width=True, type="primary"):
             with st.spinner("Gerando..."):
                 pdf = gerar_pdf_fornecedor_premium(df_forn, fornecedor, formatar_moeda_br)
                 if pdf:
-                    st.download_button("💾 Download", pdf.getvalue(), f"forn_{datetime.now().strftime('%Y%m%d')}.pdf", use_container_width=True)
+                    st.download_button("Download", pdf.getvalue(), f"forn_{datetime.now().strftime('%Y%m%d')}.pdf", use_container_width=True)
 
 
 def gerar_relatorio_departamento(df_pedidos, departamento, formatar_moeda_br):
     """Relatório de departamento"""
     
-    st.markdown(f"### 🏢 {departamento}")
+    st.markdown(f"### {departamento}")
     
     df_dept = df_pedidos[df_pedidos['departamento'] == departamento]
     
@@ -409,16 +409,16 @@ def gerar_relatorio_departamento(df_pedidos, departamento, formatar_moeda_br):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("📦 Pedidos", len(df_dept))
+        st.metric("Pedidos", len(df_dept))
     
     with col2:
-        st.metric("💰 Valor", formatar_moeda_br(df_dept['valor_total'].sum()))
+        st.metric("Valor", formatar_moeda_br(df_dept['valor_total'].sum()))
     
     with col3:
-        st.metric("🏭 Fornecedores", df_dept['fornecedor_nome'].nunique())
+        st.metric("Fornecedores", df_dept['fornecedor_nome'].nunique())
     
     with col4:
-        st.metric("⚠️ Atrasados", (df_dept['atrasado'] == True).sum())
+        st.metric("Atrasados", (df_dept['atrasado'] == True).sum())
     
     st.markdown("---")
     st.dataframe(preparar_dados_exportacao(df_dept), use_container_width=True, hide_index=True)
@@ -430,20 +430,20 @@ def gerar_relatorio_departamento(df_pedidos, departamento, formatar_moeda_br):
     
     with col1:
         csv = df_export.to_csv(index=False, encoding='utf-8-sig', sep=';', decimal=',')
-        st.download_button("📥 CSV", csv, f"dept_{datetime.now().strftime('%Y%m%d')}.csv", use_container_width=True)
+        st.download_button("CSV", csv, f"dept_{datetime.now().strftime('%Y%m%d')}.csv", use_container_width=True)
     
     with col2:
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             df_export.to_excel(writer, index=False)
-        st.download_button("📊 Excel", buffer.getvalue(), f"dept_{datetime.now().strftime('%Y%m%d')}.xlsx", use_container_width=True)
+        st.download_button("Excel", buffer.getvalue(), f"dept_{datetime.now().strftime('%Y%m%d')}.xlsx", use_container_width=True)
     
     with col3:
-        if PDF_DISPONIVEL and st.button("📑 PDF", key=f"pdf_d_{departamento}", use_container_width=True, type="primary"):
+        if PDF_DISPONIVEL and st.button("PDF", key=f"pdf_d_{departamento}", use_container_width=True, type="primary"):
             with st.spinner("Gerando..."):
                 pdf = gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br)
                 if pdf:
-                    st.download_button("💾 Download", pdf.getvalue(), f"dept_{datetime.now().strftime('%Y%m%d')}.pdf", use_container_width=True)
+                    st.download_button("Download", pdf.getvalue(), f"dept_{datetime.now().strftime('%Y%m%d')}.pdf", use_container_width=True)
 
 
 def preparar_dados_exportacao(df):
@@ -883,10 +883,10 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
 
         kpi_dados = [
             ['INDICADOR', 'VALOR'],
-            ['📦 Total de Pedidos', f'{total:,}'.replace(',', '.')],
-            ['💰 Valor Total', _safe_money(valor, formatar_moeda_br)],
-            ['✅ Pedidos Entregues', f'{entregues:,} ({(entregues/total*100 if total else 0):.1f}%)'.replace(',', '.')],
-            ['⚠️ Pedidos Atrasados', f'{atrasados:,} ({(atrasados/total*100 if total else 0):.1f}%)'.replace(',', '.')],
+            ['Total de Pedidos', f'{total:,}'.replace(',', '.')],
+            ['Valor Total', _safe_money(valor, formatar_moeda_br)],
+            ['Pedidos Entregues', f'{entregues:,} ({(entregues/total*100 if total else 0):.1f}%)'.replace(',', '.')],
+            ['Pedidos Atrasados', f'{atrasados:,} ({(atrasados/total*100 if total else 0):.1f}%)'.replace(',', '.')],
         ]
         elements.append(criar_tabela_kpi(kpi_dados))
         elements.append(Spacer(1, 0.6 * cm))
