@@ -103,9 +103,7 @@ def _load_entregues(supabase, tenant_id: str, dt_ini, dt_fim, departamentos=None
     # Base query sem filtro de datetime (mais compatível)
     q = (
         supabase.table("pedidos")
-        .select(
-            "id,numero_pedido,fornecedor,descricao,quantidade,valor_total,departamento,atualizado_em,entregue"
-        )
+        .select("*")
         .eq("tenant_id", tenant_id)
         .eq("entregue", True)
         .order("atualizado_em", desc=True)
