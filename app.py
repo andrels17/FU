@@ -1084,7 +1084,7 @@ def main():
                 )
 
             is_admin = st.session_state.usuario.get("perfil") == "admin"
-            # ✅ Controle de navegação (seleção única + expander inteligente)
+            # ✅ Controle de navegação (seleção única) — visual separado por grupos
             if "current_page" not in st.session_state:
                 st.session_state.current_page = "home"
 
@@ -1096,25 +1096,23 @@ def main():
 
             # ---------- Operações ----------
             opcoes_ops = ["home", "dashboard", "alerts", "orders_search", "profile"]
-            # Garante que o valor salvo do rádio exista nas opções atuais (evita ValueError)
-            if st.session_state.get("menu_ops") not in opcoes_ops:
-                st.session_state["menu_ops"] = st.session_state.current_page if st.session_state.current_page in opcoes_ops else opcoes_ops[0]
-            is_ops_page = st.session_state.current_page in opcoes_ops
-            index_ops = opcoes_ops.index(st.session_state.current_page) if is_ops_page else None
 
             # ---------- Gestão ----------
             if is_admin:
-                opcoes_gestao = ["material_sheet", "orders_manage", "map", "users", "backup"] + (["saas_admin"] if st.session_state.get("is_superadmin") else [])
+                opcoes_gestao = ["material_sheet", "orders_manage", "map", "users", "backup"] + (
+                    ["saas_admin"] if st.session_state.get("is_superadmin") else []
+                )
             else:
                 opcoes_gestao = ["material_sheet", "map"]
 
-            # Garante que o valor salvo do rádio exista nas opções atuais (evita ValueError)
-            if st.session_state.get("menu_gestao") not in opcoes_gestao:
-                st.session_state["menu_gestao"] = st.session_state.current_page if st.session_state.current_page in opcoes_gestao else opcoes_gestao[0]
-            is_gestao_page = st.session_state.current_page in opcoes_gestao
-            index_gestao = opcoes_gestao.index(st.session_state.current_page) if is_gestao_page else None
+            # Fonte de verdade: página atual deve existir em algum grupo
+            if st.session_state.current_page not in (opcoes_ops + opcoes_gestao):
+                st.session_state.current_page = "home"
 
-            # Auto-abrir o box do grupo ativo (e manter seleção única)
+            is_ops_page = st.session_state.current_page in opcoes_ops
+            is_gestao_page = st.session_state.current_page in opcoes_gestao
+
+            # Auto-abrir o box do grupo ativo
             if is_ops_page:
                 expanded_ops = True
                 expanded_gestao = False
@@ -1128,38 +1126,35 @@ def main():
             else:
                 expanded_ops = bool(st.session_state.exp_ops_open)
                 expanded_gestao = bool(st.session_state.exp_gestao_open)
-                # Segurança: nunca deixar os dois ativos no servidor (melhora mobile)
+                # Segurança: nunca deixar os dois ativos no servidor
                 if expanded_ops and expanded_gestao:
                     expanded_gestao = False
-            # Renderiza expanders + menus
-            
-            # 🔁 Sincroniza o valor dos rádios (menu_ops/menu_gestao) ANTES de criar os widgets
-            # Evita warning: widget criado com default e também setado via session_state no mesmo rerun.
-            if st.session_state.get("_force_menu_sync"):
-                try:
-                    if st.session_state.current_page in opcoes_ops:
-                        st.session_state["menu_ops"] = st.session_state.current_page
-                    if st.session_state.current_page in opcoes_gestao:
-                        st.session_state["menu_gestao"] = st.session_state.current_page
-                except Exception:
-                    pass
-                st.session_state["_force_menu_sync"] = False
 
-            prev_ops = st.session_state.get("_prev_menu_ops", st.session_state.get("menu_ops"))
-            prev_gestao = st.session_state.get("_prev_menu_gestao", st.session_state.get("menu_gestao"))
+            def _nav_button_row(page_id: str, group: str) -> None:
+                active = (page_id == st.session_state.current_page)
+                dot = '<div class="fu-compact-dot"></div>' if active else '<div class="fu-compact-dot fu-compact-dot--off"></div>'
+                c_dot, c_btn = st.columns([0.12, 0.88], vertical_alignment="center")
+                with c_dot:
+                    st.markdown(dot, unsafe_allow_html=True)
+                with c_btn:
+                    if st.button(
+                        page_label(page_id, total_alertas),
+                        key=f"nav__{group}__{page_id}",
+                        use_container_width=True,
+                    ):
+                        if page_id != st.session_state.current_page:
+                            st.session_state.current_page = page_id
+                            st.session_state.exp_ops_open = (group == "ops")
+                            st.session_state.exp_gestao_open = (group == "gestao")
+                            st.rerun()
 
+            # Renderiza expanders + menus (separados), mas com seleção única (current_page)
             with st.expander("Operações", expanded=expanded_ops):
                 if is_ops_page:
                     st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
 
-                escolha_ops = st.radio(
-                    "",
-                    opcoes_ops,
-                    index=index_ops,
-                    label_visibility="collapsed",
-                    key="menu_ops",
-                    format_func=lambda pid: page_label(pid, total_alertas),
-                )
+                for pid in opcoes_ops:
+                    _nav_button_row(pid, "ops")
 
                 if is_ops_page:
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -1168,76 +1163,13 @@ def main():
                 if is_gestao_page:
                     st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
 
-                escolha_gestao = st.radio(
-                    "",
-                    opcoes_gestao,
-                    index=index_gestao,
-                    label_visibility="collapsed",
-                    key="menu_gestao",
-                    format_func=lambda pid: page_label(pid, total_alertas),
-                )
+                for pid in opcoes_gestao:
+                    _nav_button_row(pid, "gestao")
 
                 if is_gestao_page:
                     st.markdown("</div>", unsafe_allow_html=True)
 
-            # Atualiza página + estado dos expanders (mobile-safe: usa mudança real do usuário)
-
-
-            nova_pagina = None
-
-
-
-            changed_ops = (escolha_ops != prev_ops)
-
-
-            changed_gestao = (escolha_gestao != prev_gestao)
-
-
-
-            st.session_state["_prev_menu_ops"] = escolha_ops
-
-
-            st.session_state["_prev_menu_gestao"] = escolha_gestao
-
-
-
-            if changed_ops and (escolha_ops in opcoes_ops) and (escolha_ops != st.session_state.current_page):
-
-
-                nova_pagina = escolha_ops
-
-
-                st.session_state.exp_ops_open = True
-
-
-                st.session_state.exp_gestao_open = False
-
-
-            elif changed_gestao and (escolha_gestao in opcoes_gestao) and (escolha_gestao != st.session_state.current_page):
-
-
-                nova_pagina = escolha_gestao
-
-
-                st.session_state.exp_ops_open = False
-
-
-                st.session_state.exp_gestao_open = True
-
-
-
-            if nova_pagina:
-
-
-                st.session_state.current_page = nova_pagina
-
-
-                st.session_state["_force_menu_sync"] = True
-
-
-                st.rerun()
-
-        # Página atual (fonte de verdade)
+# Página atual (fonte de verdade)
         pagina = st.session_state.current_page
         # Normaliza (caso ainda exista valor antigo por label/emoji)
         if isinstance(pagina, str) and pagina.startswith("Alertas"):
