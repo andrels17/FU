@@ -109,7 +109,29 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
     style = textwrap.dedent(
         """
         <style>
-        /* ===== Compact sidebar nav (ícones only) ===== */
+        
+        /* ===== Sidebar toggle (hamburger) ===== */
+        .fu-sidebar-toggle{ display:flex; justify-content:flex-start; margin: 4px 0 10px 0; }
+        .fu-sidebar-toggle .stButton > button{
+          width: 46px !important;
+          height: 46px !important;
+          border-radius: 14px !important;
+          padding: 0 !important;
+          display:flex !important;
+          align-items:center !important;
+          justify-content:center !important;
+          font-size: 20px !important;
+          line-height: 1 !important;
+          border: 1px solid rgba(255,255,255,0.12) !important;
+          background: rgba(255,255,255,0.05) !important;
+          transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease !important;
+        }
+        .fu-sidebar-toggle .stButton > button:hover{
+          transform: translateY(-1px);
+          border-color: rgba(245,158,11,0.30) !important;
+          background: rgba(245,158,11,0.10) !important;
+        }
+/* ===== Compact sidebar nav (ícones only) ===== */
         .fu-compact-nav{
           display:flex;
           flex-direction:column;
@@ -322,17 +344,28 @@ def _industrial_sidebar_css() -> None:
             .fu-user-name { font-size: 16px; font-weight: 800; margin: 0; letter-spacing: .2px; }
             .fu-user-role { font-size: 12px; opacity: .75; margin: 4px 0 0 0; }
 
-            /* Mini KPIs */
-            .fu-kpi-row { display:flex; gap:8px; margin: 6px 0 12px 0; }
-            .fu-kpi {
-                flex: 1;
+            /* Mini KPIs (grid 2x2, mobile friendly) */
+            .fu-kpi-grid{
+                display:grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap:8px;
+                margin: 8px 0 12px 0;
+            }
+            @media (max-width: 420px){
+                .fu-kpi-grid{ grid-template-columns: 1fr; }
+            }
+            .fu-kpi{
                 background: rgba(255,255,255,0.04);
                 border: 1px solid rgba(255,255,255,0.08);
                 border-radius: 12px;
                 padding: 10px 10px;
+                min-height: 64px;
+                display:flex;
+                flex-direction:column;
+                justify-content:center;
             }
-            .fu-kpi-title { font-size: 11px; opacity: .78; margin: 0 0 2px 0; }
-            .fu-kpi-value { font-size: 18px; font-weight: 900; margin: 0; }
+            .fu-kpi-title{ font-size: 11px; opacity: .80; margin: 0 0 2px 0; line-height: 1.05; }
+            .fu-kpi-value{ font-size: 18px; font-weight: 900; margin: 0; line-height: 1.05; }
 
 /* KPIs responsivos (evita “prensar” em mobile) */
 @media (max-width: 520px){
@@ -1047,12 +1080,16 @@ def main():
     # ===== Sidebar topo + menus (SEM botão sair/creditos aqui) =====
     with st.sidebar:
 
-        # Toggle: colapsar/expandir (ícones only no colapsado)
-        btn_lbl = "⮞" if st.session_state.get("fu_sidebar_hidden") else "⮜"
-        btn_help = "Expandir menu lateral" if st.session_state.get("fu_sidebar_hidden") else "Colapsar menu lateral"
+        # Toggle: colapsar/expandir (hamburger)
+        is_hidden = bool(st.session_state.get("fu_sidebar_hidden"))
+        btn_lbl = "☰" if is_hidden else "✕"
+        btn_help = "Expandir menu lateral" if is_hidden else "Colapsar menu lateral"
+
+        st.markdown('<div class="fu-sidebar-toggle">', unsafe_allow_html=True)
         if st.button(btn_lbl, help=btn_help, key="fu_sidebar_toggle"):
-            st.session_state.fu_sidebar_hidden = (not st.session_state.get("fu_sidebar_hidden"))
+            st.session_state.fu_sidebar_hidden = (not is_hidden)
             st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
         is_admin = st.session_state.usuario.get("perfil") == "admin"
         if st.session_state.get("fu_sidebar_hidden"):
@@ -1103,7 +1140,7 @@ def main():
     </div>
   </div>
 
-  <div class="fu-kpi-row">
+  <div class="fu-kpi-grid">
     <div class="fu-kpi">
       <p class="fu-kpi-title">⚠️ Atrasados</p>
       <p class="fu-kpi-value">{atrasados}</p>
@@ -1115,6 +1152,10 @@ def main():
     <div class="fu-kpi">
       <p class="fu-kpi-title">⏰ Vencendo</p>
       <p class="fu-kpi-value">{vencendo}</p>
+    </div>
+    <div class="fu-kpi">
+      <p class="fu-kpi-title">🔔 Alertas</p>
+      <p class="fu-kpi-value">{total_alertas}</p>
     </div>
   </div>
 </div>
