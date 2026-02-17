@@ -590,6 +590,16 @@ def main():
 
     route = st.session_state.get("fu_route") or "landing"
 
+    # Se já estiver autenticado, não mantenha "page=login" (isso prende o app no modo login em todo rerun)
+    if verificar_autenticacao():
+        if st.query_params.get("page") in ("login", "landing"):
+            try:
+                del st.query_params["page"]
+            except Exception:
+                pass
+            st.session_state["fu_route"] = "app"
+            route = "app"
+
     if route == "first_access":
         from first_access import render_first_access
         render_first_access(supabase_anon)
@@ -613,11 +623,6 @@ def main():
         st.stop()
 
     # Rota explícita de login (antes do app)
-    if (route == "login") and (not verificar_autenticacao()):
-        st.session_state["fu_route"] = "login"
-        if st.query_params.get("page") != "login":
-            st.query_params["page"] = "login"
-
     if not verificar_autenticacao():
         st.session_state["fu_route"] = "login"
         if st.query_params.get("page") != "login":
