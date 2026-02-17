@@ -6,6 +6,26 @@ import json
 import base64
 import textwrap
 import streamlit.components.v1 as components
+
+from datetime import datetime, timezone
+import src.services.sistema_alertas as sa
+import src.services.backup_auditoria as ba
+from src.repositories.fornecedores import carregar_fornecedores
+from src.core.config import configure_page  # noqa: F401
+from src.core.db import init_supabase_admin, init_supabase_anon, get_supabase_user_client
+from src.repositories.pedidos import carregar_pedidos
+from src.utils.formatting import formatar_moeda_br
+from src.ui.dashboard import exibir_dashboard
+from src.ui.mapa import exibir_mapa
+from src.ui.consulta import exibir_consulta_pedidos
+from src.ui.gestao_pedidos import exibir_gestao_pedidos
+from src.ui.ficha_material_page import exibir_ficha_material
+from src.ui.gestao_usuarios import exibir_gestao_usuarios
+from src.ui.admin_saas import exibir_admin_saas
+from src.ui.landing_public import render_landing
+from src.ui.home import exibir_home
+from src.core.superadmin import is_superadmin
+
 st.set_page_config(
     page_title="Sistema de Follow-Up",
     layout="wide",
