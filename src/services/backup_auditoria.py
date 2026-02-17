@@ -48,7 +48,7 @@ def carregar_logs_auditoria(supabase, filtro_acao: Optional[str] = None, limite:
 
 
 def exibir_painel_auditoria(supabase) -> None:
-    st.title("🔒 Painel de Auditoria e Logs")
+    st.title("Painel de Auditoria e Logs")
 
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -58,7 +58,7 @@ def exibir_painel_auditoria(supabase) -> None:
 
     df = carregar_logs_auditoria(supabase, None if filtro == "Todas" else filtro, limite=int(limite))
     if df.empty:
-        st.info("📭 Nenhum log encontrado (verifique se a tabela logs_auditoria existe e está acessível).")
+        st.info("Nenhum log encontrado (verifique se a tabela logs_auditoria existe e está acessível).")
         return
 
     # Formatação básica
@@ -70,10 +70,10 @@ def exibir_painel_auditoria(supabase) -> None:
 
 
 def realizar_backup_manual(supabase) -> None:
-    st.subheader("💾 Backup Manual dos Dados")
+    st.subheader("Backup Manual dos Dados")
     st.caption("Gera um XLSX com pedidos e fornecedores (quando disponíveis).")
 
-    if st.button("🔄 Gerar Backup Completo", use_container_width=True):
+    if st.button("Gerar Backup Completo", use_container_width=True):
         with st.spinner("Gerando backup..."):
             try:
                 pedidos = supabase.table("pedidos").select("*").execute()
@@ -89,7 +89,7 @@ def realizar_backup_manual(supabase) -> None:
                     df_fornecedores.to_excel(writer, sheet_name="Fornecedores", index=False)
 
                 output.seek(0)
-                st.success("✅ Backup gerado com sucesso!")
+                st.success("Backup gerado com sucesso!")
                 st.download_button(
                     "📥 Baixar Backup",
                     data=output,
@@ -98,4 +98,4 @@ def realizar_backup_manual(supabase) -> None:
                     use_container_width=True,
                 )
             except Exception as e:
-                st.error(f"❌ Erro ao gerar backup: {e}")
+                st.error(f"Erro ao gerar backup: {e}")
