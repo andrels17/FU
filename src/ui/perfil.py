@@ -381,7 +381,7 @@ def exibir_perfil(supabase_db):
     avatar_bytes = _get_object_bytes_authenticated("avatars", avatar_path) if avatar_path else None
 
     # Header
-    st.markdown("## 👤 Meu Perfil")
+    st.markdown("##  Meu Perfil")
     c1, c2 = st.columns([1, 2])
 
     with c1:
@@ -408,16 +408,16 @@ def exibir_perfil(supabase_db):
         st.markdown(f"**Perfil:** {role}")
         if empresa:
             st.markdown(f"**Empresa:** {empresa}")
-        st.caption("🔒 Avatar em bucket privado (REST + leitura authenticated).")
+        st.caption(" Avatar em bucket privado (REST + leitura authenticated).")
 
         col_h1, col_h2, col_h3 = st.columns([1, 1, 1])
         with col_h1:
             st.code(user_id, language="text")
         with col_h2:
-            if st.button("🔄 Atualizar", key="perfil_refresh_btn", use_container_width=True):
+            if st.button(" Atualizar", key="perfil_refresh_btn", use_container_width=True):
                 st.rerun()
         with col_h3:
-            if st.button("🚪 Sair", key="perfil_logout_btn_header", use_container_width=True):
+            if st.button(" Sair", key="perfil_logout_btn_header", use_container_width=True):
                 _logout_clear_session()
                 st.success("Você saiu da conta.")
                 st.rerun()
@@ -429,27 +429,27 @@ def exibir_perfil(supabase_db):
         for i, (k, v) in enumerate(stats.items()):
             cols[i % len(cols)].metric(k, v)
 
-    tabs = st.tabs(["🏠 Visão geral", "📝 Perfil", "🖼 Avatar", "🔐 Segurança"])
+    tabs = st.tabs([" Visão geral", " Perfil", " Avatar", " Segurança"])
 
     # =========================
     # Tab: Visão Geral
     # =========================
     with tabs[0]:
-        st.subheader("🏠 Visão geral")
+        st.subheader(" Visão geral")
         st.caption("Resumo da sua conta e atalhos.")
 
         cA, cB, cC = st.columns([1, 1, 1])
         with cA:
-            st.info("💡 Dica: personalize seu nome e avatar para aparecerem na sidebar.")
+            st.info(" Dica: personalize seu nome e avatar para aparecerem na sidebar.")
         with cB:
-            st.success("✅ Sessão ativa")
+            st.success(" Sessão ativa")
             st.caption(f"User ID: `{user_id}`")
         with cC:
-            st.warning("🏢 Empresa")
+            st.warning(" Empresa")
             st.caption(empresa or "Nenhuma selecionada (se aplicável).")
 
         st.divider()
-        st.markdown("### 🧾 Meus últimos pedidos")
+        st.markdown("###  Meus últimos pedidos")
         last = _safe_last_pedidos(supabase_db, user_id, limit=5)
         if not last:
             st.caption("Nenhum pedido encontrado (ou não foi possível ler a tabela/colunas).")
@@ -469,12 +469,12 @@ def exibir_perfil(supabase_db):
                 # Agrupado: descrição + equipamento + depto (visual mais limpo)
                 cA, cB, cC, cD, cE = st.columns([0.9, 4.2, 1.2, 1.1, 1.0])
                 with cA:
-                    if st.button("🔎 Abrir", key=f"perfil_open_{pid}", use_container_width=True):
+                    if st.button(" Abrir", key=f"perfil_open_{pid}", use_container_width=True):
                         # Navega para Consulta > Ações
-                        st.session_state["current_page"] = "orders_search"
+                        st.session_state["current_page"] = "Consultar Pedidos"
                         st.session_state["_force_menu_sync"] = True
                         st.session_state["consulta_selected_pid"] = str(pid or "")
-                        st.session_state["consulta_tab_target"] = "Ações"
+                        st.session_state["consulta_tab_target"] = "⚡ Ações"
                         st.rerun()
                 with cB:
                     # Mostra a descrição do material (quando existir) e agrupa metadados
@@ -508,7 +508,7 @@ def exibir_perfil(supabase_db):
                 st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
 
         st.divider()
-        st.markdown("### 📦 Exportar meus dados")
+        st.markdown("###  Exportar meus dados")
         st.caption("Baixa um JSON com os dados básicos do seu perfil (sem informações sensíveis).")
 
         export_obj = {
@@ -532,7 +532,7 @@ def exibir_perfil(supabase_db):
     # Tab: Perfil
     # =========================
     with tabs[1]:
-        st.subheader("📝 Dados do perfil")
+        st.subheader(" Dados do perfil")
         novo_nome = st.text_input(
             "Nome",
             value=nome_db or "",
@@ -542,7 +542,7 @@ def exibir_perfil(supabase_db):
 
         col_a, col_b = st.columns([1, 3])
         with col_a:
-            salvar_nome = st.button("💾 Salvar dados", use_container_width=True, key="perfil_salvar_dados_btn")
+            salvar_nome = st.button(" Salvar dados", use_container_width=True, key="perfil_salvar_dados_btn")
         with col_b:
             st.caption("Atualiza apenas o nome (sem campos extras).")
 
@@ -555,7 +555,7 @@ def exibir_perfil(supabase_db):
                     supabase_db.table("user_profiles").update({"nome": nn}).eq("user_id", user_id).execute()
                     if isinstance(st.session_state.get("usuario"), dict):
                         st.session_state.usuario["nome"] = nn
-                    st.success("✅ Perfil atualizado!")
+                    st.success(" Perfil atualizado!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Falha ao salvar: {e}")
@@ -564,7 +564,7 @@ def exibir_perfil(supabase_db):
     # Tab: Avatar
     # =========================
     with tabs[2]:
-        st.subheader("🖼 Avatar")
+        st.subheader(" Avatar")
         st.caption("Use PNG/JPG. O arquivo fica em `avatars/<user_id>/avatar.ext` (privado).")
 
         if "avatar_uploader_key" not in st.session_state:
@@ -583,14 +583,14 @@ def exibir_perfil(supabase_db):
         b1, b2 = st.columns([1, 1])
         with b1:
             salvar_avatar = st.button(
-                "💾 Salvar avatar",
+                " Salvar avatar",
                 use_container_width=True,
                 disabled=arquivo is None,
                 key="perfil_salvar_avatar_btn",
             )
         with b2:
             remover_avatar = st.button(
-                "🗑️ Remover avatar",
+                "️ Remover avatar",
                 use_container_width=True,
                 disabled=not bool(avatar_bytes),
                 key="perfil_remover_avatar_btn",
@@ -625,7 +625,7 @@ def exibir_perfil(supabase_db):
                 st.session_state.usuario["avatar_path"] = object_path
 
             st.session_state.avatar_uploader_key += 1
-            st.success("✅ Avatar atualizado!")
+            st.success(" Avatar atualizado!")
             st.rerun()
 
         if remover_avatar:
@@ -645,17 +645,17 @@ def exibir_perfil(supabase_db):
             if isinstance(st.session_state.get("usuario"), dict):
                 st.session_state.usuario["avatar_path"] = None
 
-            st.success("✅ Avatar removido!")
+            st.success(" Avatar removido!")
             st.rerun()
 
     # =========================
     # Tab: Segurança
     # =========================
     with tabs[3]:
-        st.subheader("🔐 Segurança")
+        st.subheader(" Segurança")
         st.caption("Ações rápidas da conta.")
 
-        st.markdown("### 🔁 Trocar senha (logado)")
+        st.markdown("###  Trocar senha (logado)")
         cP1, cP2 = st.columns([1, 1])
         with cP1:
             nova = st.text_input("Nova senha", type="password", key="perfil_nova_senha")
@@ -664,7 +664,7 @@ def exibir_perfil(supabase_db):
 
         col_btn1, col_btn2 = st.columns([1, 1])
         with col_btn1:
-            if st.button("✅ Trocar senha", use_container_width=True, key="perfil_trocar_senha_btn"):
+            if st.button(" Trocar senha", use_container_width=True, key="perfil_trocar_senha_btn"):
                 if not nova or len(nova) < 8:
                     st.error("A senha deve ter pelo menos 8 caracteres.")
                 elif nova != confirmar:
@@ -672,24 +672,24 @@ def exibir_perfil(supabase_db):
                 else:
                     try:
                         _change_password(nova)
-                        st.success("✅ Senha atualizada!")
+                        st.success(" Senha atualizada!")
                         st.caption("Se você usa regras de senha no Supabase, elas podem exigir complexidade.")
                     except Exception as e:
                         st.error(f"Falha ao trocar senha: {e}")
 
         with col_btn2:
-            if st.button("🚪 Sair", use_container_width=True, key="perfil_logout_btn_security"):
+            if st.button(" Sair", use_container_width=True, key="perfil_logout_btn_security"):
                 _logout_clear_session()
                 st.success("Você saiu da conta.")
                 st.rerun()
 
         st.divider()
-        st.markdown("### 📩 Recuperação por email")
+        st.markdown("###  Recuperação por email")
         st.caption("Envia um link para redefinir senha (útil se preferir fluxo por email).")
-        if st.button("📩 Enviar link de redefinição", use_container_width=True, key="perfil_recover_btn"):
+        if st.button(" Enviar link de redefinição", use_container_width=True, key="perfil_recover_btn"):
             try:
                 _send_password_recovery(email)
-                st.success("✅ Link enviado! Verifique seu email.")
+                st.success(" Link enviado! Verifique seu email.")
                 st.caption("Se não chegar, verifique Spam e as Redirect URLs no Supabase Auth.")
             except Exception as e:
                 st.error(f"Falha ao enviar: {e}")
@@ -700,7 +700,7 @@ def exibir_perfil(supabase_db):
         st.write(f"**Email:** `{email}`")
 
     if DEBUG:
-        with st.expander("🧪 Debug (interno)", expanded=False):
+        with st.expander(" Debug (interno)", expanded=False):
             st.write("empresa:", empresa)
             st.write("avatar_path:", avatar_path)
             st.write("has_avatar_bytes:", bool(avatar_bytes))
