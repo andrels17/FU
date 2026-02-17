@@ -106,6 +106,16 @@ section[data-testid="stSidebar"] .stButton button{
         }}
 
         /* Botões mais consistentes */
+
+    /* Evita quebra de texto em botões (zoom/telas menores) */
+    .stButton button{{ white-space: nowrap !important; }}
+    @media (max-width: 1100px){{
+      .stButton button{{ font-size: 0.85rem !important; padding: 0.35rem 0.6rem !important; }}
+    }}
+    @media (max-width: 900px){{
+      .stButton button{{ font-size: 0.82rem !important; padding: 0.32rem 0.55rem !important; }}
+    }}
+
         .stButton button{{ border-radius: 12px !important; }}
 
         /* Sidebar colapsada (modo compacto) */
@@ -764,7 +774,7 @@ def main():
         _sync_empresa_nome(tenant_id, tenant_opts)
 
     # Se o usuário tiver mais de uma empresa, permite escolher
-    if tenant_opts and len(tenant_opts) > 1:
+    if tenant_opts and len(tenant_opts) > 1 and not st.session_state.get("fu_sidebar_hidden"):
         with st.sidebar:
 
             btn_lbl = '⮞' if st.session_state.get('fu_sidebar_hidden') else '⮜'
