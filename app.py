@@ -495,7 +495,7 @@ def _sidebar_footer(supabase_client) -> None:
         except Exception:
             pass
 
-        st.rerun()
+            st.rerun()
 
     st.markdown(
         """
@@ -986,7 +986,7 @@ def main():
             with st.expander("Conta"):
                 if st.button("Meu Perfil", use_container_width=True):
                     st.session_state.current_page = "profile"
-                    st.session_state["menu_ops"] = "Meu Perfil"
+                    st.session_state["menu_ops"] = "profile"
                     st.session_state.exp_ops_open = True
                     st.session_state.exp_gestao_open = False
                     st.rerun()
@@ -1203,7 +1203,7 @@ def main():
 
     with b2:
         if st.button("📤 Exportar", use_container_width=True, key="qa_export", help="Ir para Exportação"):
-            st.session_state.current_page = "Dashboard"
+            st.session_state.current_page = "dashboard"
             st.session_state["dash_force_tab"] = "Exportação"
             st.rerun()
 
