@@ -13,7 +13,7 @@ from src.repositories.pedidos import carregar_pedidos
 from src.repositories.fornecedores import carregar_fornecedores
 
 
-APP_TITULO = "🗺️ Mapa Geográfico de Fornecedores"
+APP_TITULO = "Mapa Geográfico de Fornecedores"
 
 BR_STATES_GEOJSON_URL = (
     "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/brazil-states.geojson"
@@ -116,7 +116,7 @@ def _load_data_cached(supabase, tenant_id: str) -> Tuple[pd.DataFrame, pd.DataFr
 
 def _filters_form(df_pedidos: pd.DataFrame) -> dict:
     """Form de filtros com multiselect + ações rápidas (selecionar tudo / limpar)."""
-    st.sidebar.markdown("## 🧭 Filtros do Mapa")
+    st.sidebar.markdown("## Filtros do Mapa")
     ss = st.session_state
 
     # opções a partir dos dados
@@ -164,9 +164,9 @@ def _filters_form(df_pedidos: pd.DataFrame) -> dict:
 
         c1, c2 = st.columns(2)
         with c1:
-            btn_select_all = st.form_submit_button("✅ Selecionar todos", use_container_width=True)
+            btn_select_all = st.form_submit_button("Selecionar todos", use_container_width=True)
         with c2:
-            btn_clear = st.form_submit_button("🧹 Limpar seleção", use_container_width=True)
+            btn_clear = st.form_submit_button("Limpar seleção", use_container_width=True)
 
         min_valor = st.number_input("Valor mínimo (valor_total)", min_value=0.0, value=min_default, step=100.0)
 
@@ -182,7 +182,7 @@ def _filters_form(df_pedidos: pd.DataFrame) -> dict:
             index=0 if med_default == "Valor total" else 1,
         )
 
-        aplicar = st.form_submit_button("✅ Aplicar filtros", use_container_width=True)
+        aplicar = st.form_submit_button("Aplicar filtros", use_container_width=True)
 
     # ações rápidas
     if btn_select_all:
@@ -227,25 +227,25 @@ def exibir_mapa(supabase) -> None:
 
     tenant_id = st.session_state.get("tenant_id")
     if not tenant_id:
-        st.error("❌ Tenant não identificado.")
+        st.error("Tenant não identificado.")
         return
 
     cbtn1, _ = st.columns([1, 4])
     with cbtn1:
-        if st.button("🔄 Recarregar dados", use_container_width=True):
+        if st.button("Recarregar dados", use_container_width=True):
             st.session_state.pop(f"mapa_cache::{tenant_id}", None)
             st.rerun()
 
     df_pedidos, df_fornecedores = _load_data_cached(supabase, str(tenant_id))
     if df_pedidos.empty:
-        st.info("📭 Sem pedidos para exibir.")
+        st.info("Sem pedidos para exibir.")
         return
 
     filtros = _filters_form(df_pedidos)
 
     df = df_pedidos.copy()
     if "fornecedor_id" not in df.columns:
-        st.error("❌ Seus pedidos não possuem a coluna fornecedor_id (necessário para mapear UF/fornecedor).")
+        st.error("Seus pedidos não possuem a coluna fornecedor_id (necessário para mapear UF/fornecedor).")
         return
 
     df["valor_total"] = pd.to_numeric(df.get("valor_total", 0.0), errors="coerce").fillna(0.0)
@@ -284,16 +284,16 @@ def exibir_mapa(supabase) -> None:
         base = base[(base["data_solicitacao"].dt.date >= filtros["dt_ini"]) & (base["data_solicitacao"].dt.date <= filtros["dt_fim"])].copy()
 
     if base.empty:
-        st.warning("⚠️ Após filtros, não há pedidos suficientes para gerar os mapas.")
+        st.warning("Após filtros, não há pedidos suficientes para gerar os mapas.")
         return
 
     if df_fornecedores.empty:
-        st.warning("⚠️ Não há fornecedores cadastrados para este tenant.")
+        st.warning("Não há fornecedores cadastrados para este tenant.")
         return
 
     forn = df_fornecedores.copy()
     if "id" not in forn.columns:
-        st.error("❌ Fornecedores não possuem coluna id.")
+        st.error("Fornecedores não possuem coluna id.")
         return
 
     for col in ("nome", "cidade", "uf", "latitude", "longitude"):
@@ -330,14 +330,14 @@ def exibir_mapa(supabase) -> None:
     k3.metric("Com UF válida", fmt_int(com_uf))
     k4.metric("Pendentes", fmt_int(pendentes))
     k5.metric("Atrasados", fmt_int(atrasados))
-    st.caption(f"💰 Valor total (após filtros): **{fmt_moeda(valor_total)}**")
+    st.caption(f"Valor total (após filtros): **{fmt_moeda(valor_total)}**")
 
     if com_uf == 0:
-        st.warning("⚠️ Nenhum pedido com UF válida (fornecedor sem UF ou sem vínculo).")
+        st.warning("Nenhum pedido com UF válida (fornecedor sem UF ou sem vínculo).")
         return
 
     tab_est, tab_pts, tab_heat, tab_rank, tab_export = st.tabs(
-        ["🗺️ Estados", "📍 Fornecedores (pontos)", "🔥 Heatmap", "🏆 Rankings", "📄 Exportar"]
+        ["Estados", "Fornecedores (pontos)", "Heatmap", "Rankings", "Exportar"]
     )
 
     with tab_est:
@@ -358,12 +358,12 @@ def exibir_mapa(supabase) -> None:
 
         agg["hover"] = (
             "<b>" + agg["UF"].astype(str) + "</b><br>"
-            + "📦 Pedidos: " + agg["pedidos"].apply(fmt_int) + "<br>"
-            + "✅ Entregues: " + agg["entregues"].apply(fmt_int) + "<br>"
-            + "🕗 Pendentes: " + agg["pendentes"].apply(fmt_int) + "<br>"
-            + "⛔ Atrasados: " + agg["atrasados"].apply(fmt_int) + "<br>"
-            + "📈 % Entregue: " + agg["pct_entregue"].apply(fmt_pct) + "<br>"
-            + "💰 Valor total: " + agg["valor"].apply(fmt_moeda)
+            + "Pedidos: " + agg["pedidos"].apply(fmt_int) + "<br>"
+            + "Entregues: " + agg["entregues"].apply(fmt_int) + "<br>"
+            + "Pendentes: " + agg["pendentes"].apply(fmt_int) + "<br>"
+            + "Atrasados: " + agg["atrasados"].apply(fmt_int) + "<br>"
+            + "% Entregue: " + agg["pct_entregue"].apply(fmt_pct) + "<br>"
+            + "Valor total: " + agg["valor"].apply(fmt_moeda)
         )
 
         color_col = "valor" if filtros["medida_estado"] == "Valor total" else "pedidos"
@@ -418,11 +418,11 @@ def exibir_mapa(supabase) -> None:
 
         agg_f["hover"] = (
             "<b>" + agg_f["nome"].fillna("Fornecedor") + "</b><br>"
-            + "🏙️ Cidade: " + agg_f["cidade"].fillna("-") + " / " + agg_f["UF"].fillna("-") + "<br>"
-            + "📦 Pedidos: " + agg_f["pedidos"].apply(fmt_int) + "<br>"
-            + "🕗 Pendentes: " + agg_f["pendentes"].apply(fmt_int) + "<br>"
-            + "⛔ Atrasados: " + agg_f["atrasados"].apply(fmt_int) + "<br>"
-            + "💰 Valor: " + agg_f["valor"].apply(fmt_moeda)
+            + "Cidade: " + agg_f["cidade"].fillna("-") + " / " + agg_f["UF"].fillna("-") + "<br>"
+            + "Pedidos: " + agg_f["pedidos"].apply(fmt_int) + "<br>"
+            + "Pendentes: " + agg_f["pendentes"].apply(fmt_int) + "<br>"
+            + "Atrasados: " + agg_f["atrasados"].apply(fmt_int) + "<br>"
+            + "Valor: " + agg_f["valor"].apply(fmt_moeda)
         )
 
         fig2 = px.scatter_mapbox(
@@ -475,7 +475,7 @@ def exibir_mapa(supabase) -> None:
         c1, c2 = st.columns(2)
 
         with c1:
-            st.subheader("🏆 Top Fornecedores")
+            st.subheader("Top Fornecedores")
             pts = dfm[dfm["nome"].notna()].copy()
             top_f = (
                 pts.groupby("nome", dropna=False)
@@ -491,7 +491,7 @@ def exibir_mapa(supabase) -> None:
             st.dataframe(top_f_show, use_container_width=True, hide_index=True)
 
         with c2:
-            st.subheader("🗺️ Top Estados (UF)")
+            st.subheader("Top Estados (UF)")
             est = dfm[dfm["uf_norm"].notna()].copy()
             top_uf = (
                 est.groupby("uf_norm", dropna=False)
@@ -508,7 +508,7 @@ def exibir_mapa(supabase) -> None:
             st.dataframe(top_uf_show, use_container_width=True, hide_index=True)
 
     with tab_export:
-        st.subheader("📄 Exportar base do mapa")
+        st.subheader("Exportar base do mapa")
         st.write("Baixe a base filtrada já enriquecida com fornecedor e UF normalizada.")
 
         export_df = dfm.copy()
@@ -525,7 +525,7 @@ def exibir_mapa(supabase) -> None:
 
         csv = export_df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "⬇️ Baixar CSV (base do mapa)",
+            "Baixar CSV (base do mapa)",
             data=csv,
             file_name="base_mapa_filtrada.csv",
             mime="text/csv",
