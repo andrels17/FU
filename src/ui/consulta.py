@@ -460,7 +460,7 @@ def exibir_consulta_pedidos(_supabase):
     # Topbar (mais limpa)
     topL, topR = st.columns([2.2, 1.3])
     with topL:
-        st.title("🔎 Consultar Pedidos")
+        st.title("Consultar Pedidos")
 
         # Estilo (lista ERP): pills, hover suave, compacto, fade-in
         st.markdown("""
