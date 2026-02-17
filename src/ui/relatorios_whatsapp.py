@@ -161,7 +161,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
     tab_send, tab_link = st.tabs(["Enviar relatório", "Vincular gestores"])
 
-    roles_destino = ["gestor", "buyer", "admin"]
+    roles_destino = ["gestor", "buyer", "admin", "user"]
 
     gestores = _load_gestores(supabase, tenant_id, roles=roles_destino)
     gestores_by_id = {g["user_id"]: g for g in gestores}
