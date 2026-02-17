@@ -491,7 +491,35 @@ def _industrial_sidebar_css() -> None:
                 background: linear-gradient(180deg, rgba(245,158,11,0.10), rgba(255,255,255,0.03)) !important;
             }
 
-            /* Wrapper do ativo */
+            
+            /* Item (alinhado) */
+            .fu-nav .fu-nav-item{
+                position: relative;
+            }
+            .fu-nav .fu-nav-item .stButton > button{
+                /* garante alinhamento perfeito sem coluna de “dot” */
+                padding-left: 16px !important;
+            }
+            .fu-nav .fu-nav-item--active{
+                border-radius: 16px;
+                padding: 4px;
+                background: rgba(245,158,11,0.10);
+                border: 1px solid rgba(245,158,11,0.25);
+                box-shadow: 0 10px 22px rgba(245,158,11,0.10);
+            }
+            .fu-nav .fu-nav-item--active::before{
+                content: "";
+                position: absolute;
+                left: 8px;
+                top: 16px;
+                width: 4px;
+                height: 22px;
+                border-radius: 999px;
+                background: rgba(245,158,11,0.95);
+                box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
+            }
+
+/* Wrapper do ativo */
             .fu-nav .fu-nav-active{
                 border-radius: 16px;
                 padding: 4px;
@@ -1304,29 +1332,24 @@ def main():
                     expanded_gestao = False
 
             def _nav_button_row(page_id: str, group: str) -> None:
+                """Linha de navegação (alinhada). Usa apenas current_page como fonte de verdade."""
                 active = (page_id == st.session_state.current_page)
-                dot_class = "fu-nav-dot fu-nav-dot--active" if active else "fu-nav-dot"
+                wrapper_cls = "fu-nav-item fu-nav-item--active" if active else "fu-nav-item"
 
-                if active:
-                    st.markdown('<div class="fu-nav-active">', unsafe_allow_html=True)
+                st.markdown(f'<div class="{wrapper_cls}">', unsafe_allow_html=True)
 
-                c_dot, c_btn = st.columns([0.10, 0.90])
-                with c_dot:
-                    st.markdown(f'<div class="{dot_class}"></div>', unsafe_allow_html=True)
-                with c_btn:
-                    if st.button(
-                        page_label(page_id, total_alertas),
-                        key=f"nav__{group}__{page_id}",
-                        use_container_width=True,
-                    ):
-                        if page_id != st.session_state.current_page:
-                            st.session_state.current_page = page_id
-                            st.rerun()
+                if st.button(
+                    page_label(page_id, total_alertas),
+                    key=f"nav__{group}__{page_id}",
+                    use_container_width=True,
+                ):
+                    if page_id != st.session_state.current_page:
+                        st.session_state.current_page = page_id
+                        st.rerun()
 
-                if active:
-                    st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
-            # Renderiza expanders + menus (separados), mas com seleção única (current_page)
+# Renderiza expanders + menus (separados), mas com seleção única (current_page)
             with st.expander("Operações", expanded=expanded_ops):
                 if is_ops_page:
                     st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
