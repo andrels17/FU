@@ -494,8 +494,7 @@ def _sidebar_footer(supabase_client) -> None:
             fazer_logout(supabase_anon)
         except Exception:
             pass
-
-            st.rerun()
+        st.rerun()
 
     st.markdown(
         """
@@ -1151,20 +1150,23 @@ def main():
                 if is_gestao_page:
                     st.markdown("</div>", unsafe_allow_html=True)
 
-            # Atualiza página + estado dos expanders (garante seleção única)
+            # Atualiza página + estado dos expanders (evita "ping-pong" entre rádios)
             nova_pagina = None
-            if escolha_ops in opcoes_ops and escolha_ops != st.session_state.current_page:
+
+            # Só permite que o rádio do expander ABERTO dirija a navegação
+            if expanded_ops and (escolha_ops in opcoes_ops) and (escolha_ops != st.session_state.current_page):
                 nova_pagina = escolha_ops
                 st.session_state.exp_ops_open = True
                 st.session_state.exp_gestao_open = False
 
-            if escolha_gestao in opcoes_gestao and escolha_gestao != st.session_state.current_page:
+            if expanded_gestao and (escolha_gestao in opcoes_gestao) and (escolha_gestao != st.session_state.current_page):
                 nova_pagina = escolha_gestao
                 st.session_state.exp_ops_open = False
                 st.session_state.exp_gestao_open = True
 
             if nova_pagina:
                 st.session_state.current_page = nova_pagina
+                st.session_state["_force_menu_sync"] = True
                 st.rerun()
 
         # Página atual (fonte de verdade)
