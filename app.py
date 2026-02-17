@@ -1184,13 +1184,13 @@ def main():
             avatar_url = usuario.get("avatar_url")
 
             # saudação
-            hora = datetime.now().hour
-            if hora < 12:
-                saudacao = "Bom dia"
-            elif hora < 18:
-                saudacao = "Boa tarde"
-            else:
-                saudacao = "Boa noite"
+        hora = datetime.now(ZoneInfo("America/Fortaleza")).hour
+        if hora < 12:
+            saudacao = "Bom dia"
+        elif hora < 18:
+            saudacao = "Boa tarde"
+        else:
+            saudacao = "Boa noite"
 
             # badge por perfil
             if perfil == "admin":
