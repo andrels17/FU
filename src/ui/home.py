@@ -406,7 +406,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             st.markdown(
                 f"""
                 <div class="fu-card">
-                  <p class="fu-kpi-num">{dept_top} possui a maior quantidade de solicitações</p>
+                  <p class="fu-kpi-num">{dept_top}</p>
                   <p class="fu-kpi-lbl">{dept_top} concentra {dept_pct}% dos atrasos</p>
                   <p class="fu-item-desc" style="margin-top:8px;">
                     {dept_top_qtd} de {sum(dept_counts.values())} pedido(s) atrasado(s)
