@@ -2,14 +2,6 @@ import io
 from datetime import datetime, time, timedelta, timezone
 
 import pandas as pd
-
-def _pick_first_col(df: pd.DataFrame, candidates: list[str]):
-    """Retorna o primeiro nome de coluna existente em df a partir de uma lista de candidatos."""
-    for c in candidates:
-        if c in df.columns:
-            return c
-    return None
-
 import streamlit as st
 
 
@@ -143,13 +135,12 @@ def _load_entregues(supabase, tenant_id: str, dt_ini, dt_fim, departamentos=None
     return df
 
 
-def _build_message(d_ini, d_fim, df, deps_sel):
+def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
     """Monta mensagem agrupada por departamento, ordenada por equipamento (sem valores e sem emojis)."""
-    if df is None or df.empty:
-        return f"Relatório de Entregas
-Período: {d_ini} a {d_fim}
+    deps_sel = departamentos_sel  # compatibilidade
 
-Nenhum item entregue no período."
+    if df is None or df.empty:
+        return f"Relatório de Entregas\nPeríodo: {d_ini} a {d_fim}\n\nNenhum item entregue no período."
 
     def pick(cands):
         for c in cands:
@@ -163,7 +154,7 @@ Nenhum item entregue no período."
     col_mat = pick(["cod_material", "material", "codigo_material"])
     col_dep = pick(["departamento"])
 
-    # Ordenação por equipamento (se existir)
+    # ordenar por equipamento se existir
     if col_equip:
         try:
             df = df.sort_values(by=col_equip, kind="mergesort")
@@ -173,25 +164,18 @@ Nenhum item entregue no período."
     total_geral = int(len(df))
 
     cabecalho = (
-        "Relatório de Entregas
-"
-        f"Período: {d_ini} a {d_fim}
-"
-        f"Departamentos: {', '.join(deps_sel) if deps_sel else 'Todos'}
-"
-        f"Total geral de itens: {total_geral}
-
-"
+        "Relatório de Entregas\n"
+        f"Período: {d_ini} a {d_fim}\n"
+        f"Departamentos: {', '.join(deps_sel) if deps_sel else 'Todos'}\n"
+        f"Total geral de itens: {total_geral}\n\n"
     )
 
-    linhas = []
+    linhas: list[str] = []
 
     if col_dep:
-        # groupby preservando ordem de ocorrência
         for dep, grupo in df.groupby(col_dep, sort=False):
             linhas.append(f"Departamento: {dep}")
             linhas.append(f"Total no departamento: {int(len(grupo))}")
-
             for i, (_, row) in enumerate(grupo.iterrows(), start=1):
                 partes = []
                 if col_desc:
@@ -202,29 +186,22 @@ Nenhum item entregue no período."
                     partes.append(f"Eqp: {row.get(col_equip, '')}")
                 if col_mat:
                     partes.append(f"Mat: {row.get(col_mat, '')}")
-
                 linhas.append(f"  {i}. " + " | ".join(partes))
-
-            linhas.append("")  # linha em branco entre departamentos
+            linhas.append("")
     else:
         for i, (_, row) in enumerate(df.iterrows(), start=1):
             partes = []
-            partes.append(str(row.get(col_desc, "")) if col_desc else "")
+            if col_desc:
+                partes.append(str(row.get(col_desc, "")))
             if col_qtd:
                 partes.append(f"Qtd: {row.get(col_qtd, '')}")
             if col_equip:
                 partes.append(f"Eqp: {row.get(col_equip, '')}")
             if col_mat:
                 partes.append(f"Mat: {row.get(col_mat, '')}")
-            linhas.append(f"{i}. " + " | ".join([p for p in partes if p]))
+            linhas.append(f"{i}. " + " | ".join(partes))
 
-    return cabecalho + "
-".join(linhas)
-        f"📦 Entregues — {d_ini.strftime('%d/%m/%Y')} a {d_fim.strftime('%d/%m/%Y')}\n"
-        f"• {total_itens} itens • {total_qtd} unidades\n"
-        f"• Departamentos: {deps_txt}\n"
-    )
-
+    return cabecalho + "\n".join(linhas)
 
 def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
     """
@@ -346,24 +323,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             st.session_state["_rep_dt_fim"] = dt_fim.isoformat()
 
             st.code(texto)
-            # Prévia mais útil (Item / Descrição / Qtde Entregue / Cód. Equipamento / Cód. Material)
-col_desc = _pick_first_col(df, ["descricao", "descrição", "item_descricao", "material_descricao"])
-col_qtd_ent = _pick_first_col(df, ["qtde_entregue", "quantidade_entregue", "qtd_entregue", "quantidade", "qtde"])
-col_cod_equip = _pick_first_col(df, ["cod_equipamento", "codigo_equipamento", "equipamento", "equipamento_codigo"])
-col_cod_mat = _pick_first_col(df, ["cod_material", "codigo_material", "material", "material_codigo", "cod_item"])
-
-cols = [c for c in [col_desc, col_qtd_ent, col_cod_equip, col_cod_mat] if c]
-df_prev = df[cols].copy() if cols else df.copy()
-df_prev.insert(0, "item", range(1, len(df_prev) + 1))
-
-rename_map = {}
-if col_desc: rename_map[col_desc] = "descrição"
-if col_qtd_ent: rename_map[col_qtd_ent] = "qtde entregue"
-if col_cod_equip: rename_map[col_cod_equip] = "cód. equipamento"
-if col_cod_mat: rename_map[col_cod_mat] = "cód. material"
-df_prev = df_prev.rename(columns=rename_map)
-
-st.dataframe(df_prev, use_container_width=True, hide_index=True)
+            st.dataframe(df, use_container_width=True)
 
         if st.button("Enfileirar envios + CSV", use_container_width=True, key="rep_enqueue"):
             df = st.session_state.get("_rep_df")
