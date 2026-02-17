@@ -827,6 +827,7 @@ def main():
 
     alertas = sa.calcular_alertas(df_pedidos, df_fornecedores)
     total_alertas = int(alertas.get("total", 0) or 0)
+    alertas_label = _label_alertas(total_alertas)
     atrasados = _safe_len(alertas.get("pedidos_atrasados"))
     criticos = _safe_len(alertas.get("pedidos_criticos"))
     vencendo = _safe_len(alertas.get("pedidos_vencendo"))
@@ -993,8 +994,6 @@ def main():
                 )
 
             is_admin = st.session_state.usuario.get("perfil") == "admin"
-            alertas_label = _label_alertas(total_alertas)
-
             # ✅ Controle de navegação (seleção única + expander inteligente)
             if "current_page" not in st.session_state:
                 st.session_state.current_page = "🏠 Início"
