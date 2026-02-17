@@ -353,7 +353,7 @@ def _industrial_sidebar_css() -> None:
 
 def _label_alertas(total_alertas: int) -> str:
     if total_alertas and total_alertas > 0:
-        return f"Alertas e Notificações  🔴 ({int(total_alertas)})"
+        return f"Alertas e Notificações"
     return "Alertas e Notificações"
 
 
