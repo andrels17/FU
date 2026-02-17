@@ -89,18 +89,18 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
             """
             /* Sidebar colapsada (modo compacto) */
             section[data-testid="stSidebar"]{
-              width: 78px !important;
-              min-width: 78px !important;
+              width: 86px !important;
+              min-width: 86px !important;
               overflow: hidden !important;
+              contain: layout paint style;
+              will-change: width;
+              backface-visibility: hidden;
+              transform: translateZ(0);
             }
             section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
               padding-top: 10px !important;
               padding-left: 6px !important;
               padding-right: 6px !important;
-            }
-            section[data-testid="stSidebar"]:hover{
-              width: 260px !important;
-              min-width: 260px !important;
             }
             """
         ).strip()
@@ -162,11 +162,15 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           margin: 0 auto;
         }
 
-        /* Sidebar responsiva */
+                /* Sidebar responsiva (performance-first) */
         section[data-testid="stSidebar"]{
-          width: clamp(260px, 20vw, 340px) !important;
-          transition: width .28s ease, transform .28s ease, opacity .28s ease, margin .28s ease, padding .28s ease;
+          width: clamp(260px, 20vw, 320px) !important;
           overflow: hidden;
+          transition: width 160ms ease;
+          contain: layout paint style;
+          will-change: width;
+          backface-visibility: hidden;
+          transform: translateZ(0);
         }
         @media (max-width: 1100px){
           section[data-testid="stSidebar"]{ width: 240px !important; }
@@ -174,6 +178,13 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         @media (max-width: 900px){
           section[data-testid="stSidebar"]{ width: 100% !important; }
         }
+
+        @media (prefers-reduced-motion: reduce){
+          section[data-testid="stSidebar"]{ transition: none !important; }
+          *{ scroll-behavior: auto !important; }
+        }
+
+}
 
         /* Tipografia fluida */
         .fu-title{ font-size: clamp(1.15rem, 1.6vw, 1.55rem) !important; }
@@ -381,7 +392,71 @@ def _industrial_sidebar_css() -> None:
                 margin: 10px 0 8px 0;
                 opacity: .9;
             }
-        </style>
+        
+            /* ===== Menu Operações / Gestão (botões SaaS) ===== */
+            .fu-nav details{
+                background: rgba(255,255,255,0.03);
+                border: 1px solid rgba(255,255,255,0.07);
+                border-radius: 16px;
+                padding: 8px 10px;
+                margin-bottom: 10px;
+            }
+            .fu-nav summary{
+                font-weight: 900;
+                font-size: 0.95rem;
+                opacity: .92;
+            }
+            .fu-nav .fu-nav-group{
+                margin-top: 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .fu-nav .fu-nav-row{
+                display:flex;
+                align-items:center;
+                gap: 10px;
+            }
+            .fu-nav .fu-nav-dot{
+                width: 6px;
+                height: 10px;
+                border-radius: 999px;
+                background: rgba(255,255,255,0.12);
+            }
+            .fu-nav .fu-nav-dot--active{
+                height: 22px;
+                background: rgba(245,158,11,0.95);
+                box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
+            }
+
+            /* Botões do menu (somente dentro da fu-nav) */
+            .fu-nav .stButton > button{
+                width: 100% !important;
+                height: 44px !important;
+                border-radius: 14px !important;
+                padding: 0 14px !important;
+                justify-content: flex-start !important;
+                font-weight: 800 !important;
+                border: 1px solid rgba(255,255,255,0.10) !important;
+                background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)) !important;
+                transition: transform 90ms ease, border-color 120ms ease, background 120ms ease !important;
+            }
+            .fu-nav .stButton > button:hover{
+                transform: translateY(-1px);
+                border-color: rgba(245,158,11,0.28) !important;
+                background: linear-gradient(180deg, rgba(245,158,11,0.10), rgba(255,255,255,0.03)) !important;
+            }
+
+            /* Wrapper do ativo */
+            .fu-nav .fu-nav-active{
+                border-radius: 16px;
+                padding: 4px;
+                background: rgba(245,158,11,0.10);
+                border: 1px solid rgba(245,158,11,0.25);
+                box-shadow: 0 10px 22px rgba(245,158,11,0.10);
+            }
+
+</style>
         """),
         unsafe_allow_html=True,
     )
@@ -593,6 +668,11 @@ def _cached_carregar_pedidos(_supabase, tenant_id):
 @st.cache_data(ttl=120)
 def _cached_carregar_fornecedores(_supabase, tenant_id):
     return carregar_fornecedores(_supabase, tenant_id, incluir_inativos=True)
+
+
+@st.cache_data(ttl=60)
+def _cached_alertas(df_pedidos, df_fornecedores):
+    return sa.calcular_alertas(df_pedidos, df_fornecedores)
 
 
 def main():
@@ -914,7 +994,7 @@ def main():
     with st.spinner("🔄 Carregando fornecedores..."):
         df_fornecedores = _cached_carregar_fornecedores(supabase, tenant_id)
 
-    alertas = sa.calcular_alertas(df_pedidos, df_fornecedores)
+    alertas = _cached_alertas(df_pedidos, df_fornecedores)
     total_alertas = int(alertas.get("total", 0) or 0)
     alertas_label = _label_alertas(total_alertas)
     atrasados = _safe_len(alertas.get("pedidos_atrasados"))
@@ -1132,10 +1212,14 @@ def main():
 
             def _nav_button_row(page_id: str, group: str) -> None:
                 active = (page_id == st.session_state.current_page)
-                dot = '<div class="fu-compact-dot"></div>' if active else '<div class="fu-compact-dot fu-compact-dot--off"></div>'
-                c_dot, c_btn = st.columns([0.12, 0.88])
+                dot_class = "fu-nav-dot fu-nav-dot--active" if active else "fu-nav-dot"
+
+                if active:
+                    st.markdown('<div class="fu-nav-active">', unsafe_allow_html=True)
+
+                c_dot, c_btn = st.columns([0.10, 0.90])
                 with c_dot:
-                    st.markdown(dot, unsafe_allow_html=True)
+                    st.markdown(f'<div class="{dot_class}"></div>', unsafe_allow_html=True)
                 with c_btn:
                     if st.button(
                         page_label(page_id, total_alertas),
@@ -1144,17 +1228,20 @@ def main():
                     ):
                         if page_id != st.session_state.current_page:
                             st.session_state.current_page = page_id
-                            st.session_state.exp_ops_open = (group == "ops")
-                            st.session_state.exp_gestao_open = (group == "gestao")
                             st.rerun()
+
+                if active:
+                    st.markdown("</div>", unsafe_allow_html=True)
 
             # Renderiza expanders + menus (separados), mas com seleção única (current_page)
             with st.expander("Operações", expanded=expanded_ops):
                 if is_ops_page:
                     st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
 
+                st.markdown('<div class="fu-nav-group">', unsafe_allow_html=True)
                 for pid in opcoes_ops:
                     _nav_button_row(pid, "ops")
+                st.markdown('</div>', unsafe_allow_html=True)
 
                 if is_ops_page:
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -1163,11 +1250,15 @@ def main():
                 if is_gestao_page:
                     st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
 
+                st.markdown('<div class="fu-nav-group">', unsafe_allow_html=True)
                 for pid in opcoes_gestao:
                     _nav_button_row(pid, "gestao")
+                st.markdown('</div>', unsafe_allow_html=True)
 
                 if is_gestao_page:
                     st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
 # Página atual (fonte de verdade)
         pagina = st.session_state.current_page
