@@ -136,7 +136,7 @@ def _load_entregues(supabase, tenant_id: str, dt_ini, dt_fim, departamentos=None
 
 
 def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
-    total_itens = int(len(df or []))
+    total_itens = int(len(df)) if df is not None else 0
     if isinstance(df, pd.DataFrame) and (not df.empty) and ("quantidade" in df.columns):
         total_qtd = int(pd.to_numeric(df["quantidade"], errors="coerce").fillna(0).sum())
     else:
