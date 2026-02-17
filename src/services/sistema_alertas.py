@@ -488,10 +488,10 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
             # Ações rápidas (híbrido: operacional + executivo)
             base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}_{idx}"
             with cbtn1:
-                if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
+                if st.button("Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
                     _ir_para_ficha_material_do_alerta(pedido)
             with cbtn2:
-                if st.button("📋 Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
+                if st.button("Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
                     st.session_state["oc_copiada"] = str(pedido.get("nr_oc", "") or "")
                     try:
                         st.toast("OC copiada.", icon="📋")
@@ -509,12 +509,12 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
                 st.markdown(
                 f"""
                 <div class='fu-card' style='border-left: 4px solid #7c3aed;'>
-                    <p class='fu-oc'>🚨 OC: {nr_oc_txt} &nbsp; {status_badge}</p>
+                    <p class='fu-oc'> OC: {nr_oc_txt} &nbsp; {status_badge}</p>
                     <p class='fu-desc'><b>Descrição:</b> {desc_txt}</p>
                     <p class='fu-meta'><b>Fornecedor:</b> {fornecedor_txt}</p>
                     <p class='fu-meta'><b>Departamento:</b> {dept}</p>
                     <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Previsão:</strong> {prev}</p>
-                    <p style='margin: 4px 0; font-size: 13px; color: #7c3aed; font-weight: 600;'><strong>💰 Valor: {formatar_moeda_br(valor)}</strong></p>
+                    <p style='margin: 4px 0; font-size: 13px; color: #7c3aed; font-weight: 600;'><strong>Valor: {formatar_moeda_br(valor)}</strong></p>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -523,10 +523,10 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
             # Ações rápidas (híbrido: operacional + executivo)
             base_key = f"{tipo}_{pedido.get('id','')}_{pedido.get('nr_oc','')}_{idx}"
             with cbtn1:
-                if st.button("🔎 Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
+                if st.button("Ver Ficha", key=f"alerta_ver_ficha_{base_key}"):
                     _ir_para_ficha_material_do_alerta(pedido)
             with cbtn2:
-                if st.button("📋 Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
+                if st.button("Copiar OC", key=f"alerta_copiar_oc_{base_key}"):
                     st.session_state["oc_copiada"] = str(pedido.get("nr_oc", "") or "")
                     try:
                         st.toast("OC copiada.", icon="📋")
@@ -567,7 +567,7 @@ def criar_card_fornecedor(fornecedor: dict, formatar_moeda_br):
         st.markdown(
             f"""
             <div style='border-left: 4px solid {cor}; padding: 12px; margin-bottom: 10px; background-color: {bg_color}; border-radius: 10px;'>
-                <p style='margin: 0; font-size: 14px; color: {cor}; font-weight: 600;'>📉 {nome}</p>
+                <p style='margin: 0; font-size: 14px; color: {cor}; font-weight: 600;'> {nome}</p>
                 <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Nível de Risco:</strong> <span style='color: {cor}; font-weight: 600;'>{nivel}</span></p>
                 <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Taxa de Sucesso:</strong> {taxa:.1f}%</p>
                 <p style='margin: 4px 0; font-size: 13px; color: rgba(229,231,235,0.92);'><strong>Total de Pedidos:</strong> {total}</p>
@@ -604,7 +604,7 @@ def _ir_para_ficha_material_do_alerta(pedido: dict) -> None:
         st.session_state["_force_menu_sync"] = True
         return
     except Exception as e:
-        st.warning(f"⚠️ Não foi possível abrir a ficha do material: {e}")
+        st.warning(f"Não foi possível abrir a ficha do material: {e}")
 
 def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
@@ -735,7 +735,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         return f"""<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:{bg};border:1px solid {bd};color:{fg};font-weight:800;font-size:12px;">{label}</span>"""
 
 
-    st.markdown("<div class='fu-header'><h1>🔔 Central de Notificações e Alertas</h1></div>", unsafe_allow_html=True)
+    st.markdown("<div class='fu-header'><h1>Central de Notificações e Alertas</h1></div>", unsafe_allow_html=True)
 
     # CSS (PRECISA ficar dentro da função)
     st.markdown(
@@ -939,7 +939,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
         with colg4:
             st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;text-align:right;'>Ações<br><span style='opacity:.65;font-size:11px;'>Limpa filtros</span></div>", unsafe_allow_html=True)
-            if st.button("🧹 Limpar", key="alertas_global_clear", use_container_width=True):
+            if st.button("Limpar", key="alertas_global_clear", use_container_width=True):
                 st.session_state["__clear_global_filters"] = True
 
     def _filtrar_pedidos(lista: list[dict]) -> list[dict]:
@@ -999,9 +999,9 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         st.markdown(
             f"""
             <div class="fu-kpi">
-              <p class="fu-kpi-title">⚠️ Atrasados</p>
+              <p class="fu-kpi-title"> Atrasados</p>
               <p class="fu-kpi-value">{a}</p>
-              <p class="fu-kpi-sub">{'⏰ Quanto maior, pior' if a else '✅ Tudo em dia'}</p>
+              <p class="fu-kpi-sub">{'Quanto maior, pior' if a else 'Tudo em dia'}</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1011,9 +1011,9 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         st.markdown(
             f"""
             <div class="fu-kpi">
-              <p class="fu-kpi-title">⏰ Vencendo em 3 dias</p>
+              <p class="fu-kpi-title">Vencendo em 3 dias</p>
               <p class="fu-kpi-value">{v}</p>
-              <p class="fu-kpi-sub">{'⚡ Atenção' if v else '✅ Sem urgências'}</p>
+              <p class="fu-kpi-sub">{'Atenção' if v else 'Sem urgências'}</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1023,9 +1023,9 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         st.markdown(
             f"""
             <div class="fu-kpi">
-              <p class="fu-kpi-title">🚨 Pedidos Críticos</p>
+              <p class="fu-kpi-title">Pedidos Críticos</p>
               <p class="fu-kpi-value">{c}</p>
-              <p class="fu-kpi-sub">{'💰 Alto valor / urgente' if c else '✅ Ok'}</p>
+              <p class="fu-kpi-sub">{'Alto valor / urgente' if c else 'Ok'}</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1035,9 +1035,9 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         st.markdown(
             f"""
             <div class="fu-kpi">
-              <p class="fu-kpi-title">📦 Fornecedores Problema</p>
+              <p class="fu-kpi-title">Fornecedores Problema</p>
               <p class="fu-kpi-value">{f}</p>
-              <p class="fu-kpi-sub">{'📉 Baixa performance' if f else '✅ Ok'}</p>
+              <p class="fu-kpi-sub">{'Baixa performance' if f else 'Ok'}</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1094,16 +1094,16 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     # Tabs
     tab1, tab2, tab3, tab4 = st.tabs(
         [
-            f"⚠️ Atrasados ({len(alertas['pedidos_atrasados'])})",
-            f"⏰ Vencendo ({len(alertas['pedidos_vencendo'])})",
-            f"🚨 Críticos ({len(alertas['pedidos_criticos'])})",
-            f"📉 Fornecedores ({len(alertas['fornecedores_baixa_performance'])})",
+            f"Atrasados ({len(alertas['pedidos_atrasados'])})",
+            f"Vencendo ({len(alertas['pedidos_vencendo'])})",
+            f"Críticos ({len(alertas['pedidos_criticos'])})",
+            f"Fornecedores ({len(alertas['fornecedores_baixa_performance'])})",
         ]
     )
 
     # TAB 1: Pedidos Atrasados
     with tab1:
-        st.subheader("⚠️ Pedidos Atrasados")
+        st.subheader("Pedidos Atrasados")
 
         pedidos_base = _apply_global_pedidos(alertas.get("pedidos_atrasados", []))
 
@@ -1120,7 +1120,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                         .head(10)
                         .reset_index()
                     )
-                    with st.expander("🏷️ Top departamentos com atrasos", expanded=False):
+                    with st.expander("Top departamentos com atrasos", expanded=False):
                         st.dataframe(rank, use_container_width=True, hide_index=True)
             except Exception:
                 pass
@@ -1177,11 +1177,11 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             with t6:
                 cA, cB, cC = st.columns([2.6, 1.6, 1.8])
                 with cA:
-                    marcar_pagina = st.button("✅ Sel. pág.", key="tab_atrasados_sel_page", use_container_width=True)
+                    marcar_pagina = st.button("Sel. pág.", key="tab_atrasados_sel_page", use_container_width=True)
                 with cB:
-                    limpar_sel = st.button("🧹 Limpar", key="tab_atrasados_clear_sel", use_container_width=True)
+                    limpar_sel = st.button("Limpar", key="tab_atrasados_clear_sel", use_container_width=True)
                 with cC:
-                    aplicar_lote = st.button("⚡ Aplicar", key="tab_atrasados_apply_bulk", use_container_width=True)
+                    aplicar_lote = st.button("Aplicar", key="tab_atrasados_apply_bulk", use_container_width=True)
 
             # Paginação (estado)
             total = len(pedidos_filtrados)
@@ -1217,19 +1217,19 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                         set_alert_status(_aid, bulk_status)
 
             if pagina_itens:
-                st.warning("⚠️ Pedidos de alto valor com previsão de entrega próxima")
+                st.warning("Pedidos de alto valor com previsão de entrega próxima")
                 
                 for i, pedido in enumerate(pagina_itens):
                     aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
                     pedido['id'] = aid
                     criar_card_pedido(pedido, "critico", formatar_moeda_br, idx=i, status=get_alert_status(aid))
             else:
-                st.info("📭 Nenhum pedido crítico corresponde aos filtros selecionados")
+                st.info("Nenhum pedido crítico corresponde aos filtros selecionados")
         else:
-            st.success("✅ Nenhum pedido crítico no momento")
+            st.success("Nenhum pedido crítico no momento")
 
     with tab2:
-        st.subheader("⏰ Pedidos Vencendo nos Próximos 3 Dias")
+        st.subheader("Pedidos Vencendo nos Próximos 3 Dias")
 
         pedidos_base = _apply_global_pedidos(alertas.get("pedidos_vencendo", []))
 
@@ -1310,7 +1310,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             end_i = start_i + per_page
             pagina_itens = pedidos_filtrados[start_i:end_i]
 
-            st.caption(f"📄 Página {page}/{total_pages} — exibindo {len(pagina_itens)} de {total}")
+            st.caption(f"Página {page}/{total_pages} — exibindo {len(pagina_itens)} de {total}")
 
             if marcar_pagina or limpar_sel:
                 for _i, _p in enumerate(pagina_itens):
@@ -1333,12 +1333,12 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                     pedido['id'] = aid
                     criar_card_pedido(pedido, "vencendo", formatar_moeda_br, idx=i, status=get_alert_status(aid))
             else:
-                st.info("📭 Nenhum pedido vencendo corresponde aos filtros selecionados")
+                st.info("Nenhum pedido vencendo corresponde aos filtros selecionados")
         else:
-            st.info("📭 Nenhum pedido vencendo nos próximos 3 dias")
+            st.info("Nenhum pedido vencendo nos próximos 3 dias")
 
     with tab3:
-        st.subheader("🚨 Pedidos Críticos (Alto Valor + Urgente)")
+        st.subheader("Pedidos Críticos (Alto Valor + Urgente)")
 
         pedidos_base = _apply_global_pedidos(alertas.get('pedidos_criticos', []))
 
@@ -1377,7 +1377,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get('fornecedor', 'N/A')) in fornecedor_crit_filtro]
             
             # Mostrar contador
-            st.caption(f"📊 Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos críticos")
+            st.caption(f"Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos críticos")
 
                         # Toolbar (paginação + lote) — compacto
             t1, t2, t3, t4, t5, t6 = st.columns([2, 2, 2, 2, 3, 5])
@@ -1416,7 +1416,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             end_i = start_i + per_page
             pagina_itens = pedidos_filtrados[start_i:end_i]
 
-            st.caption(f"📄 Página {page}/{total_pages} — exibindo {len(pagina_itens)} de {total}")
+            st.caption(f"Página {page}/{total_pages} — exibindo {len(pagina_itens)} de {total}")
 
             if marcar_pagina or limpar_sel:
                 for _i, _p in enumerate(pagina_itens):
@@ -1434,19 +1434,19 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                         set_alert_status(_aid, bulk_status)
 
             if pagina_itens:
-                st.warning("⚠️ Pedidos de alto valor com previsão de entrega próxima")
+                st.warning("Pedidos de alto valor com previsão de entrega próxima")
                 
                 for i, pedido in enumerate(pagina_itens):
                     aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
                     pedido['id'] = aid
                     criar_card_pedido(pedido, "critico", formatar_moeda_br, idx=i, status=get_alert_status(aid))
             else:
-                st.info("📭 Nenhum pedido crítico corresponde aos filtros selecionados")
+                st.info("Nenhum pedido crítico corresponde aos filtros selecionados")
         else:
-            st.success("✅ Nenhum pedido crítico no momento")
+            st.success("Nenhum pedido crítico no momento")
 
     with tab4:
-        st.subheader("📉 Fornecedores com Baixa Performance")
+        st.subheader("Fornecedores com Baixa Performance")
 
         fornecedores_base = _apply_global_fornecedores(alertas.get('fornecedores_baixa_performance', []))
 
@@ -1516,14 +1516,14 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 fornecedores_filtrados = sorted(fornecedores_filtrados, key=lambda x: x['total_pedidos'], reverse=True)
             
             # Mostrar contador
-            st.caption(f"📊 Mostrando {len(fornecedores_filtrados)} de {len(fornecedores_base)} (após filtro global) fornecedores")
+            st.caption(f"Mostrando {len(fornecedores_filtrados)} de {len(fornecedores_base)} (após filtro global) fornecedores")
             
             if fornecedores_filtrados:
-                st.warning("⚠️ Fornecedores com taxa de sucesso abaixo de 70%")
+                st.warning("Fornecedores com taxa de sucesso abaixo de 70%")
                 
                 for fornecedor in fornecedores_filtrados:
                     criar_card_fornecedor(fornecedor, formatar_moeda_br)
             else:
-                st.info("📭 Nenhum fornecedor corresponde aos filtros selecionados")
+                st.info("Nenhum fornecedor corresponde aos filtros selecionados")
         else:
-            st.success("✅ Todos os fornecedores com boa performance!")
+            st.success("Todos os fornecedores com boa performance!")
