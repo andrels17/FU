@@ -261,13 +261,13 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
     st.markdown('<div class="fu-wrap">', unsafe_allow_html=True)
 
     # HERO
-    empresa_txt = f"{empresa_nome}" if empresa_nome else "Multiempresa"
+    empresa_txt = f" {empresa_nome}" if empresa_nome else " Multiempresa"
     st.markdown(
         f"""
         <div class="fu-hero">
           <div class="fu-hero-top">
             <div>
-              <h2 class="fu-title">{saudacao}, {usuario_nome}!</h2>
+              <h2 class="fu-title"> {saudacao}, {usuario_nome}!</h2>
               <p class="fu-sub">
                 Visão geral do seu dia no Follow-up.
                 <span style="opacity:.92;"><b>{total_pontos}</b></span> ponto(s) de atenção entre atrasos, críticos e vencimentos.
@@ -286,7 +286,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         <div class="fu-kpi-bar">
           <div class="fu-kpi-chip">
             <div class="fu-kpi-left">
-              <div class="fu-kpi-ico">!</div>
+              <div class="fu-kpi-ico">⚠️</div>
               <p class="fu-kpi-label">Pedidos atrasados</p>
             </div>
             <p class="fu-kpi-value">{atrasados}</p>
@@ -294,7 +294,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
 
           <div class="fu-kpi-chip">
             <div class="fu-kpi-left">
-              <div class="fu-kpi-ico">!</div>
+              <div class="fu-kpi-ico">🚨</div>
               <p class="fu-kpi-label">Pedidos críticos</p>
             </div>
             <p class="fu-kpi-value">{criticos}</p>
@@ -302,7 +302,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
 
           <div class="fu-kpi-chip">
             <div class="fu-kpi-left">
-              <div class="fu-kpi-ico">!</div>
+              <div class="fu-kpi-ico">⏰</div>
               <p class="fu-kpi-label">Vencendo / próximos</p>
             </div>
             <p class="fu-kpi-value">{vencendo}</p>
@@ -383,14 +383,14 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
     except Exception:
         vencendo_48h = 0
 
-    st.markdown('<div class="fu-section-title">Insights</div>', unsafe_allow_html=True)
+    st.markdown('<div class="fu-section-title">POntos de Atenção</div>', unsafe_allow_html=True)
     i1, i2, i3 = st.columns(3)
 
     with i1:
         st.markdown(
             f"""
             <div class="fu-card">
-              <p class="fu-kpi-num">💰 R$ {_moeda_br(valor_risco_total)}</p>
+              <p class="fu-kpi-num"> R$ {_moeda_br(valor_risco_total)}</p>
               <p class="fu-kpi-lbl">Risco financeiro (críticos + atrasados)</p>
               <p class="fu-item-desc" style="margin-top:8px;">
                 Críticos: <b>R$ {_moeda_br(valor_critico)}</b> •
@@ -406,7 +406,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             st.markdown(
                 f"""
                 <div class="fu-card">
-                  <p class="fu-kpi-num">🏭 {dept_pct}%</p>
+                  <p class="fu-kpi-num"> {dept_pct}%</p>
                   <p class="fu-kpi-lbl">{dept_top} concentra {dept_pct}% dos atrasos</p>
                   <p class="fu-item-desc" style="margin-top:8px;">
                     {dept_top_qtd} de {sum(dept_counts.values())} pedido(s) atrasado(s)
@@ -419,7 +419,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             st.markdown(
                 """
                 <div class="fu-card">
-                  <p class="fu-kpi-num">🏭 —</p>
+                  <p class="fu-kpi-num"> —</p>
                   <p class="fu-kpi-lbl">Sem atrasos para calcular concentração</p>
                   <p class="fu-item-desc" style="margin-top:8px;">Quando houver atrasos, mostramos o depto dominante.</p>
                 </div>
@@ -432,7 +432,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             st.markdown(
                 f"""
                 <div class="fu-card">
-                  <p class="fu-kpi-num">🏢 {forn_top}</p>
+                  <p class="fu-kpi-num"> {forn_top}</p>
                   <p class="fu-kpi-lbl">Fornecedor com maior valor em risco</p>
                   <p class="fu-item-desc" style="margin-top:8px;">
                     Em risco: <b>R$ {_moeda_br(forn_top_valor)}</b> • Maior atraso: <b>{maior_atraso} dia(s)</b>
@@ -445,7 +445,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             st.markdown(
                 f"""
                 <div class="fu-card">
-                  <p class="fu-kpi-num">✅ OK</p>
+                  <p class="fu-kpi-num"> OK</p>
                   <p class="fu-kpi-lbl">Sem valor em risco relevante agora</p>
                   <p class="fu-item-desc" style="margin-top:8px;">
                     Vencendo em 48h: <b>{vencendo_48h}</b>
@@ -456,18 +456,18 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             )
 
     if vencendo_48h > 0:
-        st.info(f"Atenção: {vencendo_48h} pedido(s) vencendo em até 48h. Pode valer um follow-up preventivo.")
+        st.info(f" Atenção: {vencendo_48h} pedido(s) vencendo em até 48h. Pode valer um follow-up preventivo.")
     elif maior_atraso >= 10:
-        st.warning(f"Maior atraso observado: {maior_atraso} dia(s). Recomendo priorizar tratativa com fornecedor.")
+        st.warning(f" Maior atraso observado: {maior_atraso} dia(s). Recomendo priorizar tratativa com fornecedor.")
 
     # -----------------------------
     # 🎯 Prioridades do dia
     # -----------------------------
-    st.markdown('<div class="fu-section-title">Prioridades do dia</div>', unsafe_allow_html=True)
+    st.markdown('<div class="fu-section-title"> Prioridades do dia</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
 
     with c1:
-        st.markdown('<div class="fu-mini"><h4>🚨 Críticos (Top 5)</h4>', unsafe_allow_html=True)
+        st.markdown('<div class="fu-mini"><h4> Críticos (Top 5)</h4>', unsafe_allow_html=True)
         if criticos_top:
             for p in _top_n(criticos_top, 5):
                 nr = _safe_str((p or {}).get("nr_oc"))
@@ -491,7 +491,7 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c2:
-        st.markdown('<div class="fu-mini"><h4>⚠️ Atrasados (Top 5)</h4>', unsafe_allow_html=True)
+        st.markdown('<div class="fu-mini"><h4> Atrasados (Top 5)</h4>', unsafe_allow_html=True)
         if atrasados_top:
             for p in _top_n(atrasados_top, 5):
                 nr = _safe_str((p or {}).get("nr_oc"))
@@ -511,11 +511,11 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
                     unsafe_allow_html=True,
                 )
         else:
-            st.caption("✅ Sem atrasos agora.")
+            st.caption(" Sem atrasos agora.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c3:
-        st.markdown('<div class="fu-mini"><h4>⏰ Vencendo (Top 5)</h4>', unsafe_allow_html=True)
+        st.markdown('<div class="fu-mini"><h4> Vencendo (Top 5)</h4>', unsafe_allow_html=True)
         if vencendo_top:
             for p in _top_n(vencendo_top, 5):
                 nr = _safe_str((p or {}).get("nr_oc"))
@@ -535,27 +535,27 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
                     unsafe_allow_html=True,
                 )
         else:
-            st.caption("✅ Sem vencimentos próximos.")
+            st.caption(" Sem vencimentos próximos.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     # -----------------------------
     # ⚡ Ações rápidas
     # -----------------------------
-    st.markdown('<div class="fu-section-title">Ações rápidas</div>', unsafe_allow_html=True)
+    st.markdown('<div class="fu-section-title"> Ações rápidas</div>', unsafe_allow_html=True)
     a1, a2, a3, a4 = st.columns(4)
 
     with a1:
         if st.button("Dashboard", use_container_width=True):
-            _go("dashboard")
+            _go("Dashboard")
     with a2:
         if st.button("Alertas", use_container_width=True):
-            _go("alerts")
+            _go("🔔 Alertas e Notificações")
     with a3:
         if st.button("Novo pedido", use_container_width=True):
-            _go("orders_manage")
+            _go("Gestão de Pedidos")
     with a4:
         if st.button("Mapa", use_container_width=True):
-            _go("map")
+            _go("Mapa Geográfico")
 
     st.markdown('<p class="fu-muted">Dica: use a busca rápida na barra lateral para navegar instantaneamente.</p>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)  # end wrap
