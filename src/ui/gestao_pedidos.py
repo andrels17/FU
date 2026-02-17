@@ -96,7 +96,7 @@ def _download_df(df: pd.DataFrame, nome: str) -> None:
         return
     csv_bytes = df.to_csv(index=False, sep=";", decimal=",", encoding="utf-8-sig").encode("utf-8-sig")
     st.download_button(
-        "⬇️ Baixar CSV",
+        "Baixar CSV",
         data=csv_bytes,
         file_name=nome,
         mime="text/csv",
@@ -349,12 +349,12 @@ def exibir_gestao_pedidos(_supabase):
     """Exibe página de gestão (criar/editar) pedidos - Apenas Admin"""
 
     if st.session_state.usuario["perfil"] != "admin":
-        st.error("⛔ Acesso negado. Apenas administradores podem gerenciar pedidos.")
+        st.error("Acesso negado. Apenas administradores podem gerenciar pedidos.")
         return
 
-    st.title("✏️ Gestão de Pedidos")
+    st.title("Gestão de Pedidos")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["➕ Novo Pedido", "📤 Upload em Massa", "📝 Editar Pedido", "⚡ Ações em Massa"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Novo Pedido", "Upload em Massa", "Editar Pedido", "Ações em Massa"])
 
     # ============================================
     # TAB 1: NOVO PEDIDO
@@ -401,7 +401,7 @@ def exibir_gestao_pedidos(_supabase):
                     forn_opts, _ = _build_fornecedor_options(stamp_f, df_fornecedores)
                     fornecedor_selecionado = st.selectbox("Fornecedor", forn_opts)
                 else:
-                    st.warning("⚠️ Nenhum fornecedor cadastrado")
+                    st.warning("Nenhum fornecedor cadastrado")
                     fornecedor_selecionado = ""
 
             col3, col4 = st.columns(2)
@@ -416,13 +416,13 @@ def exibir_gestao_pedidos(_supabase):
                 valor_total = st.number_input("Valor Total (R$)", min_value=0.0, step=0.01)
                 observacoes = st.text_area("Observações")
 
-            submitted = st.form_submit_button("💾 Salvar Pedido", use_container_width=True)
+            submitted = st.form_submit_button("Salvar Pedido", use_container_width=True)
 
             if submitted:
                 if not descricao:
-                    st.error("⚠️ Descrição é obrigatória")
+                    st.error("Descrição é obrigatória")
                 elif qtde_solicitada <= 0:
-                    st.error("⚠️ Quantidade deve ser maior que zero")
+                    st.error("Quantidade deve ser maior que zero")
                 else:
                     fornecedor_id = None
                     if fornecedor_selecionado and not df_fornecedores.empty:
@@ -526,18 +526,16 @@ def exibir_gestao_pedidos(_supabase):
     # TAB 2: UPLOAD EM MASSA
     # ============================================
     with tab2:
-        st.subheader("📤 Importar Pedidos em Massa")
+        st.subheader("Importar Pedidos em Massa")
 
         st.info(
             """
-📋 **Instruções:**
+**Instruções:**
 1. Baixe o template abaixo
 2. Preencha com os dados dos pedidos
 3. Faça upload do arquivo preenchido
 4. Revise os dados antes de importar
 
-💡 **Dica:** Se o fornecedor não existir, o sistema pode criá-lo automaticamente!
-"""
         )
 
         template_data = {
@@ -563,19 +561,19 @@ def exibir_gestao_pedidos(_supabase):
         csv_template = df_template.to_csv(index=False, encoding="utf-8-sig", sep=";", decimal=",")
 
         st.download_button(
-            label="📥 Baixar Template",
+            label="Baixar Template",
             data=csv_template,
             file_name="template_importacao_pedidos.csv",
             mime="text/csv",
         )
 
         st.markdown("---")
-        with st.expander("🗑️ Ferramentas de Limpeza de Banco", expanded=False):
-            st.warning("⚠️ **ATENÇÃO:** Esta ferramenta permite apagar dados. Use com extremo cuidado!")
+        with st.expander("Ferramentas de Limpeza de Banco", expanded=False):
+            st.warning("**ATENÇÃO:** Esta ferramenta permite apagar dados. Use com extremo cuidado!")
 
             tenant_id = st.session_state.get("tenant_id")
             if not tenant_id:
-                st.error("❌ Não foi possível identificar a empresa (tenant). Faça login novamente ou selecione uma empresa.")
+                st.error("Não foi possível identificar a empresa (tenant). Faça login novamente ou selecione uma empresa.")
             else:
                 st.markdown(
                     """
@@ -634,7 +632,7 @@ def exibir_gestao_pedidos(_supabase):
                     )
 
                 st.markdown("---")
-                st.subheader("📦 Backup antes de apagar")
+                st.subheader("Backup antes de apagar")
                 fazer_backup = st.checkbox("Gerar backup CSV antes de apagar (recomendado)", value=True)
                 st.caption("O backup é gerado somente com os registros que serão apagados (empresa + filtros).")
 
@@ -652,7 +650,7 @@ def exibir_gestao_pedidos(_supabase):
 
                 colp1, colp2 = st.columns([1, 1])
                 with colp1:
-                    if st.button("🔎 Pré-visualizar (contagem)", use_container_width=True):
+                    if st.button("Pré-visualizar (contagem)", use_container_width=True):
                         try:
                             res = _query_pedidos_para_limpeza()
                             dados = res.data or []
@@ -660,7 +658,7 @@ def exibir_gestao_pedidos(_supabase):
                             st.session_state["limpeza_preview_count"] = len(dados)
                             st.success(f"Encontrados **{len(dados)}** pedidos para apagar.")
                         except Exception as e_prev:
-                            st.error(f"❌ Erro ao pré-visualizar: {e_prev}")
+                            st.error(f"Erro ao pré-visualizar: {e_prev}")
 
                 with colp2:
                     if fazer_backup:
@@ -670,37 +668,37 @@ def exibir_gestao_pedidos(_supabase):
                                 df_bkp = pd.DataFrame(dados)
                                 csv_bkp = df_bkp.to_csv(index=False, sep=";", encoding="utf-8-sig").encode("utf-8-sig")
                                 st.download_button(
-                                    "⬇️ Baixar backup (CSV)",
+                                    "Baixar backup (CSV)",
                                     data=csv_bkp,
                                     file_name=f"backup_pedidos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                                     mime="text/csv",
                                     use_container_width=True,
                                 )
                             except Exception as e_bkp:
-                                st.error(f"❌ Não foi possível gerar o backup: {e_bkp}")
+                                st.error(f"Não foi possível gerar o backup: {e_bkp}")
                         else:
                             st.info("Faça a pré-visualização para habilitar o backup.")
 
                 st.markdown("---")
-                st.subheader("🧨 Executar limpeza")
+                st.subheader("Executar limpeza")
                 confirm_risco = st.checkbox("Confirmo que entendo os riscos", value=False)
                 texto_conf = st.text_input("Digite **CONFIRMAR LIMPEZA** para liberar o botão:", value="")
                 pode_apagar = confirm_risco and (texto_conf.strip() == "CONFIRMAR LIMPEZA")
 
                 if fazer_backup and not st.session_state.get("limpeza_preview_rows"):
-                    st.warning("⚠️ Para maior segurança, faça a **pré-visualização** antes de apagar (e baixe o backup).")
+                    st.warning("Para maior segurança, faça a **pré-visualização** antes de apagar (e baixe o backup).")
                     pode_apagar = False
 
-                if st.button("🗑️ APAGAR AGORA", type="primary", use_container_width=True, disabled=not pode_apagar):
+                if st.button("APAGAR AGORA", type="primary", use_container_width=True, disabled=not pode_apagar):
                     try:
-                        with st.spinner("🗑️ Apagando registros..."):
+                        with st.spinner("Apagando registros..."):
                             res = _query_pedidos_para_limpeza()
                             rows = res.data or []
                             ids = [str(r.get("id")) for r in rows if r.get("id")]
                             total = len(ids)
 
                             if total == 0:
-                                st.info("ℹ️ Nada para apagar com os filtros atuais.")
+                                st.info("Nada para apagar com os filtros atuais.")
                             else:
                                 # Tenta apagar tabelas dependentes (se existirem)
                                 for tb in ["anexos", "historico_pedidos", "historico"]:
@@ -733,12 +731,12 @@ def exibir_gestao_pedidos(_supabase):
                                 except Exception:
                                     pass
 
-                                st.success(f"✅ Limpeza concluída! **{total}** pedidos removidos.")
+                                st.success(f"Limpeza concluída! **{total}** pedidos removidos.")
                                 st.session_state.pop("limpeza_preview_rows", None)
                                 st.session_state.pop("limpeza_preview_count", None)
                                 st.rerun()
                     except Exception as e_limpeza:
-                        st.error(f"❌ Erro ao limpar banco: {e_limpeza}")
+                        st.error(f"Erro ao limpar banco: {e_limpeza}")
                         st.error("Por favor, tente novamente ou contate o administrador.")
 
         st.markdown("---")
@@ -769,9 +767,9 @@ def exibir_gestao_pedidos(_supabase):
                 else:
                     df_upload = pd.read_excel(arquivo_upload)
 
-                st.success(f"✅ Arquivo carregado: {len(df_upload)} registros encontrados")
+                st.success(f"Arquivo carregado: {len(df_upload)} registros encontrados")
 
-                st.subheader("👀 Preview dos Dados")
+                st.subheader("Preview dos Dados")
                 st.dataframe(df_upload.head(10), use_container_width=True)
 
                 col1, col2, col3, col4 = st.columns(4)
@@ -779,11 +777,11 @@ def exibir_gestao_pedidos(_supabase):
                 with col1:
                     st.markdown("**Modo:** Importar / Sincronizar (UPSERT automático por OC → Solicitação)")
                     atualizacao_conservadora = st.checkbox(
-                        "🛡️ Atualização conservadora (recomendado)",
+                        "Atualização conservadora (recomendado)",
                         value=True,
                         help="Atualiza apenas status/datas/quantidades/valor/observações. Desmarque para atualizar todos os campos recebidos.",
                     )
-                    pular_duplicados = st.checkbox("⛔ Pular se já existir (OC/SOL)", value=False)
+                    pular_duplicados = st.checkbox("Pular se já existir (OC/SOL)", value=False)
 
                 with col2:
                     criar_fornecedores = st.checkbox(
@@ -794,22 +792,22 @@ def exibir_gestao_pedidos(_supabase):
 
                 with col3:
                     modo_simulacao = st.checkbox(
-                        "🔎 Modo simulação",
+                        "Modo simulação",
                         value=False,
                         help="Valida e mostra o resumo sem inserir/atualizar registros.",
                     )
 
                 with col4:
                     limpar_antes = st.checkbox(
-                        "🗑️ Limpar banco antes da importação",
+                        "Limpar banco antes da importação",
                         value=False,
-                        help="⚠️ Remove todos os pedidos existentes ANTES de importar os novos dados.",
+                        help="Remove todos os pedidos existentes ANTES de importar os novos dados.",
                         key="limpar_antes_upload"
                     )
 
                 if limpar_antes:
                     st.error(
-                        "🚨 **ATENÇÃO CRÍTICA:** Ao marcar esta opção, TODOS os pedidos existentes "
+                        "**ATENÇÃO CRÍTICA:** Ao marcar esta opção, TODOS os pedidos existentes "
                         "serão **PERMANENTEMENTE DELETADOS** antes da importação dos novos dados. "
                         "Esta ação **NÃO PODE SER DESFEITA**!"
                     )
@@ -821,7 +819,7 @@ def exibir_gestao_pedidos(_supabase):
                     )
                     
                     if confirmar_delecao != "LIMPAR":
-                        st.warning("⚠️ Você precisa digitar 'LIMPAR' para habilitar a importação com limpeza prévia.")
+                        st.warning("Você precisa digitar 'LIMPAR' para habilitar a importação com limpeza prévia.")
                         # Desabilitar o botão de importação se não confirmou
                         if 'pode_importar_com_limpeza' in st.session_state:
                             del st.session_state['pode_importar_com_limpeza']
@@ -830,23 +828,20 @@ def exibir_gestao_pedidos(_supabase):
 
                 if limpar_antes:
                     st.warning(
-                        "⚠️ **ATENÇÃO:** Todos os pedidos existentes serão **deletados** antes da importação. "
+                        "**ATENÇÃO:** Todos os pedidos existentes serão **deletados** antes da importação. "
                         "Esta ação não pode ser desfeita!"
                     )
                 
                 
-                # ----------------------------
-                # Validação + Prévia + Duplicidade
-                # ----------------------------
                 df_norm, df_erros = _validate_upload_df(df_upload)
 
                 if not df_erros.empty:
-                    st.error(f"❌ Foram encontrados {len(df_erros)} erros no arquivo.")
+                    st.error(f"Foram encontrados {len(df_erros)} erros no arquivo.")
                     st.dataframe(df_erros, use_container_width=True, height=260)
                     _download_df(df_erros, "erros_validacao_importacao.csv")
                     st.stop()
                 else:
-                    st.success("✅ Validação OK (sem erros).")
+                    st.success("Validação OK (sem erros).")
 
                 # Checagem de duplicidade por nr_oc (mesmo no modo 'Adicionar')
                 duplicados_oc = 0
@@ -870,7 +865,7 @@ def exibir_gestao_pedidos(_supabase):
 
                 if duplicados_oc > 0:
                     st.warning(
-                        f"⚠️ Encontradas **{duplicados_oc}** OCs do arquivo que já existem no banco. "
+                        f"Encontradas **{duplicados_oc}** OCs do arquivo que já existem no banco. "
                         f"Se você importar como **Adicionar**, pode duplicar registros."
                     )
 
@@ -887,7 +882,7 @@ def exibir_gestao_pedidos(_supabase):
                 cprev4.metric("Previsão pular", int(pula_prev))
 
                 if modo_simulacao:
-                    st.info("🔎 Modo simulação ativado: nada será gravado no banco.")
+                    st.info("Modo simulação ativado: nada será gravado no banco.")
                     st.dataframe(df_norm.head(30), use_container_width=True, height=320)
                     st.stop()
 
@@ -897,13 +892,13 @@ def exibir_gestao_pedidos(_supabase):
                     pode_importar = True  # se não vai limpar, pode importar normalmente
                 
                 if st.button(
-                    "🚀 Importar Dados",
+                    "Importar Dados",
                     type="primary",
                     use_container_width=True,
                     disabled=not pode_importar,
                 ):
                     if limpar_antes and not pode_importar:
-                        st.error("⚠️ Confirme a limpeza do banco digitando 'LIMPAR' antes de importar.")
+                        st.error("Confirme a limpeza do banco digitando 'LIMPAR' antes de importar.")
                         st.stop()
                     
                     with st.spinner("Processando importação..."):
@@ -916,7 +911,7 @@ def exibir_gestao_pedidos(_supabase):
                         # podem vir NULL). Também impede o erro clássico de tenant_id = user_id.
                         if not tenant_id:
                             st.error(
-                                "❌ tenant_id não definido na sessão. Faça login/seleciona a empresa novamente."
+                                "tenant_id não definido na sessão. Faça login/seleciona a empresa novamente."
                             )
                             st.stop()
                         tenant_id = str(tenant_id)
@@ -924,7 +919,7 @@ def exibir_gestao_pedidos(_supabase):
                         uid = str((st.session_state.get("usuario") or {}).get("id") or "")
                         if uid and tenant_id == uid:
                             st.error(
-                                "❌ ERRO DE CONFIGURAÇÃO: tenant_id está igual ao user_id. "
+                                "ERRO DE CONFIGURAÇÃO: tenant_id está igual ao user_id. "
                                 "Isso corrompe o multiempresa. Verifique onde você seta st.session_state['tenant_id']."
                             )
                             st.stop()
@@ -936,7 +931,7 @@ def exibir_gestao_pedidos(_supabase):
                             obrig = ["descricao", "qtde_solicitada", "departamento", "status"]
                             faltantes = [c for c in obrig if c not in df_upload.columns]
                             if faltantes:
-                                st.error(f"❌ Colunas obrigatórias faltando: {', '.join(faltantes)}")
+                                st.error(f"Colunas obrigatórias faltando: {', '.join(faltantes)}")
                                 st.stop()
 
                             df_sim = df_upload.copy()
@@ -949,7 +944,7 @@ def exibir_gestao_pedidos(_supabase):
                                 if pd.isna(r.get("qtde_solicitada")) or float(r.get("qtde_solicitada") or 0) <= 0:
                                     erros_sim.append({"linha": int(i) + 2, "erro": "Quantidade inválida"})
 
-                            st.info("🔎 Simulação concluída. Nenhum dado foi gravado.")
+                            st.info("Simulação concluída. Nenhum dado foi gravado.")
                             c1, c2 = st.columns(2)
                             c1.metric("Registros no arquivo", len(df_sim))
                             c2.metric("Erros de validação", len(erros_sim))
@@ -959,20 +954,20 @@ def exibir_gestao_pedidos(_supabase):
                                 st.dataframe(df_er, use_container_width=True, height=260)
                                 _download_df(df_er, "erros_validacao_importacao.csv")
                             else:
-                                st.success("✅ Arquivo válido para importação.")
+                                st.success("Arquivo válido para importação.")
                             st.stop()
 
                         # Limpeza do banco
                         if limpar_antes:
                             try:
-                                with st.spinner("🗑️ Limpando banco de dados..."):
+                                with st.spinner("Limpando banco de dados..."):
                                     tenant_id = st.session_state.get("tenant_id")
                                     _supabase.table("pedidos").delete().eq("tenant_id", tenant_id).execute()
                                     res = _supabase.rpc("reset_tenant_data").execute()
-                                    st.success(f"✅ Limpeza concluída: {res.data}")
+                                    st.success(f"Limpeza concluída: {res.data}")
                                     st.cache_data.clear()
                             except Exception as e_limpeza:
-                                st.error(f"❌ Erro ao limpar banco: {e_limpeza}")
+                                st.error(f"Erro ao limpar banco: {e_limpeza}")
                                 st.stop()
 
                         df_fornecedores = carregar_fornecedores(_supabase, st.session_state.get("tenant_id"))
@@ -1257,34 +1252,34 @@ def exibir_gestao_pedidos(_supabase):
                         if registros_erro == 0:
                             st.success(
                                 f"""
-✅ **Importação Concluída com Sucesso!**
-- ✅ Processados: {registros_processados}
-- ➕ Inseridos: {registros_inseridos}
-- 🔄 Atualizados: {registros_atualizados}
-- 🏭 Fornecedores criados: {fornecedores_criados}
-- ⛔ Duplicados (OC) pulados: {registros_pulados_dup}
+ **Importação Concluída com Sucesso!**
+- Processados: {registros_processados}
+- Inseridos: {registros_inseridos}
+- Atualizados: {registros_atualizados}
+- Fornecedores criados: {fornecedores_criados}
+- Duplicados (OC) pulados: {registros_pulados_dup}
 """
                             )
                         else:
                             st.warning(
                                 f"""
-⚠️ **Importação Concluída com Erros**
-- ✅ Processados: {registros_processados}
-- ➕ Inseridos: {registros_inseridos}
-- 🔄 Atualizados: {registros_atualizados}
-- 🏭 Fornecedores criados: {fornecedores_criados}
-- ⛔ Duplicados (OC) pulados: {registros_pulados_dup}
-- ❌ Erros: {registros_erro}
+ **Importação Concluída com Erros**
+- Processados: {registros_processados}
+- Inseridos: {registros_inseridos}
+- Atualizados: {registros_atualizados}
+- Fornecedores criados: {fornecedores_criados}
+- Duplicados (OC) pulados: {registros_pulados_dup}
+- Erros: {registros_erro}
 """
                             )
 
                         if avisos:
-                            with st.expander(f"ℹ️ Ver avisos ({len(avisos)})"):
+                            with st.expander(f"Ver avisos ({len(avisos)})"):
                                 for aviso in avisos[:50]:
                                     st.info(aviso)
 
                         if erros:
-                            with st.expander(f"⚠️ Ver erros ({len(erros)})"):
+                            with st.expander(f"Ver erros ({len(erros)})"):
                                 for erro in erros[:50]:
                                     st.error(erro)
                                 if len(erros) > 50:
@@ -1295,7 +1290,7 @@ def exibir_gestao_pedidos(_supabase):
                         if log_rows:
                             try:
                                 df_log = pd.DataFrame(log_rows)
-                                with st.expander("📄 Log detalhado da importação (baixar)", expanded=(registros_erro > 0)):
+                                with st.expander("Log detalhado da importação (baixar)", expanded=(registros_erro > 0)):
                                     st.dataframe(df_log, use_container_width=True, hide_index=True)
                                     csv_log = df_log.to_csv(index=False, sep=";", encoding="utf-8-sig").encode("utf-8-sig")
                                     st.download_button(
@@ -1324,8 +1319,8 @@ def exibir_gestao_pedidos(_supabase):
                             pass
 
             except Exception as e:
-                st.error(f"❌ Erro ao processar arquivo: {e}")
-                st.info("💡 Verifique se o arquivo está no formato correto e contém todas as colunas necessárias")
+                st.error(f"Erro ao processar arquivo: {e}")
+                st.info("Verifique se o arquivo está no formato correto e contém todas as colunas necessárias")
 
     # ============================================
     
@@ -1333,7 +1328,7 @@ def exibir_gestao_pedidos(_supabase):
     # TAB 3: EDITAR PEDIDO
     # ============================================
     with tab3:
-        st.subheader("📝 Editar Pedido")
+        st.subheader("Editar Pedido")
 
         tenant_id = st.session_state.get("tenant_id")
         df_pedidos = carregar_pedidos(_supabase, tenant_id)
@@ -1351,7 +1346,7 @@ def exibir_gestao_pedidos(_supabase):
                 pass
 
         if df_pedidos.empty:
-            st.info("📭 Nenhum pedido cadastrado ainda")
+            st.info("Nenhum pedido cadastrado ainda")
             return
 
         # --------------------------------------------
@@ -1461,9 +1456,9 @@ def exibir_gestao_pedidos(_supabase):
         # --------------------------------------------
         status_atual = str(pedido_atual.get("status") or "")
         bloqueado = (status_atual == "Entregue")
-        st.caption("💡 Dica: use a busca acima para localizar rápido por OC/descrição/equipamento.")
+        st.caption("Dica: use a busca acima para localizar rápido por OC/descrição/equipamento.")
         if bloqueado:
-            st.info("🔒 Este pedido está **Entregue**. Por padrão, a edição é bloqueada para evitar inconsistências.")
+            st.info("Este pedido está **Entregue**. Por padrão, a edição é bloqueada para evitar inconsistências.")
 
         override_edicao = False
         if bloqueado:
@@ -1478,7 +1473,7 @@ def exibir_gestao_pedidos(_supabase):
         # Formulário (em blocos)
         # --------------------------------------------
         with st.form("form_editar_pedido_v2"):
-            st.markdown("### 📌 Identificação")
+            st.markdown("### Identificação")
             c1, c2, c3 = st.columns([1, 1, 1])
             with c1:
                 nr_solicitacao = st.text_input(
@@ -1502,7 +1497,7 @@ def exibir_gestao_pedidos(_supabase):
                     disabled=desabilitar,
                 )
 
-            st.markdown("### 📦 Material")
+            st.markdown("### Material")
             m1, m2 = st.columns([1, 1])
             with m1:
                 cod_material = st.text_input(
@@ -1523,9 +1518,9 @@ def exibir_gestao_pedidos(_supabase):
                     disabled=desabilitar,
                 )
 
-            st.markdown("### 🏭 Fornecedor")
+            st.markdown("### Fornecedor")
             if df_fornecedores is None or df_fornecedores.empty:
-                st.warning("⚠️ Nenhum fornecedor cadastrado.")
+                st.warning("Nenhum fornecedor cadastrado.")
                 fornecedor_sel = ""
             else:
                 try:
@@ -1540,7 +1535,7 @@ def exibir_gestao_pedidos(_supabase):
                     disabled=desabilitar,
                 )
 
-            st.markdown("### 📅 Datas")
+            st.markdown("### Datas")
             d1, d2, d3 = st.columns(3)
             with d1:
                 data_solicitacao = st.date_input(
@@ -1561,7 +1556,7 @@ def exibir_gestao_pedidos(_supabase):
                     disabled=desabilitar,
                 )
 
-            st.markdown("### 📦 Quantidades e status")
+            st.markdown("### Quantidades e status")
             q1, q2, q3, q4 = st.columns([1, 1, 1, 1])
             with q1:
                 qtde_solicitada = st.number_input(
@@ -1595,7 +1590,7 @@ def exibir_gestao_pedidos(_supabase):
                     disabled=desabilitar,
                 )
 
-            st.markdown("### 📝 Observações")
+            st.markdown("### Observações")
             observacoes = st.text_area(
                 "Observações",
                 value=str(pedido_atual.get("observacoes") or ""),
@@ -1618,10 +1613,10 @@ def exibir_gestao_pedidos(_supabase):
         if submitted_edit:
             # validações mínimas
             if not descricao.strip():
-                st.error("⚠️ A descrição do material é obrigatória.")
+                st.error("A descrição do material é obrigatória.")
                 st.stop()
             if qtde_solicitada <= 0:
-                st.error("⚠️ A quantidade solicitada deve ser maior que zero.")
+                st.error("A quantidade solicitada deve ser maior que zero.")
                 st.stop()
 
             # ------------------------------
@@ -1633,28 +1628,28 @@ def exibir_gestao_pedidos(_supabase):
                 qe_antiga = 0.0
 
             if float(qtde_entregue) > float(qtde_solicitada):
-                st.error("❌ Quantidade entregue não pode ser maior que a solicitada.")
+                st.error("Quantidade entregue não pode ser maior que a solicitada.")
                 st.stop()
 
             if float(qtde_solicitada) < float(qe_antiga):
                 st.error(
-                    f"❌ Não é permitido reduzir a quantidade solicitada abaixo da já entregue ({qe_antiga:g})."
+                    f"Não é permitido reduzir a quantidade solicitada abaixo da já entregue ({qe_antiga:g})."
                 )
                 st.stop()
 
             # Status coerente com OC
             if status == "Sem OC" and str(nr_oc or "").strip():
-                st.error("❌ Status 'Sem OC' não pode ter número de OC preenchido.")
+                st.error("Status 'Sem OC' não pode ter número de OC preenchido.")
                 st.stop()
 
             if status == "Tem OC" and not str(nr_oc or "").strip():
-                st.error("❌ Status 'Tem OC' exige número de OC.")
+                st.error("Status 'Tem OC' exige número de OC.")
                 st.stop()
 
             # Status coerente com entrega
             pendente_calc = float(qtde_solicitada) - float(qtde_entregue)
             if status == "Entregue" and pendente_calc > 0:
-                st.error("❌ Não é possível marcar como Entregue se ainda há quantidade pendente.")
+                st.error("Não é possível marcar como Entregue se ainda há quantidade pendente.")
                 st.stop()
 
 
@@ -1667,7 +1662,7 @@ def exibir_gestao_pedidos(_supabase):
                     & (df_pedidos["id"].astype(str) != str(pedido_editar))
                 ]
                 if not dup.empty:
-                    st.error(f"❌ Já existe um pedido com a OC **{nr_oc_new}** nesta empresa.")
+                    st.error(f"Já existe um pedido com a OC **{nr_oc_new}** nesta empresa.")
                     st.stop()
 
             # resolve fornecedor_id
@@ -1781,7 +1776,7 @@ def exibir_gestao_pedidos(_supabase):
         # --------------------------------------------
         # Ações avançadas (perigosas)
         # --------------------------------------------
-        with st.expander("⚠️ Ações avançadas", expanded=False):
+        with st.expander("Ações avançadas", expanded=False):
             st.caption("Use com cuidado. Essas ações são registradas na auditoria (se habilitada).")
             colx1, colx2 = st.columns(2)
             with colx1:
@@ -1789,7 +1784,7 @@ def exibir_gestao_pedidos(_supabase):
                 motivo_exclusao = st.text_input("Motivo da exclusão (opcional)", value="")
             with colx2:
                 if st.button(
-                    "🗑️ Excluir Pedido",
+                    "Excluir Pedido",
                     type="secondary",
                     use_container_width=True,
                     disabled=not confirmar_exclusao,
@@ -1825,18 +1820,18 @@ def exibir_gestao_pedidos(_supabase):
                             )
                         except Exception:
                             pass
-                        st.success("✅ Pedido excluído.")
+                        st.success("Pedido excluído.")
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e_del:
-                        st.error(f"❌ Erro ao excluir: {e_del}")
+                        st.error(f"Erro ao excluir: {e_del}")
 
         
         # --------------------------------------------
         # Controle de Entregas (unificado)
         # --------------------------------------------
         st.markdown("---")
-        st.subheader("📦 Controle de Entregas")
+        st.subheader("Controle de Entregas")
 
         qtde_solicitada_atual = float(pedido_atual.get("qtde_solicitada") or 0)
         qtde_entregue_atual = float(pedido_atual.get("qtde_entregue") or 0)
@@ -1856,7 +1851,7 @@ def exibir_gestao_pedidos(_supabase):
 
         # Sugestão automática de status (não força, mas ajuda)
         if qtde_solicitada_atual > 0 and qtde_pendente <= 0 and str(pedido_atual.get("status") or "") != "Entregue":
-            st.info("ℹ️ Este pedido está 100% entregue. Você pode ajustar o status para **Entregue** na edição acima (ou registrar uma entrega extra somente se necessário).")
+            st.info("Este pedido está 100% entregue. Você pode ajustar o status para **Entregue** na edição acima (ou registrar uma entrega extra somente se necessário).")
 
         # Histórico de entregas (se existir tabela)
         tenant_id = str(st.session_state.get("tenant_id") or "")
@@ -1881,7 +1876,7 @@ def exibir_gestao_pedidos(_supabase):
                 continue
 
         if historico_rows:
-            with st.expander(f"🧾 Histórico de entregas ({len(historico_rows)})", expanded=False):
+            with st.expander(f"Histórico de entregas ({len(historico_rows)})", expanded=False):
                 try:
                     df_hist = pd.DataFrame(historico_rows)
 
@@ -1932,13 +1927,13 @@ def exibir_gestao_pedidos(_supabase):
                     help="Se esta entrega completar 100%, o status será ajustado para Entregue automaticamente.",
                 )
 
-                submitted_ent = st.form_submit_button("✅ Registrar entrega", use_container_width=True)
+                submitted_ent = st.form_submit_button("Registrar entrega", use_container_width=True)
 
             if submitted_ent:
                 if qtde_entrega <= 0:
-                    st.warning("⚠️ Informe uma quantidade maior que zero.")
+                    st.warning("Informe uma quantidade maior que zero.")
                 elif qtde_entrega > qtde_pendente:
-                    st.error("❌ A quantidade informada é maior que a pendente.")
+                    st.error("A quantidade informada é maior que a pendente.")
                 else:
                     try:
                         sucesso, mensagem = registrar_entrega(
@@ -1970,7 +1965,7 @@ def exibir_gestao_pedidos(_supabase):
                             try:
                                 antes = float(qtde_pendente)
                                 depois = max(0.0, antes - float(qtde_entrega))
-                                st.caption(f"📌 Pendente: {antes:g} → {depois:g}")
+                                st.caption(f"Pendente: {antes:g} → {depois:g}")
                             except Exception:
                                 pass
 
@@ -1979,15 +1974,15 @@ def exibir_gestao_pedidos(_supabase):
                         else:
                             st.error(mensagem)
                     except Exception as e_ent:
-                        st.error(f"❌ Erro ao registrar entrega: {e_ent}")
+                        st.error(f"Erro ao registrar entrega: {e_ent}")
         else:
-            st.success("✅ Pedido totalmente entregue!")
+            st.success("Pedido totalmente entregue!")
 
         # --------------------------------------------
         # 📜 Histórico do pedido (auditoria)
         # --------------------------------------------
         st.markdown("---")
-        with st.expander("📜 Histórico do Pedido", expanded=False):
+        with st.expander("Histórico do Pedido", expanded=False):
             try:
                 qh = (
                     _supabase.table("historico_pedidos")
@@ -2047,12 +2042,12 @@ def exibir_gestao_pedidos(_supabase):
 
 
     with tab4:
-        st.subheader("⚡ Ações em Massa")
+        st.subheader("Ações em Massa")
         st.caption("Atualize vários pedidos de uma vez (status / previsão / fornecedor). Use filtros para selecionar o conjunto.")
     
         df_pedidos = carregar_pedidos(_supabase, st.session_state.get("tenant_id"))
         if df_pedidos.empty:
-            st.info("📭 Nenhum pedido cadastrado.")
+            st.info("Nenhum pedido cadastrado.")
             return
     
         # Filtros e seleção (form para evitar rerun a cada clique)
@@ -2098,7 +2093,7 @@ def exibir_gestao_pedidos(_supabase):
     
         df_sel = df_sel.head(int(lim))
     
-        st.write(f"🔎 Selecionados (após filtros): **{len(df_sel)}**")
+        st.write(f"Selecionados (após filtros): **{len(df_sel)}**")
     
         if df_sel.empty:
             st.warning("Nenhum pedido encontrado com os filtros.")
@@ -2125,7 +2120,7 @@ def exibir_gestao_pedidos(_supabase):
     
         # 1) Status em massa
         with a1:
-            st.markdown("### 🏷️ Status")
+            st.markdown("### Status")
             novo_status = st.selectbox("Novo status", STATUS_VALIDOS, index=0, key="mass_status")
             if st.button("Aplicar status", use_container_width=True):
                 ok, errs = _bulk_update(_supabase, selecionados, {"status": novo_status})
@@ -2133,7 +2128,7 @@ def exibir_gestao_pedidos(_supabase):
                     st.warning(f"Atualizados: {ok}/{len(selecionados)}")
                     st.text("\n".join(errs[:30]))
                 else:
-                    st.success(f"✅ Status atualizado em {ok} pedidos.")
+                    st.success(f"Status atualizado em {ok} pedidos.")
                 try:
                     ba.registrar_acao(_supabase, st.session_state.usuario.get("email"), "mass_update_status",
                                       {"qtd": len(selecionados), "status": novo_status})
@@ -2144,7 +2139,7 @@ def exibir_gestao_pedidos(_supabase):
     
         # 2) Previsão em massa
         with a2:
-            st.markdown("### 📅 Previsão")
+            st.markdown("### Previsão")
             nova_prev = st.date_input("Nova previsão", value=datetime.now(), key="mass_prev")
             if st.button("Aplicar previsão", use_container_width=True):
                 payload = {"previsao_entrega": nova_prev.isoformat()}
@@ -2153,7 +2148,7 @@ def exibir_gestao_pedidos(_supabase):
                     st.warning(f"Atualizados: {ok}/{len(selecionados)}")
                     st.text("\n".join(errs[:30]))
                 else:
-                    st.success(f"✅ Previsão atualizada em {ok} pedidos.")
+                    st.success(f"Previsão atualizada em {ok} pedidos.")
                 try:
                     ba.registrar_acao(_supabase, st.session_state.usuario.get("email"), "mass_update_previsao",
                                       {"qtd": len(selecionados), "previsao": nova_prev.isoformat()})
@@ -2164,7 +2159,7 @@ def exibir_gestao_pedidos(_supabase):
     
         # 3) Fornecedor em massa
         with a3:
-            st.markdown("### 🏭 Fornecedor")
+            st.markdown("### Fornecedor")
             df_fornecedores = carregar_fornecedores(_supabase, st.session_state.get("tenant_id"))
             if df_fornecedores is None or df_fornecedores.empty:
                 st.warning("Sem fornecedores cadastrados.")
@@ -2185,7 +2180,7 @@ def exibir_gestao_pedidos(_supabase):
                                 st.warning(f"Atualizados: {ok}/{len(selecionados)}")
                                 st.text("\n".join(errs[:30]))
                             else:
-                                st.success(f"✅ Fornecedor atualizado em {ok} pedidos.")
+                                st.success(f"Fornecedor atualizado em {ok} pedidos.")
                             try:
                                 ba.registrar_acao(_supabase, st.session_state.usuario.get("email"), "mass_update_fornecedor",
                                                   {"qtd": len(selecionados), "cod_fornecedor": cod})
