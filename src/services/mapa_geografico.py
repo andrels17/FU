@@ -162,10 +162,10 @@ def criar_mapa_coropletico_estados(df_pedidos):
     
     df_estados['hover_text'] = df_estados.apply(
         lambda row: f"<b>{row['UF']}</b><br>" +
-                    f"📦 Pedidos: {formatar_numero_br(row['total_pedidos']).split(',')[0]}<br>" +
-                    f"💰 Valor: {formatar_moeda_br(row['valor_total'])}<br>" +
-                    f"🏭 Fornecedores: {int(row['qtd_fornecedores'])}<br>" +
-                    f"✅ Entregues: {int(row['pedidos_entregues'])} ({row['perc_entrega']:.0f}%)",
+                    f"Pedidos: {formatar_numero_br(row['total_pedidos']).split(',')[0]}<br>" +
+                    f"Valor: {formatar_moeda_br(row['valor_total'])}<br>" +
+                    f"Fornecedores: {int(row['qtd_fornecedores'])}<br>" +
+                    f"Entregues: {int(row['pedidos_entregues'])} ({row['perc_entrega']:.0f}%)",
         axis=1
     )
     
@@ -244,19 +244,19 @@ def exibir_metricas_estados(df_estados):
     media_entrega = df_estados['perc_entrega'].mean()
     
     with col1:
-        st.metric("📍 Estados Ativos", f"{int(total_estados)}/27")
+        st.metric("Estados Ativos", f"{int(total_estados)}/27")
     
     with col2:
-        st.metric("📦 Total de Pedidos", formatar_numero_br(total_pedidos).split(',')[0])
+        st.metric("Total de Pedidos", formatar_numero_br(total_pedidos).split(',')[0])
     
     with col3:
-        st.metric("💰 Valor Total", formatar_moeda_br(total_valor))
+        st.metric("Valor Total", formatar_moeda_br(total_valor))
     
     with col4:
-        st.metric("🏭 Fornecedores", f"{int(total_fornecedores)}")
+        st.metric("Fornecedores", f"{int(total_fornecedores)}")
     
     with col5:
-        st.metric("✅ Taxa Entrega Média", f"{media_entrega:.1f}%".replace('.', ','))
+        st.metric("Taxa Entrega Média", f"{media_entrega:.1f}%".replace('.', ','))
 
 def criar_mapa_fornecedores(df_pedidos):
     """Cria mapa interativo dos fornecedores com marcadores"""
@@ -264,7 +264,7 @@ def criar_mapa_fornecedores(df_pedidos):
     df_map = df_pedidos[df_pedidos['fornecedor_nome'].notna()].copy()
     
     if df_map.empty:
-        st.warning("⚠️ Nenhum pedido com fornecedor cadastrado")
+        st.warning("Nenhum pedido com fornecedor cadastrado")
         return None, None
     
     df_fornecedores = df_map.groupby(['fornecedor_nome', 'fornecedor_cidade', 'fornecedor_uf']).agg({
@@ -284,15 +284,15 @@ def criar_mapa_fornecedores(df_pedidos):
     df_fornecedores = df_fornecedores[df_fornecedores['lat'].notna()]
     
     if df_fornecedores.empty:
-        st.warning("⚠️ Não foi possível geocodificar os fornecedores")
+        st.warning("Não foi possível geocodificar os fornecedores")
         return None, None
     
     df_fornecedores['hover_text'] = df_fornecedores.apply(
         lambda row: f"<b>{row['fornecedor']}</b><br>" +
-                    f"📍 {row['cidade']}/{row['uf']}<br>" +
-                    f"📦 {int(row['total_pedidos'])} pedidos<br>" +
-                    f"💰 {formatar_moeda_br(row['valor_total'])}<br>" +
-                    f"✅ {int(row['pedidos_entregues'])} entregues",
+                    f"{row['cidade']}/{row['uf']}<br>" +
+                    f"{int(row['total_pedidos'])} pedidos<br>" +
+                    f"{formatar_moeda_br(row['valor_total'])}<br>" +
+                    f"{int(row['pedidos_entregues'])} entregues",
         axis=1
     )
     
@@ -334,7 +334,7 @@ def criar_mapa_fornecedores(df_pedidos):
             center=dict(lat=-14, lon=-55)
         ),
         title={
-            'text': '📍 Localização de Fornecedores',
+            'text': 'Localização de Fornecedores',
             'x': 0.5,
             'xanchor': 'center',
             'font': {'size': 28, 'color': '#fafafa', 'family': 'Arial Black'}
@@ -358,21 +358,21 @@ def exibir_estatisticas_mapa(df_fornecedores):
     estados_atendidos = df_fornecedores['uf'].nunique()
     
     with col1:
-        st.metric("🏭 Fornecedores", f"{int(total_fornecedores)}")
+        st.metric("Fornecedores", f"{int(total_fornecedores)}")
     
     with col2:
-        st.metric("📦 Pedidos", formatar_numero_br(total_pedidos).split(',')[0])
+        st.metric("Pedidos", formatar_numero_br(total_pedidos).split(',')[0])
     
     with col3:
-        st.metric("💰 Valor Total", formatar_moeda_br(total_valor))
+        st.metric("Valor Total", formatar_moeda_br(total_valor))
     
     with col4:
-        st.metric("📍 Estados", f"{int(estados_atendidos)}")
+        st.metric("Estados", f"{int(estados_atendidos)}")
 
 def criar_ranking_fornecedores(df_fornecedores):
     """Cria ranking visual de fornecedores"""
     
-    st.subheader("🏆 Ranking de Fornecedores")
+    st.subheader("Ranking de Fornecedores")
     
     top_fornecedores = df_fornecedores.nlargest(10, 'valor_total')
     
@@ -410,7 +410,7 @@ def criar_graficos_analise(df_estados):
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("💰 Top 10 Estados por Valor")
+        st.subheader("Top 10 Estados por Valor")
         
         df_top = df_estados.nlargest(10, 'valor_total')
         
@@ -444,7 +444,7 @@ def criar_graficos_analise(df_estados):
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        st.subheader("📦 Distribuição de Pedidos")
+        st.subheader("Distribuição de Pedidos")
         
         df_top_pedidos = df_estados.nlargest(5, 'total_pedidos')
         outros_pedidos = df_estados[~df_estados['UF'].isin(df_top_pedidos['UF'])]['total_pedidos'].sum()
@@ -483,7 +483,7 @@ def criar_graficos_analise(df_estados):
 def criar_tabela_detalhada(df_estados):
     """Cria tabela detalhada com todos os estados"""
     
-    st.subheader("📊 Análise Detalhada por Estado")
+    st.subheader("Análise Detalhada por Estado")
     
     df_display = df_estados.copy()
     df_display = df_display.sort_values('valor_total', ascending=False)
