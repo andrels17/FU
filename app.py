@@ -373,9 +373,14 @@ def _industrial_sidebar_css() -> None:
     )
 
 def _label_alertas(total_alertas: int) -> str:
-    if total_alertas and total_alertas > 0:
-        return f"Alertas e Notificações"
-    return "Alertas e Notificações"
+    """Label visual de Alertas (sem emoji) com contagem quando houver."""
+    try:
+        n = int(total_alertas or 0)
+    except Exception:
+        n = 0
+    if n > 0:
+        return f"Alertas ({n})"
+    return "Alertas"
 
 # ===== Navegação: IDs internos (não dependem de label/emoji) =====
 PAGE_LABELS = {
@@ -989,8 +994,8 @@ def main():
                 mapa_paginas = {
                     "dash": "Dashboard",
                     "dashboard": "Dashboard",
-                    "alert": "Alertas e Notificações",
-                    "notific": "Alertas e Notificações",
+                    "alert": "alerts",
+                    "notific": "alerts",
                     "consulta": "Consultar Pedidos",
                     "pedido": "Consultar Pedidos",
                     "ficha": "Ficha de Material",
@@ -1143,10 +1148,6 @@ def main():
         # Página atual (fonte de verdade)
         pagina = st.session_state.current_page
 
-    # Normaliza label de alertas
-    if pagina == alertas_label:
-        pagina = "Alertas e Notificações"
-
     st.markdown(
         """
         <style>
@@ -1193,7 +1194,7 @@ def main():
         exibir_home(alertas, usuario_nome=st.session_state.usuario.get("nome", "Usuário"))
     elif pagina == "dashboard":
         exibir_dashboard(supabase)
-    elif pagina == "Alertas e Notificações":
+    elif pagina == "alerts":
         sa.exibir_painel_alertas(alertas, formatar_moeda_br)
     elif pagina == "orders_search":
         exibir_consulta_pedidos(supabase)
