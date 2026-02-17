@@ -9,7 +9,7 @@ from auth_flows import enviar_link_redefinicao_senha, tela_redefinir_senha
 
 
 def render_request_reset(supabase_anon):
-    st.title("🔑 Esqueci minha senha")
+    st.title("Esqueci minha senha")
     email = st.text_input("Seu e-mail", key="reset_email")
     if st.button("Enviar link", type="primary", use_container_width=True):
         ok, msg = enviar_link_redefinicao_senha(supabase_anon, email)
@@ -17,5 +17,5 @@ def render_request_reset(supabase_anon):
 
 
 def render_reset_password(supabase_anon):
-    st.title("♻️ Redefinir senha")
+    st.title("Redefinir senha")
     tela_redefinir_senha(supabase_anon)
