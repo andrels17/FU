@@ -93,28 +93,14 @@ def _resolve_gestores_for_departamentos(links, departamentos_sel):
 
 def _load_entregues(supabase, tenant_id: str, dt_ini, dt_fim, departamentos=None) -> pd.DataFrame:
     """
-    Carrega pedidos entregues por período, filtrando por departamentos se fornecido.
+    Carrega pedidos entregues por período.
 
-    Nota (importante):
-    - Em muitas bases, 'atualizado_em' é TIMESTAMP SEM fuso (timestamp without time zone).
-      Se enviarmos ISO com '+00:00', o PostgREST pode rejeitar.
-    - Por isso, enviamos datas em formato sem offset e, se necessário, fazemos retry.
+    Observação:
+    - Se o PostgREST estiver falhando nos filtros de datetime (APIError), evitamos filtrar no servidor por 'atualizado_em'
+      e filtramos no pandas. Isso mantém o app funcional sem depender do tipo exato da coluna (timestamp/timestamptz/text).
+    - Para evitar carregar demais, aplicamos limit e ordenação.
     """
-    def _fmt(dt):
-        # Remove tzinfo para evitar '+00:00' quando a coluna é timestamp sem timezone
-        try:
-            dt2 = dt.replace(tzinfo=None)
-        except Exception:
-            dt2 = dt
-        # PostgREST aceita bem 'YYYY-MM-DDTHH:MM:SS'
-        try:
-            return dt2.strftime("%Y-%m-%dT%H:%M:%S")
-        except Exception:
-            return str(dt2)
-
-    dt_ini_s = _fmt(dt_ini)
-    dt_fim_s = _fmt(dt_fim)
-
+    # Base query sem filtro de datetime (mais compatível)
     q = (
         supabase.table("pedidos")
         .select(
@@ -122,37 +108,33 @@ def _load_entregues(supabase, tenant_id: str, dt_ini, dt_fim, departamentos=None
         )
         .eq("tenant_id", tenant_id)
         .eq("entregue", True)
-        .gte("atualizado_em", dt_ini_s)
-        .lt("atualizado_em", dt_fim_s)
+        .order("atualizado_em", desc=True)
+        .limit(5000)
     )
     if departamentos:
         q = q.in_("departamento", departamentos)
 
+    res = q.execute()
+    df = pd.DataFrame(res.data or [])
+
+    if df.empty or "atualizado_em" not in df.columns:
+        return df
+
+    # Converte atualizado_em para datetime (tolerante a formatos)
+    dt_col = pd.to_datetime(df["atualizado_em"], errors="coerce", utc=True)
+    # dt_ini/dt_fim podem vir com tz; normalizamos para UTC e tratamos fim exclusivo
     try:
-        res = q.execute()
-        return pd.DataFrame(res.data or [])
-    except Exception as e:
-        # Retry: algumas bases preferem apenas 'YYYY-MM-DD'
-        try:
-            dt_ini_d = dt_ini_s.split("T")[0]
-            dt_fim_d = dt_fim_s.split("T")[0]
-            q2 = (
-                supabase.table("pedidos")
-                .select(
-                    "id,numero_pedido,fornecedor,descricao,quantidade,valor_total,departamento,atualizado_em,entregue"
-                )
-                .eq("tenant_id", tenant_id)
-                .eq("entregue", True)
-                .gte("atualizado_em", dt_ini_d)
-                .lt("atualizado_em", dt_fim_d)
-            )
-            if departamentos:
-                q2 = q2.in_("departamento", departamentos)
-            res2 = q2.execute()
-            return pd.DataFrame(res2.data or [])
-        except Exception:
-            # Propaga o erro original (será logado no Streamlit Cloud)
-            raise e
+        dt_ini_u = pd.to_datetime(dt_ini, utc=True)
+    except Exception:
+        dt_ini_u = pd.to_datetime(str(dt_ini), errors="coerce", utc=True)
+    try:
+        dt_fim_u = pd.to_datetime(dt_fim, utc=True)
+    except Exception:
+        dt_fim_u = pd.to_datetime(str(dt_fim), errors="coerce", utc=True)
+
+    mask = (dt_col >= dt_ini_u) & (dt_col < dt_fim_u)
+    df = df.loc[mask].copy()
+    return df
 
 
 def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
