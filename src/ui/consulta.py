@@ -512,7 +512,7 @@ def exibir_consulta_pedidos(_supabase):
     st.session_state.setdefault("go_key", "")
 
     # -------------------- Tabs para reduzir poluição
-    st.session_state.setdefault("consulta_tab", "📌 Lista")
+    st.session_state.setdefault("consulta_tab", "Lista")
     st.session_state.setdefault("consulta_tab_target", None)
     # Aplica troca de aba pendente (evita erro de setar estado após render do widget)
     if st.session_state.get("consulta_tab_target"):
@@ -521,7 +521,7 @@ def exibir_consulta_pedidos(_supabase):
 
     tab_choice = st.radio(
         "Navegação",
-        ["📌 Lista", "📊 Visão", "⚡ Ações"],
+        ["Lista", "Visão", "Ações"],
         horizontal=True,
         key="consulta_tab",
         label_visibility="collapsed",
@@ -529,7 +529,7 @@ def exibir_consulta_pedidos(_supabase):
     # =========================
     # TAB: LISTA (principal)
     # =========================
-    if tab_choice == "📌 Lista":
+    if tab_choice == "Ações Ações":
         # Barra superior: busca + filtros em popover (responsivo / clean)
         c1, c2, c3 = st.columns([3.2, 1.1, 1.1])
 
@@ -712,12 +712,12 @@ def exibir_consulta_pedidos(_supabase):
 
         if pid_editor:
             st.session_state["consulta_selected_pid"] = pid_editor
-            st.session_state["consulta_tab_target"] = "⚡ Ações"
+            st.session_state["consulta_tab_target"] = "Ações"
             st.rerun()
 # =========================
     # TAB: VISÃO (KPIs + atalhos)
     # =========================
-    if tab_choice == "📊 Visão":
+    if tab_choice == "Visão":
         atrasados = int(_is_atrasado(df).sum())
         sem_oc = int((df["status"] == "Sem OC").sum()) if "status" in df.columns else 0
         transporte = int((df["status"] == "Em Transporte").sum()) if "status" in df.columns else 0
@@ -751,7 +751,7 @@ def exibir_consulta_pedidos(_supabase):
     # =========================
     # TAB: AÇÕES (operacional)
     # =========================
-    if tab_choice == "⚡ Ações":
+    if tab_choice == "Ações":
         st.markdown("#### Ações rápidas")
         st.caption("Localize um pedido por OC/Solicitação e abra diretamente na Gestão/Ficha.")
 
@@ -795,13 +795,13 @@ def exibir_consulta_pedidos(_supabase):
             , unsafe_allow_html=True)
         with cB:
             st.markdown("**Ações**")
-            if st.button("✏️ Abrir na Gestão", use_container_width=True):
+            if st.button("Abrir na Gestão", use_container_width=True):
                 st.session_state["pedido_selecionado"] = _to_str(r.get("id") or "")
                 st.session_state["pagina"] = "Gestão de Pedidos"
                 st.rerun()
-            if st.button("📦 Ficha do Material", use_container_width=True):
+            if st.button("Ficha do Material", use_container_width=True):
                 st.session_state["pedido_selecionado"] = _to_str(r.get("id") or "")
                 st.session_state["pagina"] = "Ficha de Material"
                 st.rerun()
-            if st.button("📋 Copiar OC/SOL", use_container_width=True):
+            if st.button("Copiar OC/SOL", use_container_width=True):
                 st.code(f"OC: {_to_str(r.get('nr_oc'))} | SOL: {_to_str(r.get('nr_solicitacao'))}")
