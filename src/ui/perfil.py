@@ -471,10 +471,10 @@ def exibir_perfil(supabase_db):
                 with cA:
                     if st.button("🔎 Abrir", key=f"perfil_open_{pid}", use_container_width=True):
                         # Navega para Consulta > Ações
-                        st.session_state["current_page"] = "Consultar Pedidos"
+                        st.session_state["current_page"] = "orders_search"
                         st.session_state["_force_menu_sync"] = True
                         st.session_state["consulta_selected_pid"] = str(pid or "")
-                        st.session_state["consulta_tab_target"] = "⚡ Ações"
+                        st.session_state["consulta_tab_target"] = "Ações"
                         st.rerun()
                 with cB:
                     # Mostra a descrição do material (quando existir) e agrupa metadados
