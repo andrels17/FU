@@ -678,7 +678,7 @@ def _sidebar_footer(supabase_client) -> None:
     if st.button("Sair", use_container_width=True, key="btn_logout_sidebar"):
         try:
             ba.registrar_acao(
-                st.session_state.usuario,
+                (st.session_state.get("usuario") or {}),
                 "Logout",
                 {"timestamp": datetime.now().isoformat()},
                 supabase_client,
@@ -787,6 +787,12 @@ def _cached_alertas(df_pedidos, df_fornecedores):
 
 
 def main():
+
+    # 🔒 Garante estrutura mínima de sessão (evita AttributeError em (st.session_state.get("usuario") or {}))
+    if "usuario" not in st.session_state or not isinstance(st.session_state.get("usuario"), dict):
+        (st.session_state.get("usuario") or {}) = {}
+    if "autenticado" not in st.session_state:
+        st.session_state.autenticado = False
 
     qp_page = st.query_params.get("page")
     if qp_page:
@@ -1078,7 +1084,7 @@ def main():
                 _sync_empresa_nome(escolhido, tenant_opts)
                 # atualiza perfil conforme empresa selecionada
                 role = next((t.get("role") for t in tenant_opts if t.get("tenant_id") == escolhido), "user")
-                if "usuario" in st.session_state and isinstance(st.session_state.usuario, dict):
+                if "usuario" in st.session_state and isinstance((st.session_state.get("usuario") or {}), dict):
                     st.session_state.usuario["tenant_id"] = escolhido
                     st.session_state.usuario["perfil"] = role
                 st.rerun()
@@ -1128,7 +1134,11 @@ def main():
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-        is_admin = st.session_state.usuario.get("perfil") == "admin"
+        usuario = st.session_state.get("usuario") or {}
+
+        perfil = (usuario.get("perfil") or "").lower()
+
+        is_admin = perfil == "admin"
         if st.session_state.get("fu_sidebar_hidden"):
             _fu_render_compact_sidebar(
                 total_alertas=total_alertas,
@@ -1137,7 +1147,7 @@ def main():
             )
 
         if not st.session_state.get("fu_sidebar_hidden"):
-            usuario = st.session_state.usuario
+            usuario = st.session_state.get("usuario") or {}
             nome = usuario.get("nome", "Usuário")
             perfil = (usuario.get("perfil") or "user").lower()
             avatar_url = usuario.get("avatar_url")
@@ -1284,7 +1294,11 @@ def main():
                     unsafe_allow_html=True,
                 )
 
-            is_admin = st.session_state.usuario.get("perfil") == "admin"
+            usuario = st.session_state.get("usuario") or {}
+
+            perfil = (usuario.get("perfil") or "").lower()
+
+            is_admin = perfil == "admin"
             # ✅ Controle de navegação (seleção única) — visual separado por grupos
             if "current_page" not in st.session_state:
                 st.session_state.current_page = "home"
@@ -1429,7 +1443,7 @@ def main():
     st.markdown("</div>", unsafe_allow_html=True)
 
     if pagina == "home":
-        exibir_home(alertas, usuario_nome=st.session_state.usuario.get("nome", "Usuário"))
+        exibir_home(alertas, usuario_nome=(st.session_state.get("usuario") or {}).get("nome", "Usuário"))
     elif pagina == "dashboard":
         exibir_dashboard(supabase)
     elif pagina == "alerts":
