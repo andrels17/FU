@@ -23,6 +23,7 @@ import textwrap
 import streamlit.components.v1 as components
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import src.services.sistema_alertas as sa
 import src.services.backup_auditoria as ba
 from src.repositories.fornecedores import carregar_fornecedores
@@ -1184,13 +1185,13 @@ def main():
             avatar_url = usuario.get("avatar_url")
 
             # saudação
-    hora = datetime.now(ZoneInfo("America/Fortaleza")).hour
-    if hora < 12:
-        saudacao = "Bom dia"
-    elif hora < 18:
-        saudacao = "Boa tarde"
-    else:
-        saudacao = "Boa noite"
+            hora = datetime.now().hour
+            if hora < 12:
+                saudacao = "Bom dia"
+            elif hora < 18:
+                saudacao = "Boa tarde"
+            else:
+                saudacao = "Boa noite"
 
             # badge por perfil
             if perfil == "admin":
