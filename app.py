@@ -1133,7 +1133,7 @@ def main():
             def _nav_button_row(page_id: str, group: str) -> None:
                 active = (page_id == st.session_state.current_page)
                 dot = '<div class="fu-compact-dot"></div>' if active else '<div class="fu-compact-dot fu-compact-dot--off"></div>'
-                c_dot, c_btn = st.columns([0.12, 0.88], vertical_alignment="center")
+                c_dot, c_btn = st.columns([0.12, 0.88])
                 with c_dot:
                     st.markdown(dot, unsafe_allow_html=True)
                 with c_btn:
