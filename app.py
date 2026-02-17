@@ -32,6 +32,20 @@ st.set_page_config(
     page_icon="📊",
 )
 
+# --- Supabase clients (anon/admin) ---
+# Necessários para login (anon) e operações administrativas (admin).
+# Mantemos como singletons no módulo para uso em callbacks/funções auxiliares.
+try:
+    supabase_anon = init_supabase_anon()
+except Exception:
+    supabase_anon = None
+
+try:
+    supabase_admin = init_supabase_admin()
+except Exception:
+    supabase_admin = None
+
+
 
 
 
@@ -692,7 +706,10 @@ def main():
         )
 
         # Form principal (e-mail + senha)
-        exibir_login(supabase_anon)
+        if supabase_anon is None:
+            st.error("Supabase (anon) não inicializou. Verifique seus secrets/env no Streamlit Cloud.")
+        else:
+            exibir_login(supabase_anon)
 
         # Linha de ações (links + botão link mágico)
         left, right = st.columns([3, 2])
