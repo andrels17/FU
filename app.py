@@ -678,7 +678,7 @@ def _sidebar_footer(supabase_client) -> None:
     if st.button("Sair", use_container_width=True, key="btn_logout_sidebar"):
         try:
             ba.registrar_acao(
-                st.session_state.usuario,
+                _ss_user(),
                 "Logout",
                 {"timestamp": datetime.now().isoformat()},
                 supabase_client,
@@ -794,6 +794,20 @@ def main():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
 
+
+
+
+def _ss_user() -> dict:
+    """Retorna o dict do usuário da sessão (sempre dict)."""
+    u = st.session_state.get("usuario")
+    return u if isinstance(u, dict) else {}
+
+def _ss_user_perfil() -> str:
+    return str((_ss_user().get("perfil") or "")).lower()
+
+def _is_admin() -> bool:
+    # Admin "clássico" e, se quiser, trate superadmin como admin também
+    return _ss_user_perfil() in ("admin", "superadmin")
 
     qp_page = st.query_params.get("page")
     if qp_page:
@@ -1137,7 +1151,7 @@ def main():
 
         usuario = st.session_state.get("usuario") or {}
         perfil = (usuario.get("perfil") or "").lower()
-        is_admin = perfil == "admin"
+        is_admin = _is_admin()
         if st.session_state.get("fu_sidebar_hidden"):
             _fu_render_compact_sidebar(
                 total_alertas=total_alertas,
@@ -1146,7 +1160,7 @@ def main():
             )
 
         if not st.session_state.get("fu_sidebar_hidden"):
-            usuario = st.session_state.usuario
+            usuario = _ss_user()
             nome = usuario.get("nome", "Usuário")
             perfil = (usuario.get("perfil") or "user").lower()
             avatar_url = usuario.get("avatar_url")
@@ -1294,8 +1308,8 @@ def main():
                 )
 
             usuario = st.session_state.get("usuario") or {}
-        perfil = (usuario.get("perfil") or "").lower()
-        is_admin = perfil == "admin"
+            perfil = (usuario.get("perfil") or "").lower()
+            is_admin = _is_admin()
             # ✅ Controle de navegação (seleção única) — visual separado por grupos
             if "current_page" not in st.session_state:
                 st.session_state.current_page = "home"
@@ -1440,7 +1454,7 @@ def main():
     st.markdown("</div>", unsafe_allow_html=True)
 
     if pagina == "home":
-        usuario = st.session_state.get("usuario") or {}
+        usuario = _ss_user()
         exibir_home(alertas, usuario_nome=usuario.get("nome", "Usuário"))
     elif pagina == "dashboard":
         exibir_dashboard(supabase)
