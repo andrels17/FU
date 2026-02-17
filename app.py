@@ -1185,7 +1185,7 @@ def main():
             avatar_url = usuario.get("avatar_url")
 
             # saudação
-            hora = datetime.now().hour
+            hora = datetime.now(ZoneInfo("America/Fortaleza")).hour
             if hora < 12:
                 saudacao = "Bom dia"
             elif hora < 18:
