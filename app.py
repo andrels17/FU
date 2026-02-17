@@ -398,6 +398,23 @@ PAGE_LABELS = {
 }
 
 LEGACY_PAGE_TO_ID = {
+
+    "Início": "home",
+    "Alertas": "alerts",
+    "Consultar pedidos": "orders_search",
+    "Consultar Pedidos": "orders_search",
+    "Meu perfil": "profile",
+    "Meu Perfil": "profile",
+    "Ficha de material": "material_sheet",
+    "Ficha de Material": "material_sheet",
+    "Gestão de pedidos": "orders_manage",
+    "Gestão de Pedidos": "orders_manage",
+    "Mapa": "map",
+    "Mapa Geográfico": "map",
+    "Gestão de usuários": "users",
+    "Gestão de Usuários": "users",
+    "Backup": "backup",
+    "Admin do SaaS": "saas_admin",
     "🏠 Início": "home",
     "Dashboard": "dashboard",
     "🔔 Alertas e Notificações": "alerts",
@@ -1060,19 +1077,13 @@ def main():
                 st.session_state.exp_gestao_open = True
 
             # ---------- Operações ----------
-            opcoes_ops = ["Início", "Dashboard", alertas_label, "Consultar Pedidos", "Meu Perfil"]
+            opcoes_ops = ["home", "dashboard", "alerts", "orders_search", "profile"]
             is_ops_page = st.session_state.current_page in opcoes_ops
             index_ops = opcoes_ops.index(st.session_state.current_page) if is_ops_page else None
 
             # ---------- Gestão ----------
             if is_admin:
-                opcoes_gestao = [
-                    "Ficha de Material",
-                    "Gestão de Pedidos",
-                    "Mapa Geográfico",
-                    "Gestão de Usuários",
-                    "Backup",
-                ] + (["Admin do SaaS"] if st.session_state.get("is_superadmin") else [])
+                opcoes_gestao = ["material_sheet", "orders_manage", "map", "users", "backup"] + (["saas_admin"] if st.session_state.get("is_superadmin") else [])
             else:
                 opcoes_gestao = ["material_sheet", "map"]
 
@@ -1148,7 +1159,10 @@ def main():
         # Página atual (fonte de verdade)
         pagina = st.session_state.current_page
         # Normaliza (caso ainda exista valor antigo por label/emoji)
-        if 'LEGACY_PAGE_TO_ID' in globals() and pagina in LEGACY_PAGE_TO_ID:
+        if isinstance(pagina, str) and pagina.startswith("Alertas"):
+            pagina = "alerts"
+            st.session_state.current_page = pagina
+        elif 'LEGACY_PAGE_TO_ID' in globals() and pagina in LEGACY_PAGE_TO_ID:
             pagina = LEGACY_PAGE_TO_ID[pagina]
             st.session_state.current_page = pagina
 
