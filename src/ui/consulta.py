@@ -529,7 +529,7 @@ def exibir_consulta_pedidos(_supabase):
     # =========================
     # TAB: LISTA (principal)
     # =========================
-    if tab_choice == "Ações Ações":
+    if tab_choice == "Lista":
         # Barra superior: busca + filtros em popover (responsivo / clean)
         c1, c2, c3 = st.columns([3.2, 1.1, 1.1])
 
@@ -797,11 +797,11 @@ def exibir_consulta_pedidos(_supabase):
             st.markdown("**Ações**")
             if st.button("Abrir na Gestão", use_container_width=True):
                 st.session_state["pedido_selecionado"] = _to_str(r.get("id") or "")
-                st.session_state["pagina"] = "Gestão de Pedidos"
+                st.session_state["current_page"] = "orders_manage"
                 st.rerun()
             if st.button("Ficha do Material", use_container_width=True):
                 st.session_state["pedido_selecionado"] = _to_str(r.get("id") or "")
-                st.session_state["pagina"] = "Ficha de Material"
+                st.session_state["current_page"] = "material_sheet"
                 st.rerun()
             if st.button("Copiar OC/SOL", use_container_width=True):
                 st.code(f"OC: {_to_str(r.get('nr_oc'))} | SOL: {_to_str(r.get('nr_solicitacao'))}")
