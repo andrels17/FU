@@ -51,34 +51,75 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
     collapsed_css = (
         textwrap.dedent(
             """
-            /* Sidebar colapsada (ícones via recorte) */
+            /* Sidebar colapsada (modo compacto) */
             section[data-testid="stSidebar"]{
-              width: 72px !important;
-              min-width: 72px !important;
-            }
-            section[data-testid="stSidebar"] *{
-              white-space: nowrap !important;
+              width: 78px !important;
+              min-width: 78px !important;
               overflow: hidden !important;
-              text-overflow: ellipsis !important;
             }
-            section[data-testid="stSidebar"] /* Compact nav buttons */
-section[data-testid="stSidebar"] .stButton button{
-  height: 44px !important;
-  border-radius: 12px !important;
-}
-
-            section[data-testid="stSidebar"]:hover{
-              width: 240px !important;
-              min-width: 240px !important;
+            /* reduz padding interno para não “cortar” */
+            section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
+              padding-top: 10px !important;
+              padding-left: 6px !important;
+              padding-right: 6px !important;
             }
             """
         ).strip()
     ) if sidebar_hidden else ""
 
 
+
     st.markdown(
         f'''
         <style>
+
+/* ===== Compact sidebar nav (ícones only) ===== */
+.fu-compact-nav{
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+  padding: 6px 4px 10px 4px;
+  align-items:center;
+}
+.fu-compact-row{
+  width: 100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap: 8px;
+}
+.fu-compact-dot{
+  width: 6px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(245,158,11,0.95);
+  box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
+}
+.fu-compact-dot--off{
+  background: rgba(255,255,255,0.10);
+  box-shadow: none;
+  height: 10px;
+}
+
+/* Botões somente na sidebar (não afeta botões do topo) */
+section[data-testid="stSidebar"] .stButton > button{
+  width: 54px !important;
+  height: 54px !important;
+  border-radius: 14px !important;
+  padding: 0 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover{
+  border-color: rgba(245,158,11,0.35) !important;
+  background: rgba(255,255,255,0.05) !important;
+  transform: translateY(-1px);
+}
+
         /* Conteúdo fluido em qualquer zoom */
         .fu-wrap{{ width: min(1200px, calc(100% - 32px)); margin: 0 auto; }}
 
@@ -115,7 +156,9 @@ section[data-testid="stSidebar"] .stButton button{
 
         /* Sidebar colapsada (modo compacto) */
         {collapsed_css}
-        </style>
+        
+.stButton button{ white-space: nowrap !important; }
+</style>
         ''',
         unsafe_allow_html=True,
     )
@@ -763,12 +806,6 @@ def main():
     if tenant_opts and len(tenant_opts) > 1 and not st.session_state.get("fu_sidebar_hidden"):
         with st.sidebar:
 
-            btn_lbl = '⮞' if st.session_state.get('fu_sidebar_hidden') else '⮜'
-            btn_help = 'Expandir menu lateral' if st.session_state.get('fu_sidebar_hidden') else 'Colapsar menu lateral'
-            if st.button(btn_lbl, help=btn_help, key="fu_sidebar_toggle"):
-                st.session_state.fu_sidebar_hidden = (not st.session_state.get('fu_sidebar_hidden'))
-                st.rerun()
-
 
             nomes = {t["tenant_id"]: (t.get("nome") or t["tenant_id"]) for t in tenant_opts}
             current = st.session_state.get("tenant_id") or tenant_opts[0]["tenant_id"]
@@ -828,7 +865,7 @@ def main():
         # Toggle: colapsar/expandir (ícones only no colapsado)
         btn_lbl = "⮞" if st.session_state.get("fu_sidebar_hidden") else "⮜"
         btn_help = "Expandir menu lateral" if st.session_state.get("fu_sidebar_hidden") else "Colapsar menu lateral"
-        if st.button(btn_lbl, help=btn_help):
+        if st.button(btn_lbl, help=btn_help, key="fu_sidebar_toggle"):
             st.session_state.fu_sidebar_hidden = (not st.session_state.get("fu_sidebar_hidden"))
             st.rerun()
 
