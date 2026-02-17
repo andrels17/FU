@@ -1078,6 +1078,9 @@ def main():
 
             # ---------- Operações ----------
             opcoes_ops = ["home", "dashboard", "alerts", "orders_search", "profile"]
+            # Garante que o valor salvo do rádio exista nas opções atuais (evita ValueError)
+            if st.session_state.get("menu_ops") not in opcoes_ops:
+                st.session_state["menu_ops"] = st.session_state.current_page if st.session_state.current_page in opcoes_ops else opcoes_ops[0]
             is_ops_page = st.session_state.current_page in opcoes_ops
             index_ops = opcoes_ops.index(st.session_state.current_page) if is_ops_page else None
 
@@ -1087,6 +1090,9 @@ def main():
             else:
                 opcoes_gestao = ["material_sheet", "map"]
 
+            # Garante que o valor salvo do rádio exista nas opções atuais (evita ValueError)
+            if st.session_state.get("menu_gestao") not in opcoes_gestao:
+                st.session_state["menu_gestao"] = st.session_state.current_page if st.session_state.current_page in opcoes_gestao else opcoes_gestao[0]
             is_gestao_page = st.session_state.current_page in opcoes_gestao
             index_gestao = opcoes_gestao.index(st.session_state.current_page) if is_gestao_page else None
 
