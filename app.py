@@ -40,6 +40,7 @@ from src.ui.admin_saas import exibir_admin_saas
 from src.ui.landing_public import render_landing
 from src.ui.home import exibir_home
 from src.core.superadmin import is_superadmin
+from src.ui.relatorios_whatsapp import render_relatorios_whatsapp
 
 st.set_page_config(
     page_title="Sistema de Follow-Up",
@@ -601,6 +602,7 @@ PAGE_LABELS = {
     "users": "Gestão de usuários",
     "backup": "Backup",
     "saas_admin": "Admin do SaaS",
+    "reports_whatsapp": "Relatórios WhatsApp",
 }
 
 LEGACY_PAGE_TO_ID = {
@@ -652,6 +654,7 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
         ("🧾", "material_sheet", "Ficha de material"),
         ("🛒", "orders_manage", "Gestão de pedidos"),
         ("🗺️", "map", "Mapa"),
+        ("📲", "reports_whatsapp", "Relatórios WhatsApp"),
     ]
 
     if is_admin:
@@ -1340,11 +1343,11 @@ def main():
 
             # ---------- Gestão ----------
             if is_admin:
-                opcoes_gestao = ["material_sheet", "orders_manage", "map", "users", "backup"] + (
+                opcoes_gestao = ["material_sheet", "orders_manage", "map", "reports_whatsapp", "users", "backup"] + (
                     ["saas_admin"] if st.session_state.get("is_superadmin") else []
                 )
             else:
-                opcoes_gestao = ["material_sheet", "map"]
+                opcoes_gestao = ["material_sheet", "map", "reports_whatsapp"]
 
             # Fonte de verdade: página atual deve existir em algum grupo
             if st.session_state.current_page not in (opcoes_ops + opcoes_gestao):
@@ -1488,6 +1491,14 @@ def main():
     elif pagina == "backup":
         ba.realizar_backup_manual(supabase)
     
+    elif pagina == "reports_whatsapp":
+        usuario = st.session_state.get("usuario") or {}
+        render_relatorios_whatsapp(
+            supabase,
+            tenant_id=tenant_id,
+            created_by=usuario.get("id"),
+        )
+
     elif pagina == "profile":
         from src.ui.perfil import exibir_perfil
         exibir_perfil(supabase)
