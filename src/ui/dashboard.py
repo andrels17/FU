@@ -263,7 +263,7 @@ def exibir_dashboard(_supabase):
     
     # Abas para diferentes visualizações
     # Abas controláveis (permite forçar "Exportação" via session_state)
-    _tabs = ["📊 Visão Geral", "📈 Dashboard Avançado", "📥 Exportação"]
+    _tabs = ["Visão Geral", "Dashboard Avançado", "Exportação"]
     _force = st.session_state.pop("dash_force_tab", None)
     _default_idx = 0
     if _force == "Exportação":
@@ -282,27 +282,27 @@ def exibir_dashboard(_supabase):
     tab3 = (aba == _tabs[2])
     if tab1:
         # Controles de densidade
-        compacto = st.toggle("🧩 Modo compacto (mostrar só o essencial)", value=False, key="dash_compacto")
+        compacto = st.toggle("Modo compacto (mostrar só o essencial)", value=False, key="dash_compacto")
 
-        st.subheader("📌 Resumo acionável")
+        st.subheader("Resumo acionável")
 
         # ⚙️ Personalização das seções
-        with st.expander("⚙️ Personalizar Dashboard", expanded=False):
+        with st.expander("Personalizar Dashboard", expanded=False):
             a, b, c = st.columns(3)
             with a:
-                show_trend = st.checkbox("📈 Tendência", value=True, key="dash_show_trend")
-                show_rank = st.checkbox("🏢 Rankings", value=True, key="dash_show_rank")
+                show_trend = st.checkbox("Tendência", value=True, key="dash_show_trend")
+                show_rank = st.checkbox("Rankings", value=True, key="dash_show_rank")
             with b:
-                show_aging = st.checkbox("🧯 Aging", value=True, key="dash_show_aging")
-                show_action = st.checkbox("✅ Aja agora", value=True, key="dash_show_action")
+                show_aging = st.checkbox("Aging", value=True, key="dash_show_aging")
+                show_action = st.checkbox("Aja agora", value=True, key="dash_show_action")
             with c:
-                show_details = st.checkbox("📊 KPIs detalhados", value=False, key="dash_show_details")
+                show_details = st.checkbox("KPIs detalhados", value=False, key="dash_show_details")
 
         # =========================
         # Tendência semanal
         # =========================
         if show_trend:
-            st.markdown("#### 📈 Tendência (semanal)")
+            st.markdown("#### Tendência (semanal)")
             df_trend = pendentes.copy()
             df_trend["_week"] = df_trend["_due"].dt.to_period("W").astype(str)
             df_trend["_is_atrasado"] = (df_trend["_due"].notna() & (df_trend["_due"] < hoje)) | (df_trend["_atrasado"])
@@ -333,7 +333,7 @@ def exibir_dashboard(_supabase):
                 c1, c2 = st.columns(2)
 
                 with c1:
-                    st.markdown("#### 🧾 Top fornecedores (valor em risco)")
+                    st.markdown("#### Top fornecedores (valor em risco)")
                     if "fornecedor_nome" in pendentes.columns and not pendentes.empty:
                         tmp = atrasados.copy()
                         tmp["_bucket"] = "Atrasado"
@@ -355,7 +355,7 @@ def exibir_dashboard(_supabase):
                         st.caption("Coluna fornecedor_nome ausente ou sem dados.")
 
                 with c2:
-                    st.markdown("#### 🏢 Top departamentos (qtd em risco)")
+                    st.markdown("#### Top departamentos (qtd em risco)")
                     if "departamento" in pendentes.columns and not pendentes.empty:
                         tmp = pd.concat([atrasados, vencendo], ignore_index=True)
                         if not tmp.empty:
@@ -375,7 +375,7 @@ def exibir_dashboard(_supabase):
             # Aging
             # =========================
             if show_aging:
-                st.markdown("#### 🧯 Aging de atrasos")
+                st.markdown("#### Aging de atrasos")
                 if not atrasados.empty:
                     dias_atraso = (hoje - atrasados["_due"]).dt.days.clip(lower=0)
                     bins = [-1, 7, 15, 30, 60, 10_000]
@@ -386,13 +386,13 @@ def exibir_dashboard(_supabase):
                                         xaxis_title="Dias em atraso", yaxis_title="Quantidade")
                     st.plotly_chart(fig_a, use_container_width=True)
                 else:
-                    st.success("✅ Sem pedidos atrasados no recorte atual.")
+                    st.success("Sem pedidos atrasados no recorte atual.")
 
             # =========================
             # Aja agora
             # =========================
             if show_action:
-                st.markdown("#### ✅ Aja agora (Top 20)")
+                st.markdown("#### Aja agora (Top 20)")
                 acao = pd.concat(
                     [criticos.assign(_prior=0), atrasados.assign(_prior=1), vencendo.assign(_prior=2)],
                     ignore_index=True,
@@ -425,7 +425,7 @@ def exibir_dashboard(_supabase):
                         },
                     )
 
-                    if st.button("➡️ Abrir lista na Consulta", use_container_width=True, key="dash_go_acao"):
+                    if st.button("Abrir lista na Consulta", use_container_width=True, key="dash_go_acao"):
                         ocs = acao["nr_oc"].dropna().astype(str).unique().tolist() if "nr_oc" in acao.columns else []
                         st.session_state["quick_filter"] = {"tipo": "lista", "nro_ocs": ocs}
                         st.session_state.current_page = "Consultar Pedidos"
@@ -437,17 +437,17 @@ def exibir_dashboard(_supabase):
 
         # KPIs detalhados (opcional)
         if show_details:
-            with st.expander("📊 KPIs detalhados", expanded=True):
+            with st.expander("KPIs detalhados", expanded=True):
                 d1, d2, d3, d4 = st.columns(4)
                 with d1:
-                    st.metric("📦 Total", formatar_numero_br(total_pedidos).split(",")[0])
+                    st.metric("Total", formatar_numero_br(total_pedidos).split(",")[0])
                 with d2:
                     taxa_entrega = (pedidos_entregues / total_pedidos * 100) if total_pedidos > 0 else 0.0
                     st.metric("✅ Entregues", formatar_numero_br(pedidos_entregues).split(",")[0], delta=f"{taxa_entrega:.1f}%".replace(".", ","))
                 with d3:
                     st.metric("🚨 Críticos", formatar_numero_br(pedidos_criticos).split(",")[0], delta_color="inverse" if pedidos_criticos > 0 else "normal")
                 with d4:
-                    st.metric("💰 Valor total", formatar_moeda_br(valor_total))
+                    st.metric("Valor total", formatar_moeda_br(valor_total))
 
     if tab2:
         # Dashboard avançado
