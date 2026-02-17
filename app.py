@@ -334,6 +334,17 @@ def _industrial_sidebar_css() -> None:
             .fu-kpi-title { font-size: 11px; opacity: .78; margin: 0 0 2px 0; }
             .fu-kpi-value { font-size: 18px; font-weight: 900; margin: 0; }
 
+/* KPIs responsivos (evita “prensar” em mobile) */
+@media (max-width: 520px){
+    .fu-kpi-row{ flex-wrap: wrap; }
+    .fu-kpi{ flex: 1 1 calc(50% - 8px); }
+    .fu-kpi:last-child{ flex: 1 1 100%; }
+    .fu-kpi-value{ font-size: 20px; }
+}
+@media (max-width: 380px){
+    .fu-kpi{ flex: 1 1 100%; }
+}
+
             /* Menu radio */
             div[role="radiogroup"] label {
                 padding: 10px 12px;
@@ -455,6 +466,36 @@ def _industrial_sidebar_css() -> None:
                 border: 1px solid rgba(245,158,11,0.25);
                 box-shadow: 0 10px 22px rgba(245,158,11,0.10);
             }
+
+/* Nav: otimização mobile (mais espaço e menos travamento) */
+@media (max-width: 520px){
+    .fu-nav .fu-nav-dot{ display:none; }
+    .fu-nav .fu-nav-row{ gap: 0; }
+    .fu-nav .stButton > button{
+        height: 48px !important;
+        border-radius: 16px !important;
+        padding: 0 12px !important;
+        font-size: 0.98rem !important;
+    }
+}
+
+/* Conta: botões com melhor toque */
+.fu-account .stButton > button{
+    width: 100% !important;
+    height: 46px !important;
+    border-radius: 16px !important;
+    padding: 0 14px !important;
+    justify-content: flex-start !important;
+    font-weight: 850 !important;
+    border: 1px solid rgba(255,255,255,0.10) !important;
+    background: rgba(255,255,255,0.04) !important;
+    transition: transform 90ms ease, border-color 120ms ease, background 120ms ease !important;
+}
+.fu-account .stButton > button:hover{
+    transform: translateY(-1px);
+    border-color: rgba(59,130,246,0.25) !important;
+    background: rgba(255,255,255,0.06) !important;
+}
 
 </style>
         """),
@@ -1082,19 +1123,21 @@ def main():
             )
 
             with st.expander("Conta"):
-                if st.button("Meu Perfil", use_container_width=True):
+                st.markdown('<div class="fu-account">', unsafe_allow_html=True)
+                if st.button("👤 Meu Perfil", use_container_width=True):
                     st.session_state.current_page = "profile"
                     st.session_state["menu_ops"] = "profile"
                     st.session_state.exp_ops_open = True
                     st.session_state.exp_gestao_open = False
                     st.rerun()
 
-                if st.button("Sair", use_container_width=True):
+                if st.button("🚪 Sair", use_container_width=True):
                     try:
                         fazer_logout(supabase_anon)
                     except Exception:
                         pass
                     st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
             # 🔎 Busca rápida (navegação)
             busca = st.text_input(
