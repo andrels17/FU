@@ -25,7 +25,7 @@ from src.ui.admin_saas import exibir_admin_saas
 from src.ui.landing_public import render_landing
 from src.ui.home import exibir_home
 from src.core.superadmin import is_superadmin
-from relatorios_whatsapp import render_relatorios_whatsapp
+from src.ui.relatorios_whatsapp import render_relatorios_whatsapp
 
 st.set_page_config(
     page_title="Sistema de Follow-Up",
