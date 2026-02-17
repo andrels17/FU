@@ -365,9 +365,9 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
     - Indicador ativo só no item atual (sem linhas repetidas)
     """
     items: list[tuple[str, str, str]] = [
-        ("🏠", "🏠 Início", "Início"),
+        ("🏠", "Início", "Início"),
         ("📊", "Dashboard", "Dashboard"),
-        ("🔔", "🔔 Alertas e Notificações", "Alertas"),
+        ("🔔", "Alertas e Notificações", "Alertas"),
         ("🔎", "Consultar Pedidos", "Consultar pedidos"),
         ("👤", "Meu Perfil", "Meu perfil"),
         ("🧾", "Ficha de Material", "Ficha de material"),
@@ -377,15 +377,15 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
 
     if is_admin:
         items += [
-            ("👥", "👥 Gestão de Usuários", "Gestão de usuários"),
-            ("💾", "💾 Backup", "Backup"),
+            ("👥", "Gestão de Usuários", "Gestão de usuários"),
+            ("💾", "Backup", "Backup"),
         ]
         if is_superadmin:
             items += [("🧩", "🧩 Admin do SaaS", "Admin do SaaS")]
 
-    current = st.session_state.get("current_page") or "🏠 Início"
+    current = st.session_state.get("current_page") or "Início"
     if str(current).startswith("🔔"):
-        current = "🔔 Alertas e Notificações"
+        current = "Alertas e Notificações"
 
     st.markdown('<div class="fu-compact-nav">', unsafe_allow_html=True)
 
@@ -409,7 +409,7 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
 def _sidebar_footer(supabase_client) -> None:
     """Renderiza Sair + créditos (sempre por último na sidebar)."""
     st.markdown("---")
-    if st.button("🚪 Sair", use_container_width=True, key="btn_logout_sidebar"):
+    if st.button("Sair", use_container_width=True, key="btn_logout_sidebar"):
         try:
             ba.registrar_acao(
                 st.session_state.usuario,
@@ -487,12 +487,12 @@ def selecionar_empresa_no_login() -> bool:
 
     c1, c2 = st.columns([1, 1])
 
-    if c1.button("✅ Entrar", use_container_width=True):
+    if c1.button("Entrar", use_container_width=True):
         st.session_state["tenant_id"] = escolhido
         _sync_empresa_nome(escolhido, tenant_opts)
         st.rerun()
 
-    if c2.button("🚪 Sair", use_container_width=True):
+    if c2.button("Sair", use_container_width=True):
         try:
             fazer_logout(supabase_anon)
         except Exception:
@@ -513,16 +513,6 @@ def _cached_carregar_fornecedores(_supabase, tenant_id):
 
 
 def main():
-
-    # 🔀 Rotas (sem multipage) — use:
-    # - Primeiro acesso: ?page=first_access
-    # - Esqueci a senha: ?page=reset_request
-    # -----------------------------
-    # Roteamento resiliente (state-first)
-    # -----------------------------
-    # O Streamlit faz reruns frequentes. Em alguns ambientes, st.query_params
-    # pode ficar indisponível por 1 execução. Para evitar voltar para a landing
-    # indevidamente, o roteamento principal usa session_state como fonte de verdade.
 
     qp_page = st.query_params.get("page")
     if qp_page:
@@ -559,15 +549,10 @@ def main():
             st.query_params["page"] = "login"
 
     if not verificar_autenticacao():
-        # Se chegou aqui sem auth, a única tela interna permitida é o login.
-        # Mantemos a rota no session_state (fonte de verdade) e no URL, sem clear().
         st.session_state["fu_route"] = "login"
         if st.query_params.get("page") != "login":
             st.query_params["page"] = "login"
 
-        # =========================
-        # 🎨 Login (SaaS clean)
-        # =========================
         st.markdown(
             '''
             <style>
@@ -681,15 +666,15 @@ def main():
             st.markdown(
                 '''
                 <div class="fu-links">
-                  <a href="?page=reset_request">🔑 Esqueci minha senha</a>
+                  <a href="?page=reset_request">Esqueci minha senha</a>
                   <span class="fu-sep">•</span>
-                  <a href="?page=first_access">👋 Primeiro acesso</a>
+                  <a href="?page=first_access">Primeiro acesso</a>
                 </div>
                 ''',
                 unsafe_allow_html=True,
             )
         with right:
-            if st.button("📩 Entrar por link", use_container_width=True):
+            if st.button("Entrar por link", use_container_width=True):
                 _open_magic_modal()
 
         st.markdown('</div></div>', unsafe_allow_html=True)
@@ -697,7 +682,7 @@ def main():
         # Modal (dialog) — fallback para expander se necessário
         if st.session_state.get("fu_magic_modal_open"):
             try:
-                @st.dialog("📩 Entrar por link (sem senha)")
+                @st.dialog("Entrar por link (sem senha)")
                 def _magic_dialog():
                     st.caption("Digite seu e-mail e enviaremos um link de acesso.")
                     email_magic = st.text_input("E-mail", key="magic_email_modal")
@@ -723,14 +708,14 @@ def main():
                                     "email_redirect_to": "https://followupdef.streamlit.app/?auth_callback=1"
                                 }
                             })
-                            st.success("✅ Link enviado! Verifique seu e-mail.")
+                            st.success("Link enviado! Verifique seu e-mail.")
                             st.session_state["fu_magic_modal_open"] = False
                         except Exception as e:
-                            st.error(f"❌ Falha ao enviar link: {e}")
+                            st.error(f"Falha ao enviar link: {e}")
 
                 _magic_dialog()
             except Exception:
-                with st.expander("📩 Entrar por link (sem senha)"):
+                with st.expander("Entrar por link (sem senha)"):
                     email_magic = st.text_input("E-mail", key="magic_email_fallback")
                     if st.button("Enviar link de acesso", use_container_width=True):
                         try:
@@ -740,9 +725,9 @@ def main():
                                     "email_redirect_to": "https://followupdef.streamlit.app/?auth_callback=1"
                                 }
                             })
-                            st.success("✅ Link enviado! Verifique seu e-mail.")
+                            st.success("Link enviado! Verifique seu e-mail.")
                         except Exception as e:
-                            st.error(f"❌ Falha ao enviar link: {e}")
+                            st.error(f"Falha ao enviar link: {e}")
 
         return
 
@@ -800,7 +785,7 @@ def main():
             ids = list(nomes.keys())
             idx = ids.index(current) if current in ids else 0
             escolhido = st.selectbox(
-                "🏢 Empresa",
+                "Empresa",
                 options=ids,
                 format_func=lambda x: nomes.get(x, x),
                 index=idx,
@@ -819,7 +804,7 @@ def main():
     tenant_id = st.session_state.get("tenant_id") or tenant_id
     _sync_empresa_nome(tenant_id, tenant_opts)
     if not tenant_id:
-        st.error("❌ Não foi possível determinar sua empresa (tenant).")
+        st.error("Não foi possível determinar sua empresa (tenant).")
         return
 
     # 🔐 Primeiro acesso: força troca de senha (se implementado em src.core.auth)
@@ -891,7 +876,7 @@ def main():
 
             st.markdown(
                 textwrap.dedent(f"""<div class="fu-card">
-  <p class="fu-user-label">👷 Sistema de Follow-Up</p>
+  <p class="fu-user-label">Sistema de Follow-Up</p>
   <div class="fu-bar"></div>
 
   <!-- Avatar -->
@@ -925,15 +910,15 @@ def main():
                 unsafe_allow_html=True,
             )
 
-            with st.expander("⚙️ Conta"):
-                if st.button("👤 Meu Perfil", use_container_width=True):
+            with st.expander("Conta"):
+                if st.button("Meu Perfil", use_container_width=True):
                     st.session_state.current_page = "Meu Perfil"
                     st.session_state["menu_ops"] = "Meu Perfil"
                     st.session_state.exp_ops_open = True
                     st.session_state.exp_gestao_open = False
                     st.rerun()
 
-                if st.button("🚪 Sair", use_container_width=True):
+                if st.button("Sair", use_container_width=True):
                     try:
                         fazer_logout(supabase_anon)
                     except Exception:
@@ -953,17 +938,17 @@ def main():
                 mapa_paginas = {
                     "dash": "Dashboard",
                     "dashboard": "Dashboard",
-                    "alert": "🔔 Alertas e Notificações",
-                    "notific": "🔔 Alertas e Notificações",
+                    "alert": "Alertas e Notificações",
+                    "notific": "Alertas e Notificações",
                     "consulta": "Consultar Pedidos",
                     "pedido": "Consultar Pedidos",
                     "ficha": "Ficha de Material",
                     "material": "Ficha de Material",
                     "gest": "Gestão de Pedidos",
                     "mapa": "Mapa Geográfico",
-                    "usu": "👥 Gestão de Usuários",
-                    "usuario": "👥 Gestão de Usuários",
-                    "backup": "💾 Backup",
+                    "usu": "Gestão de Usuários",
+                    "usuario": "Gestão de Usuários",
+                    "backup": "Backup",
                 }
 
                 sugestoes = []
@@ -989,7 +974,7 @@ def main():
   background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(255,255,255,0.04));
 ">
   <div style="display:flex; align-items:center; justify-content:space-between;">
-    <div style="font-weight:900;">🔔 Alertas</div>
+    <div style="font-weight:900;">Alertas</div>
     <div style="
       background: rgba(239,68,68,0.95);
       color: white;
@@ -1010,7 +995,7 @@ def main():
             is_admin = st.session_state.usuario.get("perfil") == "admin"
             # ✅ Controle de navegação (seleção única + expander inteligente)
             if "current_page" not in st.session_state:
-                st.session_state.current_page = "🏠 Início"
+                st.session_state.current_page = "Início"
 
             # Memoriza qual box ficou aberto por último
             if "exp_ops_open" not in st.session_state:
@@ -1019,7 +1004,7 @@ def main():
                 st.session_state.exp_gestao_open = True
 
             # ---------- Operações ----------
-            opcoes_ops = ["🏠 Início", "Dashboard", alertas_label, "Consultar Pedidos", "Meu Perfil"]
+            opcoes_ops = ["Início", "Dashboard", alertas_label, "Consultar Pedidos", "Meu Perfil"]
             is_ops_page = st.session_state.current_page in opcoes_ops
             index_ops = opcoes_ops.index(st.session_state.current_page) if is_ops_page else None
 
@@ -1029,9 +1014,9 @@ def main():
                     "Ficha de Material",
                     "Gestão de Pedidos",
                     "Mapa Geográfico",
-                    "👥 Gestão de Usuários",
-                    "💾 Backup",
-                ] + (["🧩 Admin do SaaS"] if st.session_state.get("is_superadmin") else [])
+                    "Gestão de Usuários",
+                    "Backup",
+                ] + (["Admin do SaaS"] if st.session_state.get("is_superadmin") else [])
             else:
                 opcoes_gestao = ["Ficha de Material", "Mapa Geográfico"]
 
@@ -1056,7 +1041,7 @@ def main():
                     pass
                 st.session_state["_force_menu_sync"] = False
 
-            with st.expander("📊 Operações", expanded=expanded_ops):
+            with st.expander("Operações", expanded=expanded_ops):
                 if is_ops_page:
                     st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
 
@@ -1071,7 +1056,7 @@ def main():
                 if is_ops_page:
                     st.markdown("</div>", unsafe_allow_html=True)
 
-            with st.expander("🛠️ Gestão", expanded=expanded_gestao):
+            with st.expander("Gestão", expanded=expanded_gestao):
                 if is_gestao_page:
                     st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
 
@@ -1107,10 +1092,8 @@ def main():
 
     # Normaliza label de alertas
     if pagina == alertas_label:
-        pagina = "🔔 Alertas e Notificações"
+        pagina = "Alertas e Notificações"
 
-    # ===== Página (pode adicionar filtros na sidebar aqui) =====
-    # 🚀 Ações rápidas (sticky + funcionais)
     st.markdown(
         """
         <style>
@@ -1153,11 +1136,11 @@ def main():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    if pagina == "🏠 Início":
+    if pagina == "Início":
         exibir_home(alertas, usuario_nome=st.session_state.usuario.get("nome", "Usuário"))
     elif pagina == "Dashboard":
         exibir_dashboard(supabase)
-    elif pagina == "🔔 Alertas e Notificações":
+    elif pagina == "Alertas e Notificações":
         sa.exibir_painel_alertas(alertas, formatar_moeda_br)
     elif pagina == "Consultar Pedidos":
         exibir_consulta_pedidos(supabase)
@@ -1167,16 +1150,16 @@ def main():
         exibir_gestao_pedidos(supabase)
     elif pagina == "Mapa Geográfico":
         exibir_mapa(supabase)
-    elif pagina == "👥 Gestão de Usuários":
+    elif pagina == "Gestão de Usuários":
         exibir_gestao_usuarios(supabase)
-    elif pagina == "💾 Backup":
+    elif pagina == "Backup":
         ba.realizar_backup_manual(supabase)
     
     elif pagina == "Meu Perfil":
         from src.ui.perfil import exibir_perfil
         exibir_perfil(supabase)
 
-    elif pagina == "🧩 Admin do SaaS":
+    elif pagina == "Admin do SaaS":
         exibir_admin_saas(supabase)
 
 
