@@ -80,102 +80,70 @@ def _supabase_admin():
         st.secrets["SUPABASE_SERVICE_ROLE_KEY"],
     )
 
-def _whatsapp_js_buttons(phone_digits: str, text: str, key: str, label_prefix: str = ""):
-    """Botões assistidos para WhatsApp Web (reutiliza a mesma aba no navegador).
-
-    Estratégia:
-    - Mantém um handle global `window.__wa` para a aba do WhatsApp.
-    - Primeiro clique pode "fixar" a aba (abre https://web.whatsapp.com/).
-    - Depois, navega na mesma aba para /send?phone=...&text=...
-
-    Observação: em alguns navegadores com bloqueio de popups, é necessário permitir popups para o app.
-    """
-    import urllib.parse
-
-    phone_digits = re.sub(r"\D+", "", phone_digits or "")
-    if not phone_digits:
-        st.warning("Telefone WhatsApp inválido.")
-        return
-
-    encoded_text = urllib.parse.quote(text or "")
+def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_prefix: str = ""):
+    encoded_text = urllib.parse.quote(text)
     whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_text}"
 
-    safe_text = (text or "").replace("\\", "\\\\").replace("`", "\\`")
-
-    safe_key = re.sub(r"[^a-zA-Z0-9_\-]", "_", key or "wa")
-    fn_fix = f"wa_fix_{safe_key}"
-    fn_go = f"wa_go_{safe_key}"
-    fn_copy = f"wa_copy_{safe_key}"
-    fn_copy_go = f"wa_copy_go_{safe_key}"
+    url_js = json.dumps(whatsapp_url)
+    text_js = json.dumps(text)
 
     components.html(
         f"""
-        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-          <script>
-            function {fn_fix}() {{
-              try {{
-                if (!window.__wa || window.__wa.closed) {{
-                  window.__wa = window.open("https://web.whatsapp.com/", "whatsapp_tab");
-                }} else {{
-                  window.__wa.focus();
-                }}
-              }} catch (e) {{
-                window.open("https://web.whatsapp.com/", "whatsapp_tab");
-              }}
+        <script>
+        function waEnsureTab() {{
+            if (!window.__wa || window.__wa.closed) {{
+                window.__wa = window.open("https://web.whatsapp.com/", "whatsapp_tab");
             }}
+            if (window.__wa) {{
+                window.__wa.focus();
+            }}
+        }}
 
-            function {fn_go}(url) {{
-              try {{
-                if (!window.__wa || window.__wa.closed) {{
-                  window.__wa = window.open("https://web.whatsapp.com/", "whatsapp_tab");
-                }}
-                if (window.__wa) {{
-                  window.__wa.location.href = url;
-                  window.__wa.focus();
-                }} else {{
-                  window.open(url, "whatsapp_tab");
-                }}
-              }} catch (e) {{
+        function waGo() {{
+            waEnsureTab();
+            const url = {url_js};
+            if (window.__wa) {{
+                window.__wa.location.href = url;
+                window.__wa.focus();
+            }} else {{
                 window.open(url, "whatsapp_tab");
-              }}
             }}
+        }}
 
-            async function {fn_copy}(txt) {{
-              try {{
-                await navigator.clipboard.writeText(txt);
-              }} catch (e) {{}}
-            }}
+        async function waCopyAndGo() {{
+            try {{
+                await navigator.clipboard.writeText({text_js});
+            }} catch (e) {{}}
+            waGo();
+        }}
+        </script>
 
-            async function {fn_copy_go}(url, txt) {{
-              try {{
-                await navigator.clipboard.writeText(txt);
-              }} catch (e) {{}}
-              {fn_go}(url);
-            }}
-          </script>
+        <button onclick="waGo()" style="
+            padding:0.6rem 1rem;
+            border-radius:0.6rem;
+            background:#25D366;
+            color:white;
+            border:none;
+            font-weight:600;
+            cursor:pointer;
+            margin-right:8px;
+        ">
+            🌐 {label_prefix} WhatsApp
+        </button>
 
-          <button onclick="{fn_fix}()"
-            style="padding:0.45rem 0.8rem;border-radius:0.6rem;border:1px solid #374151;background:#111827;color:#e5e7eb;font-weight:600;cursor:pointer;">
-            📌 Fixar WhatsApp Web
-          </button>
-
-          <button onclick="{fn_go}('{whatsapp_url}')"
-            style="padding:0.45rem 0.8rem;border-radius:0.6rem;border:0;background:#16a34a;color:white;font-weight:700;cursor:pointer;">
-            🌐 {label_prefix + ' ' if label_prefix else ''}Abrir no WhatsApp
-          </button>
-
-          <button onclick="{fn_copy_go}('{whatsapp_url}', `{safe_text}`)"
-            style="padding:0.45rem 0.8rem;border-radius:0.6rem;border:0;background:#2563eb;color:white;font-weight:700;cursor:pointer;">
+        <button onclick="waCopyAndGo()" style="
+            padding:0.6rem 1rem;
+            border-radius:0.6rem;
+            background:#1f2937;
+            color:white;
+            border:none;
+            font-weight:600;
+            cursor:pointer;
+        ">
             📋 Copiar + Abrir
-          </button>
-
-          <button onclick="{fn_copy}(`{safe_text}`)"
-            style="padding:0.45rem 0.8rem;border-radius:0.6rem;border:1px solid #374151;background:#1f2937;color:#e5e7eb;font-weight:600;cursor:pointer;">
-            📋 Copiar
-          </button>
-        </div>
+        </button>
         """,
-        height=90,
+        height=110,
     )
 
     prefix = (label_prefix + " ") if label_prefix else ""
