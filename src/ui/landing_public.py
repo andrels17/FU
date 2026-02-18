@@ -141,7 +141,7 @@ def render_landing() -> None:
         )
 
         st.write("")
-with col_right:
+    with col_right:
         st.markdown('<div class="fu-side">', unsafe_allow_html=True)
         st.subheader("Acesso")
         st.caption("Use sua conta para entrar. Se ainda não tem acesso, solicite o convite.")
