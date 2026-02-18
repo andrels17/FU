@@ -722,298 +722,298 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
         st.caption("Cadastre/atualize o número WhatsApp dos destinatários para habilitar o envio assistido (WhatsApp Web).")
 
         
-with st.expander("📞 Telefones WhatsApp dos destinatários", expanded=False):
-    # Visão geral (somente leitura)
-    df_users = pd.DataFrame(gestores or [])
-    if df_users.empty:
-        st.caption("Nenhum usuário retornado (RPC/fallback).")
-    else:
-        if "user_id" not in df_users.columns and "id" in df_users.columns:
-            df_users = df_users.rename(columns={"id": "user_id"})
-        for c in ["nome", "email", "role", "whatsapp"]:
-            if c not in df_users.columns:
-                df_users[c] = ""
-
-        cols_show = ["user_id", "nome", "email", "role", "whatsapp"]
-        st.dataframe(df_users[cols_show], use_container_width=True, hide_index=True)
-
-        st.markdown("#### Editar WhatsApp de um destinatário")
-        user_options = df_users["user_id"].tolist()
-
-        def _fmt_user(uid: str) -> str:
-            row = df_users.loc[df_users["user_id"] == uid].head(1)
-            if row.empty:
-                return uid
-            nome = (row["nome"].iloc[0] or "Sem nome")
-            email = (row["email"].iloc[0] or "")
-            w = (row["whatsapp"].iloc[0] or "")
-            w_disp = f" | {w}" if w else ""
-            return f"{nome} — {email}{w_disp}"
-
-        uid_sel = st.selectbox(
-            "Destinatário",
-            options=user_options,
-            format_func=_fmt_user,
-            key="rep_whats_uid_sel",
-        )
-
-        cur_digits = ""
-        try:
-            cur_digits = _normalize_whatsapp(
-                df_users.loc[df_users["user_id"] == uid_sel, "whatsapp"].iloc[0]
-            )
-        except Exception:
-            cur_digits = ""
-
-        # Defaults BR friendly
-        ddi_def = "55"
-        ddd_def = ""
-        num_def = ""
-        if cur_digits.startswith("55") and len(cur_digits) >= 12:
-            ddi_def = "55"
-            rest = cur_digits[2:]
-            ddd_def = rest[:2]
-            num_def = rest[2:]
-        elif cur_digits:
-            ddi_def = cur_digits[:2]
-            rest = cur_digits[2:]
-            ddd_def = rest[:2] if len(rest) >= 2 else ""
-            num_def = rest[2:] if len(rest) > 2 else ""
-
-        cddi, cddd, cnum = st.columns([0.6, 0.6, 1.2])
-        with cddi:
-            ddi = st.text_input("DDI", value=ddi_def, max_chars=3, help="Ex.: 55 (Brasil)", key="rep_whats_ddi")
-        with cddd:
-            ddd = st.text_input("DDD", value=ddd_def, max_chars=2, help="Ex.: 83", key="rep_whats_ddd")
-        with cnum:
-            numero = st.text_input(
-                "Número",
-                value=num_def,
-                max_chars=9,
-                help="Somente o número (8 ou 9 dígitos). Ex.: 986392013",
-                key="rep_whats_num",
-            )
-
-        ddi_d = re.sub(r"\D+", "", ddi or "").strip() or "55"
-        ddd_d = re.sub(r"\D+", "", ddd or "").strip()
-        num_d = re.sub(r"\D+", "", numero or "").strip()
-
-        full_digits = (ddi_d + ddd_d + num_d) if (ddd_d or num_d) else ""
-        full_digits = full_digits.lstrip("0")
-
-        valid = True
-        errs = []
-        if full_digits:
-            if not ddi_d.isdigit() or len(ddi_d) not in (1, 2, 3):
-                valid = False
-                errs.append("DDI inválido")
-            if ddi_d == "55":
-                if len(ddd_d) != 2:
-                    valid = False
-                    errs.append("DDD deve ter 2 dígitos")
-                if len(num_d) not in (8, 9):
-                    valid = False
-                    errs.append("Número deve ter 8 ou 9 dígitos")
+        with st.expander("📞 Telefones WhatsApp dos destinatários", expanded=False):
+            # Visão geral (somente leitura)
+            df_users = pd.DataFrame(gestores or [])
+            if df_users.empty:
+                st.caption("Nenhum usuário retornado (RPC/fallback).")
             else:
-                if len(full_digits) < 10:
-                    valid = False
-                    errs.append("Número muito curto")
+                if "user_id" not in df_users.columns and "id" in df_users.columns:
+                    df_users = df_users.rename(columns={"id": "user_id"})
+                for c in ["nome", "email", "role", "whatsapp"]:
+                    if c not in df_users.columns:
+                        df_users[c] = ""
 
-        def _fmt_preview(ddi_d: str, ddd_d: str, num_d: str) -> str:
-            if not (ddi_d and (ddd_d or num_d)):
-                return ""
-            if num_d:
-                if len(num_d) == 9:
-                    num_fmt = f"{num_d[:5]}-{num_d[5:]}"
-                elif len(num_d) == 8:
-                    num_fmt = f"{num_d[:4]}-{num_d[4:]}"
-                else:
-                    num_fmt = num_d
-            else:
-                num_fmt = ""
-            mid = f"{ddd_d} {num_fmt}".strip()
-            return f"+{ddi_d} {mid}".strip()
+                cols_show = ["user_id", "nome", "email", "role", "whatsapp"]
+                st.dataframe(df_users[cols_show], use_container_width=True, hide_index=True)
 
-        preview = _fmt_preview(ddi_d, ddd_d, num_d)
-        if preview:
-            st.caption(f"Formato final: **{preview}**")
-            st.caption(f"wa.me: **https://wa.me/{full_digits}**")
+                st.markdown("#### Editar WhatsApp de um destinatário")
+                user_options = df_users["user_id"].tolist()
 
-        if full_digits and not valid:
-            st.warning("Ajuste: " + "; ".join(errs))
+                def _fmt_user(uid: str) -> str:
+                    row = df_users.loc[df_users["user_id"] == uid].head(1)
+                    if row.empty:
+                        return uid
+                    nome = (row["nome"].iloc[0] or "Sem nome")
+                    email = (row["email"].iloc[0] or "")
+                    w = (row["whatsapp"].iloc[0] or "")
+                    w_disp = f" | {w}" if w else ""
+                    return f"{nome} — {email}{w_disp}"
 
-        csave, ctest, cclear = st.columns([1, 1, 1])
-        with csave:
-            if st.button("Salvar WhatsApp", type="primary", use_container_width=True, key="rep_whats_save_one"):
-                if not full_digits:
-                    st.error("Informe ao menos DDD e número.")
-                elif not valid:
-                    st.error("Número inválido: " + "; ".join(errs))
-                else:
-                    ok_upd = _update_user_whatsapp(supabase, uid_sel, full_digits)
-                    if ok_upd:
-                        st.success("WhatsApp salvo.")
-                        st.rerun()
-                    else:
-                        st.error("Não consegui salvar (verifique coluna user_profiles.whatsapp e policies).")
-        with ctest:
-            if full_digits:
-                st.link_button("Testar abrir WhatsApp Web", url=f"https://wa.me/{full_digits}", use_container_width=True)
-            else:
-                st.button("Testar abrir WhatsApp Web", disabled=True, use_container_width=True)
-        with cclear:
-            if st.button("Limpar WhatsApp", use_container_width=True, key="rep_whats_clear_one"):
-                ok_upd = _update_user_whatsapp(supabase, uid_sel, "")
-                if ok_upd:
-                    st.success("WhatsApp removido.")
-                    st.rerun()
-                else:
-                    st.error("Não consegui limpar (verifique policies).")
-
-
-        deps = _load_departamentos_from_pedidos(supabase, tenant_id)
-
-        if not deps:
-            st.info("Não encontrei departamentos em pedidos (coluna 'departamento').")
-            st.caption("Cadastre ao menos um pedido com departamento preenchido para habilitar os vínculos.")
-        elif not gestores:
-            st.warning(
-                "Nenhum destinatário encontrado para este tenant. "
-                "Não encontrei nenhum usuário retornado pela RPC rpc_tenant_members para este tenant."
-            )
-            st.caption("Se seu sistema usa outro nome de role (ex.: 'manager'), ajuste roles_destino no código.")
-        else:
-            links = _load_links(supabase, tenant_id)
-            mapa_links = {l.get("departamento"): l.get("gestor_user_id") for l in (links or [])}
-
-            st.markdown("### Vincular / editar vínculo individual")
-
-            c1, c2, c3 = st.columns([1.2, 1.3, 0.8])
-            with c1:
-                dep = st.selectbox("Departamento", options=deps, key="rep_link_dep")
-            with c2:
-                gestor_id = st.selectbox(
+                uid_sel = st.selectbox(
                     "Destinatário",
-                    options=list(labels_g.keys()),
-                    format_func=lambda uid: labels_g.get(uid, uid),
-                    key="rep_link_gestor",
+                    options=user_options,
+                    format_func=_fmt_user,
+                    key="rep_whats_uid_sel",
                 )
-            with c3:
-                st.caption("")
 
-            dep_ok = (dep or "").strip()
-            if st.button("Salvar vínculo", type="primary", use_container_width=True, key="rep_link_save"):
-                if not dep_ok:
-                    st.error("Departamento inválido (vazio).")
-                else:
-                    _upsert_link(supabase, tenant_id, dep_ok, gestor_id)
-                    st.success("Vínculo salvo.")
-                    st.rerun()
-
-            st.divider()
-
-            st.markdown("### Vínculos existentes (listar / editar / remover)")
-
-            if links:
-                rows = []
-                for l in links:
-                    dep_l = (l.get("departamento") or "").strip()
-                    g_id = l.get("gestor_user_id")
-                    g = gestores_by_id.get(g_id, {})
-                    rows.append(
-                        {
-                            "id": l.get("id"),
-                            "departamento": dep_l,
-                            "gestor_user_id": g_id,
-                            "destinatário": (g.get("nome") or g.get("email") or labels_g.get(g_id) or g_id),
-                        }
-                    )
-
-                df_links = pd.DataFrame(rows)
-
-                # Editor (permite trocar o destinatário por departamento)
+                cur_digits = ""
                 try:
-                    edited = st.data_editor(
-                        df_links,
-                        use_container_width=True,
-                        hide_index=True,
-                        disabled=["id", "departamento", "destinatário"],
-                        column_config={
-                            "gestor_user_id": st.column_config.SelectboxColumn(
-                                "Destinatário",
-                                options=list(labels_g.keys()),
-                                format_func=lambda uid: labels_g.get(uid, uid),
-                                required=True,
-                            ),
-                        },
-                        key="rep_links_editor",
+                    cur_digits = _normalize_whatsapp(
+                        df_users.loc[df_users["user_id"] == uid_sel, "whatsapp"].iloc[0]
                     )
                 except Exception:
-                    st.dataframe(df_links[["departamento", "destinatário"]], use_container_width=True, hide_index=True)
-                    edited = df_links
+                    cur_digits = ""
 
-                c_save, c_rm = st.columns([1, 1])
-                with c_save:
-                    if st.button("Salvar alterações do grid", use_container_width=True, key="rep_links_save_grid"):
-                        changed = 0
-                        for _, r in edited.iterrows():
-                            dep_l = (r.get("departamento") or "").strip()
-                            g_id = r.get("gestor_user_id")
-                            if not dep_l:
-                                continue
-                            if mapa_links.get(dep_l) != g_id:
-                                _upsert_link(supabase, tenant_id, dep_l, g_id)
-                                changed += 1
-                        st.success(f"Alterações aplicadas: {changed}.")
-                        st.rerun()
+                # Defaults BR friendly
+                ddi_def = "55"
+                ddd_def = ""
+                num_def = ""
+                if cur_digits.startswith("55") and len(cur_digits) >= 12:
+                    ddi_def = "55"
+                    rest = cur_digits[2:]
+                    ddd_def = rest[:2]
+                    num_def = rest[2:]
+                elif cur_digits:
+                    ddi_def = cur_digits[:2]
+                    rest = cur_digits[2:]
+                    ddd_def = rest[:2] if len(rest) >= 2 else ""
+                    num_def = rest[2:] if len(rest) > 2 else ""
 
-                with c_rm:
-                    rm_deps = st.multiselect(
-                        "Remover vínculo(s) (por departamento)",
-                        options=sorted([r["departamento"] for r in rows if r.get("departamento")]),
-                        key="rep_links_rm_deps",
+                cddi, cddd, cnum = st.columns([0.6, 0.6, 1.2])
+                with cddi:
+                    ddi = st.text_input("DDI", value=ddi_def, max_chars=3, help="Ex.: 55 (Brasil)", key="rep_whats_ddi")
+                with cddd:
+                    ddd = st.text_input("DDD", value=ddd_def, max_chars=2, help="Ex.: 83", key="rep_whats_ddd")
+                with cnum:
+                    numero = st.text_input(
+                        "Número",
+                        value=num_def,
+                        max_chars=9,
+                        help="Somente o número (8 ou 9 dígitos). Ex.: 986392013",
+                        key="rep_whats_num",
                     )
-                    if st.button("Remover selecionados", use_container_width=True, key="rep_links_rm_btn"):
-                        if not rm_deps:
-                            st.warning("Selecione ao menos um departamento para remover.")
+
+                ddi_d = re.sub(r"\D+", "", ddi or "").strip() or "55"
+                ddd_d = re.sub(r"\D+", "", ddd or "").strip()
+                num_d = re.sub(r"\D+", "", numero or "").strip()
+
+                full_digits = (ddi_d + ddd_d + num_d) if (ddd_d or num_d) else ""
+                full_digits = full_digits.lstrip("0")
+
+                valid = True
+                errs = []
+                if full_digits:
+                    if not ddi_d.isdigit() or len(ddi_d) not in (1, 2, 3):
+                        valid = False
+                        errs.append("DDI inválido")
+                    if ddi_d == "55":
+                        if len(ddd_d) != 2:
+                            valid = False
+                            errs.append("DDD deve ter 2 dígitos")
+                        if len(num_d) not in (8, 9):
+                            valid = False
+                            errs.append("Número deve ter 8 ou 9 dígitos")
+                    else:
+                        if len(full_digits) < 10:
+                            valid = False
+                            errs.append("Número muito curto")
+
+                def _fmt_preview(ddi_d: str, ddd_d: str, num_d: str) -> str:
+                    if not (ddi_d and (ddd_d or num_d)):
+                        return ""
+                    if num_d:
+                        if len(num_d) == 9:
+                            num_fmt = f"{num_d[:5]}-{num_d[5:]}"
+                        elif len(num_d) == 8:
+                            num_fmt = f"{num_d[:4]}-{num_d[4:]}"
                         else:
-                            ids_to_rm = [l.get("id") for l in links if (l.get("departamento") or "").strip() in set(rm_deps)]
-                            for lid in ids_to_rm:
-                                if lid:
-                                    _delete_link(supabase, lid)
-                            st.success(f"Removidos: {len(ids_to_rm)}.")
+                            num_fmt = num_d
+                    else:
+                        num_fmt = ""
+                    mid = f"{ddd_d} {num_fmt}".strip()
+                    return f"+{ddi_d} {mid}".strip()
+
+                preview = _fmt_preview(ddi_d, ddd_d, num_d)
+                if preview:
+                    st.caption(f"Formato final: **{preview}**")
+                    st.caption(f"wa.me: **https://wa.me/{full_digits}**")
+
+                if full_digits and not valid:
+                    st.warning("Ajuste: " + "; ".join(errs))
+
+                csave, ctest, cclear = st.columns([1, 1, 1])
+                with csave:
+                    if st.button("Salvar WhatsApp", type="primary", use_container_width=True, key="rep_whats_save_one"):
+                        if not full_digits:
+                            st.error("Informe ao menos DDD e número.")
+                        elif not valid:
+                            st.error("Número inválido: " + "; ".join(errs))
+                        else:
+                            ok_upd = _update_user_whatsapp(supabase, uid_sel, full_digits)
+                            if ok_upd:
+                                st.success("WhatsApp salvo.")
+                                st.rerun()
+                            else:
+                                st.error("Não consegui salvar (verifique coluna user_profiles.whatsapp e policies).")
+                with ctest:
+                    if full_digits:
+                        st.link_button("Testar abrir WhatsApp Web", url=f"https://wa.me/{full_digits}", use_container_width=True)
+                    else:
+                        st.button("Testar abrir WhatsApp Web", disabled=True, use_container_width=True)
+                with cclear:
+                    if st.button("Limpar WhatsApp", use_container_width=True, key="rep_whats_clear_one"):
+                        ok_upd = _update_user_whatsapp(supabase, uid_sel, "")
+                        if ok_upd:
+                            st.success("WhatsApp removido.")
                             st.rerun()
-            else:
-                st.caption("Nenhum vínculo cadastrado ainda.")
+                        else:
+                            st.error("Não consegui limpar (verifique policies).")
 
-            st.divider()
 
-            st.markdown("### Vincular todos os departamentos para um destinatário")
+                deps = _load_departamentos_from_pedidos(supabase, tenant_id)
 
-            c_all1, c_all2 = st.columns([1.3, 0.9])
-            with c_all1:
-                gestor_all = st.selectbox(
-                    "Destinatário para todos",
-                    options=list(labels_g.keys()),
-                    format_func=lambda uid: labels_g.get(uid, uid),
-                    key="rep_link_all_gestor",
-                )
-            with c_all2:
-                aplicar_somente_faltantes = st.checkbox("Somente departamentos sem vínculo", value=True, key="rep_link_all_only_missing")
+                if not deps:
+                    st.info("Não encontrei departamentos em pedidos (coluna 'departamento').")
+                    st.caption("Cadastre ao menos um pedido com departamento preenchido para habilitar os vínculos.")
+                elif not gestores:
+                    st.warning(
+                        "Nenhum destinatário encontrado para este tenant. "
+                        "Não encontrei nenhum usuário retornado pela RPC rpc_tenant_members para este tenant."
+                    )
+                    st.caption("Se seu sistema usa outro nome de role (ex.: 'manager'), ajuste roles_destino no código.")
+                else:
+                    links = _load_links(supabase, tenant_id)
+                    mapa_links = {l.get("departamento"): l.get("gestor_user_id") for l in (links or [])}
 
-            if st.button("Vincular todos para este destinatário", use_container_width=True, key="rep_link_all_btn"):
-                alvo = gestor_all
-                total = 0
-                for d in deps:
-                    d_ok = (d or "").strip()
-                    if not d_ok:
-                        continue
-                    if aplicar_somente_faltantes and mapa_links.get(d_ok):
-                        continue
-                    _upsert_link(supabase, tenant_id, d_ok, alvo)
-                    total += 1
-                st.success(f"Vínculos atualizados: {total}.")
-                st.rerun()
+                    st.markdown("### Vincular / editar vínculo individual")
+
+                    c1, c2, c3 = st.columns([1.2, 1.3, 0.8])
+                    with c1:
+                        dep = st.selectbox("Departamento", options=deps, key="rep_link_dep")
+                    with c2:
+                        gestor_id = st.selectbox(
+                            "Destinatário",
+                            options=list(labels_g.keys()),
+                            format_func=lambda uid: labels_g.get(uid, uid),
+                            key="rep_link_gestor",
+                        )
+                    with c3:
+                        st.caption("")
+
+                    dep_ok = (dep or "").strip()
+                    if st.button("Salvar vínculo", type="primary", use_container_width=True, key="rep_link_save"):
+                        if not dep_ok:
+                            st.error("Departamento inválido (vazio).")
+                        else:
+                            _upsert_link(supabase, tenant_id, dep_ok, gestor_id)
+                            st.success("Vínculo salvo.")
+                            st.rerun()
+
+                    st.divider()
+
+                    st.markdown("### Vínculos existentes (listar / editar / remover)")
+
+                    if links:
+                        rows = []
+                        for l in links:
+                            dep_l = (l.get("departamento") or "").strip()
+                            g_id = l.get("gestor_user_id")
+                            g = gestores_by_id.get(g_id, {})
+                            rows.append(
+                                {
+                                    "id": l.get("id"),
+                                    "departamento": dep_l,
+                                    "gestor_user_id": g_id,
+                                    "destinatário": (g.get("nome") or g.get("email") or labels_g.get(g_id) or g_id),
+                                }
+                            )
+
+                        df_links = pd.DataFrame(rows)
+
+                        # Editor (permite trocar o destinatário por departamento)
+                        try:
+                            edited = st.data_editor(
+                                df_links,
+                                use_container_width=True,
+                                hide_index=True,
+                                disabled=["id", "departamento", "destinatário"],
+                                column_config={
+                                    "gestor_user_id": st.column_config.SelectboxColumn(
+                                        "Destinatário",
+                                        options=list(labels_g.keys()),
+                                        format_func=lambda uid: labels_g.get(uid, uid),
+                                        required=True,
+                                    ),
+                                },
+                                key="rep_links_editor",
+                            )
+                        except Exception:
+                            st.dataframe(df_links[["departamento", "destinatário"]], use_container_width=True, hide_index=True)
+                            edited = df_links
+
+                        c_save, c_rm = st.columns([1, 1])
+                        with c_save:
+                            if st.button("Salvar alterações do grid", use_container_width=True, key="rep_links_save_grid"):
+                                changed = 0
+                                for _, r in edited.iterrows():
+                                    dep_l = (r.get("departamento") or "").strip()
+                                    g_id = r.get("gestor_user_id")
+                                    if not dep_l:
+                                        continue
+                                    if mapa_links.get(dep_l) != g_id:
+                                        _upsert_link(supabase, tenant_id, dep_l, g_id)
+                                        changed += 1
+                                st.success(f"Alterações aplicadas: {changed}.")
+                                st.rerun()
+
+                        with c_rm:
+                            rm_deps = st.multiselect(
+                                "Remover vínculo(s) (por departamento)",
+                                options=sorted([r["departamento"] for r in rows if r.get("departamento")]),
+                                key="rep_links_rm_deps",
+                            )
+                            if st.button("Remover selecionados", use_container_width=True, key="rep_links_rm_btn"):
+                                if not rm_deps:
+                                    st.warning("Selecione ao menos um departamento para remover.")
+                                else:
+                                    ids_to_rm = [l.get("id") for l in links if (l.get("departamento") or "").strip() in set(rm_deps)]
+                                    for lid in ids_to_rm:
+                                        if lid:
+                                            _delete_link(supabase, lid)
+                                    st.success(f"Removidos: {len(ids_to_rm)}.")
+                                    st.rerun()
+                    else:
+                        st.caption("Nenhum vínculo cadastrado ainda.")
+
+                    st.divider()
+
+                    st.markdown("### Vincular todos os departamentos para um destinatário")
+
+                    c_all1, c_all2 = st.columns([1.3, 0.9])
+                    with c_all1:
+                        gestor_all = st.selectbox(
+                            "Destinatário para todos",
+                            options=list(labels_g.keys()),
+                            format_func=lambda uid: labels_g.get(uid, uid),
+                            key="rep_link_all_gestor",
+                        )
+                    with c_all2:
+                        aplicar_somente_faltantes = st.checkbox("Somente departamentos sem vínculo", value=True, key="rep_link_all_only_missing")
+
+                    if st.button("Vincular todos para este destinatário", use_container_width=True, key="rep_link_all_btn"):
+                        alvo = gestor_all
+                        total = 0
+                        for d in deps:
+                            d_ok = (d or "").strip()
+                            if not d_ok:
+                                continue
+                            if aplicar_somente_faltantes and mapa_links.get(d_ok):
+                                continue
+                            _upsert_link(supabase, tenant_id, d_ok, alvo)
+                            total += 1
+                        st.success(f"Vínculos atualizados: {total}.")
+                        st.rerun()
     with tab_send:
         st.subheader("Enviar relatório de entregues (sob demanda)")
 
@@ -1120,7 +1120,7 @@ with st.expander("📞 Telefones WhatsApp dos destinatários", expanded=False):
             texto = st.session_state.get("_rep_texto")
             if df is None or texto is None:
                 st.error("Gere a prévia primeiro.")
-                
+                return
 
             destinos = sorted({g for g in mapa.values() if g})
 
