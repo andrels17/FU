@@ -119,6 +119,55 @@ def _pill_style():
     )
 
 
+
+def _periodo_anterior(dt_ini: date, dt_fim: date) -> tuple[date, date]:
+    """Retorna (dt_ini_prev, dt_fim_prev) com o mesmo número de dias do período atual."""
+    if not dt_ini or not dt_fim or dt_fim < dt_ini:
+        return dt_ini, dt_fim
+    dias = (dt_fim - dt_ini).days
+    dt_fim_prev = dt_ini - timedelta(days=1)
+    dt_ini_prev = dt_fim_prev - timedelta(days=dias)
+    return dt_ini_prev, dt_fim_prev
+
+
+def _evolucao_semanal(df_base: pd.DataFrame, date_col: str) -> pd.DataFrame:
+    """Soma valor_total por semana (freq=W)."""
+    if df_base is None or df_base.empty or date_col not in df_base.columns:
+        return pd.DataFrame(columns=["data", "total"])
+    s = pd.to_datetime(df_base[date_col], errors="coerce")
+    tmp = df_base.copy()
+    tmp["_data"] = s
+    tmp = tmp.dropna(subset=["_data"])
+    if tmp.empty:
+        return pd.DataFrame(columns=["data", "total"])
+    tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0)
+    out = tmp.groupby(pd.Grouper(key="_data", freq="W"))["_valor"].sum().reset_index()
+    out = out.rename(columns={"_data": "data", "_valor": "total"})
+    return out
+
+
+def _cols_detail(df: pd.DataFrame, date_field: str) -> list[str]:
+    """Colunas sugeridas para drill-down (apenas as que existirem)."""
+    prefer = [
+        date_field,
+        "id",
+        "numero_pedido",
+        "departamento",
+        "cod_equipamento",
+        "fornecedor",
+        "descricao",
+        "valor_total",
+        "status",
+        "entregue",
+    ]
+    return [c for c in prefer if c in df.columns]
+
+
+def _download_df(df: pd.DataFrame, prefix: str, dt_ini: date, dt_fim: date) -> tuple[bytes, str]:
+    csv = df.to_csv(index=False).encode("utf-8")
+    return csv, _download_name(prefix, dt_ini, dt_fim)
+
+
 def render_relatorios_gerenciais(_supabase, tenant_id: str):
     st.title("📈 Relatórios Gerenciais")
     st.caption("Visão de gastos por Gestor, Frota (cód. equipamento) e Departamento.")
@@ -170,22 +219,72 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str):
     qtd_geral = int(len(df_base)) if not df_base.empty else 0
     ticket = (total_geral / qtd_geral) if qtd_geral else 0.0
 
+    # Período anterior (comparação)
+    dt_ini_prev, dt_fim_prev = _periodo_anterior(dt_ini, dt_fim)
+    filtros_prev = FiltrosGastos(
+        dt_ini=dt_ini_prev,
+        dt_fim=dt_fim_prev,
+        date_field=filtros.date_field,
+        entregue=filtros.entregue,
+        departamentos=filtros.departamentos,
+        cod_equipamentos=filtros.cod_equipamentos,
+    )
+    df_prev = filtrar_pedidos_base(df_pedidos, filtros=filtros_prev)
+    total_prev = _as_float(df_prev.get("valor_total", pd.Series(dtype=float)).fillna(0).sum()) if df_prev is not None and not df_prev.empty else 0.0
+    qtd_prev = int(len(df_prev)) if df_prev is not None and not df_prev.empty else 0
+    delta_pct = ((total_geral - total_prev) / total_prev * 100.0) if total_prev else 0.0
+
     # ===== Resumo primeiro (como você pediu) =====
     with st.container(border=True):
         st.markdown("### 📌 Resumo do período aplicado")
-        a1, a2, a3 = st.columns(3)
-        a1.metric("Pedidos", qtd_geral)
-        a2.metric("Gasto total", formatar_moeda_br(total_geral))
-        a3.metric("Ticket médio", formatar_moeda_br(ticket))
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric("Pedidos", qtd_geral, f"{qtd_prev} no período anterior" if qtd_prev else None)
+        a2.metric("Gasto total", formatar_moeda_br(total_geral), f"{delta_pct:.1f}% vs anterior" if total_prev else None)
+        a3.metric("Período anterior", formatar_moeda_br(total_prev))
+        a4.metric("Ticket médio", formatar_moeda_br(ticket))
 
         st.caption(
             f"Período: **{dt_ini.strftime('%d/%m/%Y')}** a **{dt_fim.strftime('%d/%m/%Y')}** · "
             f"Data: **{filtros.date_field}** · Situação: **{st.session_state.get('rg_entregue_label','Todos')}**"
         )
 
+    # 📈 Evolução semanal (no período aplicado)
+    with st.container(border=True):
+        st.markdown("### 📈 Evolução do gasto (semanal)")
+        df_evol = _evolucao_semanal(df_base, filtros.date_field)
+        if df_evol is None or df_evol.empty:
+            st.caption("Sem dados suficientes para a evolução semanal.")
+        else:
+            st.line_chart(df_evol.set_index("data")["total"])
+
     # ===== Filtros abaixo do resumo (sempre visíveis) =====
     with st.container(border=True):
         st.markdown("### 🔎 Filtros")
+
+        # Presets rápidos (não aplica automaticamente; clique em "Aplicar filtros")
+        p1, p2, p3, p4, p5 = st.columns([1, 1, 1, 1, 1])
+        if p1.button("📅 Mês atual", use_container_width=True):
+            hoje = date.today()
+            st.session_state["rg_dt_ini"] = hoje.replace(day=1)
+            st.session_state["rg_dt_fim"] = hoje
+        if p2.button("⏮️ Mês anterior", use_container_width=True):
+            hoje = date.today().replace(day=1)
+            fim = hoje - timedelta(days=1)
+            st.session_state["rg_dt_ini"] = fim.replace(day=1)
+            st.session_state["rg_dt_fim"] = fim
+        if p3.button("🗓️ 7 dias", use_container_width=True):
+            hoje = date.today()
+            st.session_state["rg_dt_ini"] = hoje - timedelta(days=6)
+            st.session_state["rg_dt_fim"] = hoje
+        if p4.button("🗓️ 30 dias", use_container_width=True):
+            hoje = date.today()
+            st.session_state["rg_dt_ini"] = hoje - timedelta(days=29)
+            st.session_state["rg_dt_fim"] = hoje
+        if p5.button("🗓️ 90 dias", use_container_width=True):
+            hoje = date.today()
+            st.session_state["rg_dt_ini"] = hoje - timedelta(days=89)
+            st.session_state["rg_dt_fim"] = hoje
+
         c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
         with c1:
             st.date_input("Data inicial", value=st.session_state["rg_dt_ini"], key="rg_dt_ini")
@@ -318,6 +417,33 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str):
         cols = ["Gestor", "E-mail", "Pedidos", "Total", "% do total"]
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
 
+
+# 🔎 Drill-down: pedidos do gestor selecionado (derivado pelo vínculo dept→gestor)
+with st.expander("🔎 Ver pedidos de um gestor", expanded=False):
+    opt_names = df_g["gestor_nome"].fillna("(Sem nome)").tolist()
+    sel_nome = st.selectbox("Gestor", options=opt_names, key="rg_drill_gestor_nome")
+    # descobrir gestor_user_id do nome selecionado
+    try:
+        sel_row = df_g[df_g["gestor_nome"].fillna("(Sem nome)") == sel_nome].head(1)
+        sel_gid = sel_row["gestor_user_id"].iloc[0] if not sel_row.empty and "gestor_user_id" in sel_row.columns else None
+    except Exception:
+        sel_gid = None
+
+    if not sel_gid:
+        st.info("Selecione um gestor válido.")
+    else:
+        # departamentos vinculados a este gestor
+        deptos = [d for d, gid in (links or {}).items() if gid == sel_gid]
+        df_det = df_base[df_base.get("departamento", "").astype(str).isin(deptos)].copy() if deptos else df_base.iloc[0:0].copy()
+        st.caption(f"Departamentos vinculados: {', '.join(deptos) if deptos else '(nenhum)'}")
+        if df_det.empty:
+            st.warning("Sem pedidos para este gestor no período aplicado.")
+        else:
+            cols_det = _cols_detail(df_det, filtros.date_field)
+            st.dataframe(df_det[cols_det], use_container_width=True, hide_index=True)
+            csv_det, name_det = _download_df(df_det[cols_det], "pedidos_gestor", dt_ini, dt_fim)
+            st.download_button("⬇️ Baixar pedidos (gestor)", csv_det, name_det, "text/csv", use_container_width=True)
+
         _render_common_actions(df_g, "gastos_por_gestor")
 
     # ===== Aba Frota =====
@@ -356,6 +482,22 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str):
         df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
         st.dataframe(df_show[["Frota", "Pedidos", "Total", "% do total"]], use_container_width=True, hide_index=True)
 
+
+with st.expander("🔎 Ver pedidos de uma frota (cód. equipamento)", expanded=False):
+    sel_frota = st.selectbox(
+        "Frota (cód.)",
+        options=df_f["cod_equipamento"].fillna("(Sem código)").astype(str).tolist(),
+        key="rg_drill_frota",
+    )
+    df_det = df_base[df_base.get("cod_equipamento", "").astype(str) == str(sel_frota)].copy()
+    if df_det.empty:
+        st.warning("Sem pedidos para esta frota no período aplicado.")
+    else:
+        cols_det = _cols_detail(df_det, filtros.date_field)
+        st.dataframe(df_det[cols_det], use_container_width=True, hide_index=True)
+        csv_det, name_det = _download_df(df_det[cols_det], "pedidos_frota", dt_ini, dt_fim)
+        st.download_button("⬇️ Baixar pedidos (frota)", csv_det, name_det, "text/csv", use_container_width=True)
+
         _render_common_actions(df_f, "gastos_por_frota")
 
     # ===== Aba Departamento =====
@@ -392,5 +534,21 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str):
         df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
         df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
         st.dataframe(df_show[["Departamento", "Pedidos", "Total", "% do total"]], use_container_width=True, hide_index=True)
+
+
+with st.expander("🔎 Ver pedidos de um departamento", expanded=False):
+    sel_dept = st.selectbox(
+        "Departamento",
+        options=df_d["departamento"].fillna("(Sem dept)").astype(str).tolist(),
+        key="rg_drill_dept",
+    )
+    df_det = df_base[df_base.get("departamento", "").astype(str) == str(sel_dept)].copy()
+    if df_det.empty:
+        st.warning("Sem pedidos para este departamento no período aplicado.")
+    else:
+        cols_det = _cols_detail(df_det, filtros.date_field)
+        st.dataframe(df_det[cols_det], use_container_width=True, hide_index=True)
+        csv_det, name_det = _download_df(df_det[cols_det], "pedidos_departamento", dt_ini, dt_fim)
+        st.download_button("⬇️ Baixar pedidos (departamento)", csv_det, name_det, "text/csv", use_container_width=True)
 
         _render_common_actions(df_d, "gastos_por_departamento")
