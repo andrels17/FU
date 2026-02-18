@@ -997,7 +997,7 @@ def exibir_gestao_pedidos(_supabase):
                             existentes = set()
                             duplicados_oc = 0
 
-                if duplicados_oc > 0:
+                if duplicados_oc > 0 and not (limpar_antes and st.session_state.get("pode_importar_com_limpeza", False)):
                     st.warning(
                         f"⚠️ Encontradas **{duplicados_oc}** OCs do arquivo que já existem no banco. "
                         f"Se você importar como **Adicionar**, pode duplicar registros."
@@ -1017,7 +1017,16 @@ def exibir_gestao_pedidos(_supabase):
                 except Exception:
                     valor_atualiza_prev = 0
 
-                cprev1, cprev2, cprev3, cprev4, cprev5 = st.columns(5)
+                
+                # Se o usuário marcou "Limpar banco antes da importação" (e confirmou),
+                # a prévia deve considerar que tudo será INSERIDO (não há updates nem valores para comparar).
+                _limpeza_confirmada = bool(limpar_antes and st.session_state.get("pode_importar_com_limpeza", False))
+                if _limpeza_confirmada:
+                    insere_prev = int(len(df_norm))
+                    atualiza_prev = 0
+                    pula_prev = 0
+                    valor_atualiza_prev = 0
+cprev1, cprev2, cprev3, cprev4, cprev5 = st.columns(5)
                 cprev1.metric("Registros válidos", len(df_norm))
                 cprev2.metric("Previsão inserir", int(insere_prev))
                 cprev3.metric("Previsão atualizar", int(atualiza_prev))
