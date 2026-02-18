@@ -42,6 +42,7 @@ from src.ui.landing_public import render_landing
 from src.ui.home import exibir_home
 from src.core.superadmin import is_superadmin
 from src.ui.relatorios_whatsapp import render_relatorios_whatsapp
+from src.ui.relatorios_gerenciais import render_relatorios_gerenciais
 
 st.set_page_config(
     page_title="Sistema de Follow-Up",
@@ -604,7 +605,9 @@ PAGE_LABELS = {
     "backup": "Backup",
     "saas_admin": "Admin do SaaS",
     "reports_whatsapp": "Relatórios WhatsApp",
+    "reports_gerenciais": "Relatórios Gerenciais",
 }
+
 
 LEGACY_PAGE_TO_ID = {
 
@@ -1344,11 +1347,11 @@ def main():
 
             # ---------- Gestão ----------
             if is_admin:
-                opcoes_gestao = ["material_sheet", "orders_manage", "map", "reports_whatsapp", "users", "backup"] + (
+                opcoes_gestao = ["material_sheet", "orders_manage", "map", "reports_whatsapp", "reports_gerenciais", "users", "backup"] + (
                     ["saas_admin"] if st.session_state.get("is_superadmin") else []
                 )
             else:
-                opcoes_gestao = ["material_sheet", "map", "reports_whatsapp"]
+                opcoes_gestao = ["material_sheet", "map", "reports_whatsapp", "reports_gerenciais"]
 
             # Fonte de verdade: página atual deve existir em algum grupo
             if st.session_state.current_page not in (opcoes_ops + opcoes_gestao):
@@ -1499,6 +1502,13 @@ def main():
             tenant_id=tenant_id,
             created_by=usuario.get("id"),
         )
+
+
+elif pagina == "reports_gerenciais":
+    render_relatorios_gerenciais(
+        supabase,
+        tenant_id=tenant_id,
+    )
 
     elif pagina == "profile":
         from src.ui.perfil import exibir_perfil
