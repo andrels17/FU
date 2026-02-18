@@ -81,16 +81,102 @@ def _supabase_admin():
     )
 
 def _whatsapp_js_buttons(phone_digits: str, text: str, key: str, label_prefix: str = ""):
-    """Renderiza botões JS que reutilizam a mesma aba do WhatsApp Web (window.open).
-    Inclui: Abrir, Copiar, Copiar+Abrir.
+    """Botões assistidos para WhatsApp Web (reutiliza a mesma aba no navegador).
+
+    Estratégia:
+    - Mantém um handle global `window.__wa` para a aba do WhatsApp.
+    - Primeiro clique pode "fixar" a aba (abre https://web.whatsapp.com/).
+    - Depois, navega na mesma aba para /send?phone=...&text=...
+
+    Observação: em alguns navegadores com bloqueio de popups, é necessário permitir popups para o app.
     """
-    phone_digits = phone_digits or ""
-    msg = text or ""
-    # URL do WhatsApp Web (melhor que wa.me no desktop)
-    import urllib.parse, json
-    url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={urllib.parse.quote(msg)}"
-    url_js = json.dumps(url)
-    msg_js = json.dumps(msg)
+    import urllib.parse
+
+    phone_digits = re.sub(r"\D+", "", phone_digits or "")
+    if not phone_digits:
+        st.warning("Telefone WhatsApp inválido.")
+        return
+
+    encoded_text = urllib.parse.quote(text or "")
+    whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_text}"
+
+    safe_text = (text or "").replace("\\", "\\\\").replace("`", "\\`")
+
+    safe_key = re.sub(r"[^a-zA-Z0-9_\-]", "_", key or "wa")
+    fn_fix = f"wa_fix_{safe_key}"
+    fn_go = f"wa_go_{safe_key}"
+    fn_copy = f"wa_copy_{safe_key}"
+    fn_copy_go = f"wa_copy_go_{safe_key}"
+
+    components.html(
+        f"""
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+          <script>
+            function {fn_fix}() {{
+              try {{
+                if (!window.__wa || window.__wa.closed) {{
+                  window.__wa = window.open("https://web.whatsapp.com/", "whatsapp_tab");
+                }} else {{
+                  window.__wa.focus();
+                }}
+              }} catch (e) {{
+                window.open("https://web.whatsapp.com/", "whatsapp_tab");
+              }}
+            }}
+
+            function {fn_go}(url) {{
+              try {{
+                if (!window.__wa || window.__wa.closed) {{
+                  window.__wa = window.open("https://web.whatsapp.com/", "whatsapp_tab");
+                }}
+                if (window.__wa) {{
+                  window.__wa.location.href = url;
+                  window.__wa.focus();
+                }} else {{
+                  window.open(url, "whatsapp_tab");
+                }}
+              }} catch (e) {{
+                window.open(url, "whatsapp_tab");
+              }}
+            }}
+
+            async function {fn_copy}(txt) {{
+              try {{
+                await navigator.clipboard.writeText(txt);
+              }} catch (e) {{}}
+            }}
+
+            async function {fn_copy_go}(url, txt) {{
+              try {{
+                await navigator.clipboard.writeText(txt);
+              }} catch (e) {{}}
+              {fn_go}(url);
+            }}
+          </script>
+
+          <button onclick="{fn_fix}()"
+            style="padding:0.45rem 0.8rem;border-radius:0.6rem;border:1px solid #374151;background:#111827;color:#e5e7eb;font-weight:600;cursor:pointer;">
+            📌 Fixar WhatsApp Web
+          </button>
+
+          <button onclick="{fn_go}('{whatsapp_url}')"
+            style="padding:0.45rem 0.8rem;border-radius:0.6rem;border:0;background:#16a34a;color:white;font-weight:700;cursor:pointer;">
+            🌐 {label_prefix + ' ' if label_prefix else ''}Abrir no WhatsApp
+          </button>
+
+          <button onclick="{fn_copy_go}('{whatsapp_url}', `{safe_text}`)"
+            style="padding:0.45rem 0.8rem;border-radius:0.6rem;border:0;background:#2563eb;color:white;font-weight:700;cursor:pointer;">
+            📋 Copiar + Abrir
+          </button>
+
+          <button onclick="{fn_copy}(`{safe_text}`)"
+            style="padding:0.45rem 0.8rem;border-radius:0.6rem;border:1px solid #374151;background:#1f2937;color:#e5e7eb;font-weight:600;cursor:pointer;">
+            📋 Copiar
+          </button>
+        </div>
+        """,
+        height=90,
+    )
 
     prefix = (label_prefix + " ") if label_prefix else ""
     # IDs únicos por instância
