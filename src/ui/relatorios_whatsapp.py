@@ -686,9 +686,9 @@ def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
                 if col_qtd:
                     partes.append(f"Qtd: {row.get(col_qtd, '')}")
                 if col_equip:
-                    partes.append(f"Eqp: {row.get(col_equip, '')}")
+                    partes.append(f"Frota: {row.get(col_equip, '')}")
                 if col_mat:
-                    partes.append(f"Mat: {row.get(col_mat, '')}")
+                    partes.append(f"Material: {row.get(col_mat, '')}")
                 linhas.append(f"  {i}. " + " | ".join(partes))
             linhas.append("")
     else:
@@ -699,9 +699,9 @@ def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
             if col_qtd:
                 partes.append(f"Qtd: {row.get(col_qtd, '')}")
             if col_equip:
-                partes.append(f"Eqp: {row.get(col_equip, '')}")
+                partes.append(f"Frota: {row.get(col_equip, '')}")
             if col_mat:
-                partes.append(f"Mat: {row.get(col_mat, '')}")
+                partes.append(f"Material: {row.get(col_mat, '')}")
             linhas.append(f"{i}. " + " | ".join(partes))
 
     return cabecalho + "\n".join(linhas)
