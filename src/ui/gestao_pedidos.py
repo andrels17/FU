@@ -174,9 +174,11 @@ def _calc_valor_total_row(row: pd.Series) -> float:
 
     # Aceita várias convenções de coluna (você pode manter sua planilha como está)
     unit = (
-        _coerce_float(row.get("valor_unitario"))
-        or _coerce_float(row.get("valor_ultima_compra"))
+        # prioridade: última compra (o que você usa na planilha)
+        _coerce_float(row.get("valor_ultima_compra"))
         or _coerce_float(row.get("valor_ultima"))
+        # fallback: preço unitário (se a planilha trouxer)
+        or _coerce_float(row.get("valor_unitario"))
     )
 
     if unit is not None and unit > 0 and qtde > 0:
@@ -213,9 +215,10 @@ def _validate_upload_df(df_upload: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
         df["valor_total"] = 0
 
     # Preços auxiliares (opcionais) para cálculo automático do valor_total
+    # (aceita PT-BR com vírgula e também valores já numéricos)
     for c in ["valor_unitario", "valor_ultima_compra", "valor_ultima"]:
         if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+            df[c] = df[c].apply(_coerce_float)
 
     # Datas (podem vir vazias)
     for c in ["data_solicitacao", "data_oc", "previsao_entrega"]:
@@ -2237,4 +2240,3 @@ def exibir_gestao_pedidos(_supabase):
                             st.rerun()
                     except Exception as e:
                         st.error(f"Erro ao aplicar fornecedor: {e}")
-
