@@ -1475,26 +1475,34 @@ def main():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    if pagina == "home":
+        if pagina == "home":
         usuario = st.session_state.get("usuario") or {}
         exibir_home(alertas, usuario_nome=usuario.get("nome", "Usuário"))
+
     elif pagina == "dashboard":
         exibir_dashboard(supabase)
+
     elif pagina == "alerts":
         sa.exibir_painel_alertas(alertas, formatar_moeda_br)
+
     elif pagina == "orders_search":
         exibir_consulta_pedidos(supabase)
+
     elif pagina == "material_sheet":
         exibir_ficha_material(supabase)
+
     elif pagina == "orders_manage":
         exibir_gestao_pedidos(supabase)
+
     elif pagina == "map":
         exibir_mapa(supabase)
+
     elif pagina == "users":
         exibir_gestao_usuarios(supabase)
+
     elif pagina == "backup":
         ba.realizar_backup_manual(supabase)
-    
+
     elif pagina == "reports_whatsapp":
         usuario = st.session_state.get("usuario") or {}
         render_relatorios_whatsapp(
@@ -1503,12 +1511,11 @@ def main():
             created_by=usuario.get("id"),
         )
 
-
-elif pagina == "reports_gerenciais":
-    render_relatorios_gerenciais(
-        supabase,
-        tenant_id=tenant_id,
-    )
+    elif pagina == "reports_gerenciais":
+        render_relatorios_gerenciais(
+            supabase,
+            tenant_id=tenant_id,
+        )
 
     elif pagina == "profile":
         from src.ui.perfil import exibir_perfil
@@ -1516,6 +1523,7 @@ elif pagina == "reports_gerenciais":
 
     elif pagina == "saas_admin":
         exibir_admin_saas(supabase)
+
 
 
     # ===== Rodapé da sidebar: sempre depois dos filtros =====
