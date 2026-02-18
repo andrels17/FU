@@ -5,6 +5,75 @@ import pandas as pd
 import streamlit as st
 
 
+
+def _split_text(texto: str, max_chars: int = 3500) -> list[str]:
+    """Divide um texto grande em partes <= max_chars, tentando quebrar por linhas."""
+    if not texto:
+        return [""]
+    if len(texto) <= max_chars:
+        return [texto]
+
+    linhas = texto.splitlines()
+    partes: list[str] = []
+    atual: list[str] = []
+    tamanho = 0
+
+    for ln in linhas:
+        add = len(ln) + (1 if atual else 0)
+        if tamanho + add > max_chars and atual:
+            partes.append("\n".join(atual))
+            atual = [ln]
+            tamanho = len(ln)
+        else:
+            tamanho += add
+            atual.append(ln)
+
+    if atual:
+        partes.append("\n".join(atual))
+
+    partes_fix: list[str] = []
+    for p in partes:
+        if len(p) <= max_chars:
+            partes_fix.append(p)
+        else:
+            for i in range(0, len(p), max_chars):
+                partes_fix.append(p[i:i+max_chars])
+    return partes_fix
+
+
+def _make_preview_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Monta um dataframe de prévia com colunas mais relevantes (tolerante ao schema)."""
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["item", "descrição", "qtde entregue", "cód. equipamento", "cód. material", "departamento"])
+
+    def pick(cands):
+        for c in cands:
+            if c in df.columns:
+                return c
+        return None
+
+    col_desc = pick(["descricao", "descrição", "item_descricao", "material_descricao"])
+    col_qtd = pick(["qtde_entregue", "quantidade_entregue", "qtd_entregue", "quantidade", "qtde"])
+    col_equip = pick(["cod_equipamento", "codigo_equipamento", "equipamento", "equipamento_codigo"])
+    col_mat = pick(["cod_material", "codigo_material", "material", "material_codigo", "cod_item"])
+    col_dep = pick(["departamento"])
+
+    cols = [c for c in [col_desc, col_qtd, col_equip, col_mat, col_dep] if c]
+    prev = df[cols].copy() if cols else df.copy()
+
+    prev.insert(0, "item", range(1, len(prev) + 1))
+
+    rename_map = {}
+    if col_desc: rename_map[col_desc] = "descrição"
+    if col_qtd: rename_map[col_qtd] = "qtde entregue"
+    if col_equip: rename_map[col_equip] = "cód. equipamento"
+    if col_mat: rename_map[col_mat] = "cód. material"
+    if col_dep: rename_map[col_dep] = "departamento"
+    prev = prev.rename(columns=rename_map)
+
+    ordem = ["item", "descrição", "qtde entregue", "cód. equipamento", "cód. material", "departamento"]
+    return prev[[c for c in ordem if c in prev.columns]]
+
 def _dt_range_utc(d_ini, d_fim):
     """Converte date -> UTC range [ini, fim+1d)."""
     dt_ini = datetime.combine(d_ini, time.min).replace(tzinfo=timezone.utc)
@@ -297,16 +366,8 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             horizontal=True,
             key="rep_periodo",
         )
-        
+
         hoje = datetime.now().date()
-        
-        # 1) Inicializa uma única vez (primeira execução)
-        if "rep_dt_ini" not in st.session_state:
-            st.session_state["rep_dt_ini"] = hoje - timedelta(days=7)
-        if "rep_dt_fim" not in st.session_state:
-            st.session_state["rep_dt_fim"] = hoje
-        
-        # 2) Atualiza as datas conforme período (sem mexer se for Personalizado)
         if periodo == "Últimos 7 dias":
             st.session_state["rep_dt_ini"] = hoje - timedelta(days=7)
             st.session_state["rep_dt_fim"] = hoje
@@ -316,17 +377,23 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
         elif periodo == "Mês atual":
             st.session_state["rep_dt_ini"] = hoje.replace(day=1)
             st.session_state["rep_dt_fim"] = hoje
-        
-        # 3) Widgets SEM value= (eles já usam session_state pelo key)
+
         c_dt1, c_dt2 = st.columns(2)
         with c_dt1:
-            d_ini = st.date_input("Data inicial", key="rep_dt_ini")
+            d_ini = st.date_input(
+                "Data inicial",
+                value=st.session_state.get("rep_dt_ini", hoje - timedelta(days=7)),
+                key="rep_dt_ini",
+            )
         with c_dt2:
-            d_fim = st.date_input("Data final", key="rep_dt_fim")
-        
+            d_fim = st.date_input(
+                "Data final",
+                value=st.session_state.get("rep_dt_fim", hoje),
+                key="rep_dt_fim",
+            )
+
         if periodo != "Personalizado":
             st.caption("Dica: selecione 'Personalizado' para editar as datas livremente.")
-
 
         dt_ini, dt_fim = _dt_range_utc(d_ini, d_fim)
 
@@ -352,6 +419,34 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             df = _load_entregues(supabase, tenant_id, dt_ini, dt_fim, deps_sel)
             texto = _build_message(d_ini, d_fim, df, deps_sel)
 
+
+            # Prévia (tabela 1:1 com o texto)
+
+            st.markdown("### Prévia")
+
+            df_prev = _make_preview_df(df)
+
+            st.dataframe(df_prev, use_container_width=True, hide_index=True)
+
+
+            # Texto final (WhatsApp) + divisão automática se ficar grande
+
+            st.markdown("### Texto (WhatsApp)")
+
+            partes = _split_text(texto, max_chars=3500)
+
+
+            if len(partes) == 1:
+
+                st.text_area("Mensagem", value=partes[0], height=260, key="rep_texto_full")
+
+            else:
+
+                st.info(f"O texto ficou grande e foi dividido em {len(partes)} mensagens.")
+
+                for i, p in enumerate(partes, start=1):
+
+                    st.text_area(f"Mensagem {i}/{len(partes)}", value=p, height=220, key=f"rep_texto_{i}")
             st.session_state["_rep_df"] = df
             st.session_state["_rep_texto"] = texto
             st.session_state["_rep_dt_ini"] = dt_ini.isoformat()
