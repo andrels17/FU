@@ -78,7 +78,7 @@ def _build_filtros_from_state() -> tuple[FiltrosGastos, date, date]:
         date_field=date_field,
         entregue=entregue,
         departamentos=list(st.session_state.get("rg_depts") or []),
-        frotas=list(st.session_state.get("rg_frotas") or []),
+        cod_equipamentos=list(st.session_state.get("rg_frotas") or []),
     )
     return filtros, dt_ini, dt_fim
 
@@ -370,4 +370,3 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str):
         st.dataframe(df_show[["Departamento", "Pedidos", "Total", "% do total"]], use_container_width=True, hide_index=True)
 
         _render_common_actions(df_d, "gastos_por_departamento")
-
