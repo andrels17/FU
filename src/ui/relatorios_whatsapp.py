@@ -297,8 +297,16 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             horizontal=True,
             key="rep_periodo",
         )
-
+        
         hoje = datetime.now().date()
+        
+        # 1) Inicializa uma única vez (primeira execução)
+        if "rep_dt_ini" not in st.session_state:
+            st.session_state["rep_dt_ini"] = hoje - timedelta(days=7)
+        if "rep_dt_fim" not in st.session_state:
+            st.session_state["rep_dt_fim"] = hoje
+        
+        # 2) Atualiza as datas conforme período (sem mexer se for Personalizado)
         if periodo == "Últimos 7 dias":
             st.session_state["rep_dt_ini"] = hoje - timedelta(days=7)
             st.session_state["rep_dt_fim"] = hoje
@@ -308,23 +316,17 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
         elif periodo == "Mês atual":
             st.session_state["rep_dt_ini"] = hoje.replace(day=1)
             st.session_state["rep_dt_fim"] = hoje
-
+        
+        # 3) Widgets SEM value= (eles já usam session_state pelo key)
         c_dt1, c_dt2 = st.columns(2)
         with c_dt1:
-            d_ini = st.date_input(
-                "Data inicial",
-                value=st.session_state.get("rep_dt_ini", hoje - timedelta(days=7)),
-                key="rep_dt_ini",
-            )
+            d_ini = st.date_input("Data inicial", key="rep_dt_ini")
         with c_dt2:
-            d_fim = st.date_input(
-                "Data final",
-                value=st.session_state.get("rep_dt_fim", hoje),
-                key="rep_dt_fim",
-            )
-
+            d_fim = st.date_input("Data final", key="rep_dt_fim")
+        
         if periodo != "Personalizado":
             st.caption("Dica: selecione 'Personalizado' para editar as datas livremente.")
+
 
         dt_ini, dt_fim = _dt_range_utc(d_ini, d_fim)
 
