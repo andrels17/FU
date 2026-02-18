@@ -20,6 +20,30 @@ from src.services.relatorios_gastos import (
 )
 
 
+
+def _safe_gastos_por_gestor(df_base, links, user_map):
+    """Compatibilidade: tenta diferentes assinaturas de gastos_por_gestor()."""
+    try:
+        return gastos_por_gestor(df_base, links=links, user_map=user_map)
+    except TypeError:
+        pass
+    try:
+        return gastos_por_gestor(df_base, links, user_map)
+    except TypeError:
+        pass
+    try:
+        return gastos_por_gestor(df_base, links)
+    except TypeError:
+        pass
+    # fallback: tenta passar só um dict dept->gestor se existir
+    try:
+        mapa = { (l.get("departamento") or "").strip(): l.get("gestor_user_id") for l in (links or []) if (l.get("departamento") or "").strip() }
+        return gastos_por_gestor(df_base, mapa)
+    except TypeError:
+        # última tentativa: sem filtros adicionais
+        return gastos_por_gestor(df_base)
+
+
 def _date_defaults() -> tuple[date, date]:
     hoje = date.today()
     ini = hoje - timedelta(days=30)
@@ -257,7 +281,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str):
         st.subheader("Gastos por Gestor")
         topn = _top_selector("rg_gestor")
 
-        df_g = gastos_por_gestor(df_base, links=links, user_map=user_map)
+        df_g = _safe_gastos_por_gestor(df_base, links, user_map)
         if df_g is None or df_g.empty:
             st.info("Sem dados para o agrupamento por Gestor (verifique vínculos de departamento → gestor).")
             st.stop()
