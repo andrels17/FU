@@ -209,6 +209,9 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str):
         links = carregar_links_departamento_gestor(supabase_admin or _supabase, tenant_id=tenant_id)
         user_map = carregar_mapa_usuarios_tenant(supabase_admin or _supabase, tenant_id=tenant_id)
 
+    # Mapa rápido dept -> gestor (para drill-down por gestor)
+    dept_map = _links_to_dept_map(links)
+
     # ===== Aplicar filtros (estado aplicado) =====
     filtros, dt_ini, dt_fim = _build_filtros_from_state()
 
@@ -410,7 +413,6 @@ def _add_prev_delta(df_now: pd.DataFrame, df_prev_group: pd.DataFrame, key_col: 
     out["delta_pct"] = out.apply(lambda r: ((r["total"] - r["prev_total"]) / r["prev_total"] * 100.0) if r["prev_total"] else 0.0, axis=1)
     return out
 
-dept_map = _links_to_dept_map(links)
 
 # ===== Aba Gestor =====
 with tab_gestor:
