@@ -169,25 +169,12 @@ def _coerce_float(x):
 
 
 def _calc_valor_total_row(row: pd.Series) -> float:
-    """Calcula valor_total = qtde_solicitada * preço.
+    """Obtém valor_total informado no arquivo (normalizado).
 
-    Prioridade de preço (pra bater com sua planilha):
-    1) valor_unitario (negociado / atual)
-    2) valor_ultima_compra (histórico)
-    3) valor_ultima (alias)
-    4) fallback: valor_total informado
+    Observação: como o arquivo já traz o valor_total final, não recalculamos
+    qtde * preço aqui. (Para materiais novos ou negociações, o valor_total do
+    arquivo é a fonte de verdade.)
     """
-    qtde = _coerce_float(row.get("qtde_solicitada")) or 0.0
-
-    unit = (
-        _coerce_float(row.get("valor_unitario"))
-        or _coerce_float(row.get("valor_ultima_compra"))
-        or _coerce_float(row.get("valor_ultima"))
-    )
-
-    if unit is not None and unit > 0 and qtde > 0:
-        return float(qtde * unit)
-
     vt = _coerce_float(row.get("valor_total"))
     return float(vt or 0.0)
 
@@ -1135,6 +1122,7 @@ def exibir_gestao_pedidos(_supabase):
                         registros_processados = 0
                         registros_inseridos = 0
                         registros_atualizados = 0
+                        valores_alterados = 0
                         registros_erro = 0
                         fornecedores_criados = 0
                         log_rows: list[dict] = []  # log detalhado por linha
@@ -1150,7 +1138,9 @@ def exibir_gestao_pedidos(_supabase):
 
                         # Prefetch para idempotência (OC > Solicitação)
                         oc_to_id: dict[str, str] = {}
+                        oc_to_valor: dict[str, float] = {}
                         sol_to_id_sem_oc: dict[str, str] = {}
+                        sol_to_valor: dict[str, float] = {}
                         sol_com_oc: set[str] = set()
 
                         # 1) OCs existentes no banco (para update/pulo)
@@ -1159,11 +1149,12 @@ def exibir_gestao_pedidos(_supabase):
                             ocs = [x for x in ocs.tolist() if x]
                             if ocs:
                                 try:
-                                    res_oc = _supabase.table("pedidos").select("id,nr_oc").eq("tenant_id", tenant_id).in_("nr_oc", ocs).execute()
+                                    res_oc = _supabase.table("pedidos").select("id,nr_oc,valor_total").eq("tenant_id", tenant_id).in_("nr_oc", ocs).execute()
                                     for r in (res_oc.data or []):
                                         nr_oc_db = str(r.get("nr_oc") or "").strip()
                                         if nr_oc_db:
                                             oc_to_id[nr_oc_db] = str(r.get("id"))
+                                            oc_to_valor[nr_oc_db] = float(r.get("valor_total") or 0)
                                 except Exception:
                                     oc_to_id = {}
 
@@ -1174,7 +1165,7 @@ def exibir_gestao_pedidos(_supabase):
                             sols = [x for x in sols.tolist() if x]
                             if sols:
                                 try:
-                                    res_sol = _supabase.table("pedidos").select("id,nr_solicitacao,nr_oc").eq("tenant_id", tenant_id).in_("nr_solicitacao", sols).execute()
+                                    res_sol = _supabase.table("pedidos").select("id,nr_solicitacao,nr_oc,valor_total").eq("tenant_id", tenant_id).in_("nr_solicitacao", sols).execute()
                                     for r in (res_sol.data or []):
                                         sol_db = str(r.get("nr_solicitacao") or "").strip()
                                         oc_db = str(r.get("nr_oc") or "").strip()
@@ -1184,6 +1175,7 @@ def exibir_gestao_pedidos(_supabase):
                                             sol_com_oc.add(sol_db)
                                         else:
                                             sol_to_id_sem_oc[sol_db] = str(r.get("id"))
+                                            sol_to_valor[sol_db] = float(r.get("valor_total") or 0)
                                 except Exception:
                                     sol_to_id_sem_oc = {}
                                     sol_com_oc = set()
@@ -1198,6 +1190,7 @@ def exibir_gestao_pedidos(_supabase):
                                 #     * se solicitação existir sem OC: atualiza
                                 # -------------------------------------------------
                                 pedido_id_existente = None
+                                old_valor_total = None
 
                                 nr_oc_row = str(row.get("nr_oc") or "").strip()
                                 nr_sol_row = str(row.get("nr_solicitacao") or "").strip()
@@ -1220,6 +1213,7 @@ def exibir_gestao_pedidos(_supabase):
                                             status_txt.caption(f"Processando {registros_processados}/{total_rows}...")
                                         continue
                                     pedido_id_existente = oc_to_id[nr_oc_row]
+                                    old_valor_total = oc_to_valor.get(nr_oc_row)
 
                                 elif (not nr_oc_row) and nr_sol_row:
                                     if nr_sol_row in sol_com_oc:
@@ -1244,6 +1238,7 @@ def exibir_gestao_pedidos(_supabase):
                                                 status_txt.caption(f"Processando {registros_processados}/{total_rows}...")
                                             continue
                                         pedido_id_existente = sol_to_id_sem_oc[nr_sol_row]
+                                        old_valor_total = sol_to_valor.get(nr_sol_row)
 
                                 fornecedor_id = None
 
@@ -1383,6 +1378,11 @@ def exibir_gestao_pedidos(_supabase):
                                     # Atualiza por ID (mais seguro e rápido)
                                     _supabase.table("pedidos").update(pedido_data).eq("id", pedido_id_existente).eq("tenant_id", tenant_id).execute()
                                     registros_atualizados += 1
+                                    try:
+                                        if old_valor_total is not None and (not _float_eq(float(pedido_data.get("valor_total") or 0), float(old_valor_total or 0))):
+                                            valores_alterados += 1
+                                    except Exception:
+                                        pass
                                     log_rows.append({"linha": idx + 2, "acao": "Atualizado", "chave": (f"OC:{nr_oc_row}" if nr_oc_row else (f"SOL:{nr_sol_row}" if nr_sol_row else "")), "id": pedido_id_existente, "mensagem": "Atualizado com sucesso"})
                                 else:
                                     pedido_data["tenant_id"] = tenant_id
@@ -1412,6 +1412,7 @@ def exibir_gestao_pedidos(_supabase):
 - ✅ Processados: {registros_processados}
 - ➕ Inseridos: {registros_inseridos}
 - 🔄 Atualizados: {registros_atualizados}
+- 💲 Valores alterados: {valores_alterados}
 - 🏭 Fornecedores criados: {fornecedores_criados}
 - ⛔ Duplicados (OC) pulados: {registros_pulados_dup}
 """
@@ -1423,6 +1424,7 @@ def exibir_gestao_pedidos(_supabase):
 - ✅ Processados: {registros_processados}
 - ➕ Inseridos: {registros_inseridos}
 - 🔄 Atualizados: {registros_atualizados}
+- 💲 Valores alterados: {valores_alterados}
 - 🏭 Fornecedores criados: {fornecedores_criados}
 - ⛔ Duplicados (OC) pulados: {registros_pulados_dup}
 - ❌ Erros: {registros_erro}
