@@ -144,21 +144,35 @@ def _fetch_user_profiles_admin(admin, user_ids: list[str]):
 
 
 def _update_user_whatsapp(supabase, uid: str, whatsapp_digits: str) -> bool:
-    """Atualiza o WhatsApp do usuário tentando schemas comuns (user_profiles/usuarios)."""
+    """Atualiza o WhatsApp do usuário (prioriza user_profiles) usando SERVICE ROLE.
+
+    Motivo: em muitos projetos o update em user_profiles é bloqueado por RLS para o usuário logado.
+    Aqui usamos o client admin (service role) para persistir com segurança no backend (Streamlit).
+    """
+    try:
+        admin = _supabase_admin()
+    except Exception:
+        admin = None
+
+    value = whatsapp_digits.strip() if isinstance(whatsapp_digits, str) else ""
+    # Se vier vazio, grava NULL (melhor do que string vazia)
+    payload = {"whatsapp": value or None}
+
     # 1) user_profiles (coluna user_id)
     try:
-        supabase.table("user_profiles").update({"whatsapp": whatsapp_digits}).eq("user_id", uid).execute()
+        client = admin or supabase
+        client.table("user_profiles").update(payload).eq("user_id", uid).execute()
         return True
     except Exception:
         pass
 
-    # 2) usuarios (coluna id)
+    # 2) usuarios (coluna id) - fallback
     try:
-        supabase.table("usuarios").update({"whatsapp": whatsapp_digits}).eq("id", uid).execute()
+        client = admin or supabase
+        client.table("usuarios").update(payload).eq("id", uid).execute()
         return True
     except Exception:
         return False
-
 
 
 def _signed_url_reports(storage_path: str, expires_in: int = 300) -> str | None:
