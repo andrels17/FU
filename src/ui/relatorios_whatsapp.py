@@ -82,101 +82,86 @@ def _supabase_admin():
         st.secrets["SUPABASE_SERVICE_ROLE_KEY"],
     )
 
-def _render_whatsapp_controller():
-    """Controlador JS persistente para reutilizar a mesma aba do WhatsApp Web.
+def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = ""):
+    """Painel único de envio assistido.
 
-    Importante: Em Streamlit, cada components.html roda em um iframe. Para manter referência
-    da aba (window.__waTab) entre cliques, renderizamos este controller UMA vez e os botões
-    enviam comandos via postMessage.
+    Importante: manter como UM único components.html por vez para que window.open
+    seja disparado por gesto do usuário (Brave/Chrome bloqueiam popups fora disso).
     """
-    components.html(
-        """
-        <script>
-        // Controller persistente (mesmo iframe)
-        window.__waTab = window.__waTab || null;
+    encoded_text = urllib.parse.quote(text)
+    whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_text}"
 
-        function ensureTab() {
-          if (!window.__waTab || window.__waTab.closed) {
-            window.__waTab = window.open("https://web.whatsapp.com/", "whatsapp_tab");
-          }
-          if (window.__waTab) window.__waTab.focus();
-        }
-
-        async function copyText(t) {
-          try { await navigator.clipboard.writeText(t); } catch (e) {}
-        }
-
-        window.addEventListener("message", async (event) => {
-          const data = event.data || {};
-          if (!data.type) return;
-
-          if (data.type === "WA_FIX") {
-            ensureTab();
-            return;
-          }
-
-          if (data.type === "WA_OPEN") {
-            ensureTab();
-            try {
-              window.__waTab.location.href = data.url;
-              window.__waTab.focus();
-            } catch (e) {
-              window.open(data.url, "whatsapp_tab");
-            }
-            return;
-          }
-
-          if (data.type === "WA_COPY_OPEN") {
-            await copyText(data.text || "");
-            ensureTab();
-            try {
-              window.__waTab.location.href = data.url;
-              window.__waTab.focus();
-            } catch (e) {
-              window.open(data.url, "whatsapp_tab");
-            }
-            return;
-          }
-        });
-        </script>
-        """,
-        height=0,
-    )
-
-def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_prefix: str = ""):
-    """Botões JS para abrir/copiar reutilizando a MESMA aba do WhatsApp (via controller)."""
-    phone_digits = _normalize_whatsapp(phone_digits)
-    encoded_text = urllib.parse.quote(text or "", safe="")
-    whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_text}" if phone_digits else ""
-
+    # Escape seguro para JS
     url_js = json.dumps(whatsapp_url)
-    msg_js = json.dumps(text or "")
-    prefix = (label_prefix + " ") if label_prefix else ""
+    msg_js = json.dumps(text)
+    key_js = json.dumps(key or "wa_panel")
 
     components.html(
         f"""
-        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-          <button onclick='parent.postMessage({{type:"WA_FIX"}}, "*")'
-            style="padding:0.45rem 0.75rem;border-radius:0.6rem;border:1px solid rgba(49,51,63,0.25);background:white;cursor:pointer;font-weight:600;">
-            📌 {prefix}Fixar WhatsApp
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <button id="wa_fix_{'{'}key{'}'}" style="padding:10px 14px;border-radius:10px;border:1px solid #374151;background:#111827;color:#fff;font-weight:700;cursor:pointer;">
+            📌 Fixar WhatsApp
           </button>
 
-          <button onclick='parent.postMessage({{type:"WA_OPEN", url:{url_js}}}, "*")'
-            style="padding:0.45rem 0.75rem;border-radius:0.6rem;border:none;background:#25D366;color:white;cursor:pointer;font-weight:700;">
-            🌐 {prefix}Abrir
+          <button id="wa_open_{'{'}key{'}'}" style="padding:10px 14px;border-radius:10px;border:none;background:#25D366;color:#fff;font-weight:800;cursor:pointer;">
+            🌐 Abrir (mesma aba)
           </button>
 
-          <button onclick='parent.postMessage({{type:"WA_COPY_OPEN", url:{url_js}, text:{msg_js}}}, "*")'
-            style="padding:0.45rem 0.75rem;border-radius:0.6rem;border:none;background:#1f2937;color:white;cursor:pointer;font-weight:700;">
-            📋 {prefix}Copiar + Abrir
+          <button id="wa_copy_{'{'}key{'}'}" style="padding:10px 14px;border-radius:10px;border:1px solid #374151;background:#1f2937;color:#fff;font-weight:800;cursor:pointer;">
+            📋 Copiar
           </button>
 
-          <span style="font-size:0.85rem; opacity:0.8;">(reutiliza a mesma aba)</span>
+          <button id="wa_copy_open_{'{'}key{'}'}" style="padding:10px 14px;border-radius:10px;border:none;background:#0f172a;color:#fff;font-weight:800;cursor:pointer;">
+            📋 Copiar + Abrir
+          </button>
+
+          <span id="wa_status_{'{'}key{'}'}" style="font-weight:600;opacity:.85;"></span>
         </div>
-        """,
-        height=70,
-    )
 
+        <script>
+          const url = {url_js};
+          const msg = {msg_js};
+          const k = {key_js}.replace(/"/g, "");
+
+          const statusEl = document.getElementById("wa_status_" + k);
+
+          function setStatus(t) {{
+            if (statusEl) statusEl.textContent = t || "";
+            setTimeout(() => {{ if (statusEl) statusEl.textContent = ""; }}, 2500);
+          }}
+
+          function fixTab() {{
+            window.open("https://web.whatsapp.com/", "whatsapp_tab");
+            setStatus("WhatsApp Web fixado ✅");
+          }}
+
+          function openTab() {{
+            window.open(url, "whatsapp_tab");
+            setStatus("Abrindo no WhatsApp Web…");
+          }}
+
+          async function copyOnly() {{
+            try {{
+              await navigator.clipboard.writeText(msg);
+              setStatus("Copiado ✅");
+            }} catch (e) {{
+              setStatus("Falha ao copiar (permissão)");
+            }}
+          }}
+
+          async function copyAndOpen() {{
+            await copyOnly();
+            openTab();
+          }}
+
+          document.getElementById("wa_fix_" + k).onclick = fixTab;
+          document.getElementById("wa_open_" + k).onclick = openTab;
+          document.getElementById("wa_copy_" + k).onclick = copyOnly;
+          document.getElementById("wa_copy_open_" + k).onclick = copyAndOpen;
+        </script>
+        """,
+        height=90,
+    )
 
 def _fetch_user_profiles_admin(admin, user_ids: list[str]):
     """Busca perfis dos usuários. Tenta tabelas/colunas comuns e é tolerante a schema.
@@ -1316,8 +1301,6 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
 
 
-        _render_whatsapp_controller()
-
         st.subheader("📲 Envio assistido (WhatsApp Web)")
         st.caption("Sem integração: abre o WhatsApp Web com a mensagem pronta. Você revisa e clica em enviar.")
         st.caption("Dica: cadastre o WhatsApp dos destinatários na aba 'Vincular gestores' → 'Telefones WhatsApp'.")
@@ -1339,46 +1322,82 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                 partes_assist = _split_text(texto_cache, max_chars=3500)
                 st.info(f"Mensagem dividida em {len(partes_assist)} parte(s).")
 
-                for to_user_id in destinos_assist:
-                    g = gestores_by_id.get(to_user_id, {}) if isinstance(gestores_by_id, dict) else {}
-                    nome = g.get("nome") or g.get("email") or str(to_user_id)
+                # Monta opções com nome + telefone (se houver)
+                options = []
+                for uid in destinos_assist:
+                    g = gestores_by_id.get(uid, {}) if isinstance(gestores_by_id, dict) else {}
+                    nome = g.get("nome") or g.get("email") or str(uid)
                     phone = g.get("whatsapp") or ""
                     phone_digits = _normalize_whatsapp(phone)
+                    options.append(
+                        {
+                            "user_id": uid,
+                            "nome": nome,
+                            "email": g.get("email") or "",
+                            "phone_digits": phone_digits,
+                            "raw_phone": phone,
+                        }
+                    )
 
-                    with st.expander(f"👤 {nome}", expanded=False):
-                        if not phone_digits:
-                            st.warning("Este destinatário está sem WhatsApp cadastrado.")
-                        else:
-                            # Botões JS que reutilizam a mesma aba do WhatsApp Web
-                            # (não abre múltiplas abas)
-                            _whatsapp_js_buttons(phone_digits, partes_assist[0], key=f"wa_{to_user_id}_p1", label_prefix="Parte 1")
+                # Separa quem tem e quem não tem WhatsApp
+                with_wa = [o for o in options if o["phone_digits"]]
+                without_wa = [o for o in options if not o["phone_digits"]]
 
-                            # ✅ Marcação manual (auditável) — grava um job 'sent_manual'
-                            if st.button("✅ Marcar como enviado (manual)", key=f"mark_manual_{to_user_id}"):
-                                try:
-                                    admin = _supabase_admin()
-                                    admin.table("report_jobs").insert({
-                                        "tenant_id": tenant_id,
-                                        "created_by": created_by,
-                                        "channel": "whatsapp",
-                                        "to_user_id": to_user_id,
-                                        "report_type": "materiais_entregues",
-                                        "dt_ini": st.session_state.get("_rep_dt_ini"),
-                                        "dt_fim": st.session_state.get("_rep_dt_fim"),
-                                        "message_text": (partes_assist[0] or "")[:3500],
-                                        "status": "sent_manual",
-                                    }).execute()
-                                    st.success("Marcado como enviado.")
-                                except Exception as e:
-                                    st.warning(f"Não consegui marcar como enviado: {e}")
+                if without_wa:
+                    st.warning(
+                        "Alguns destinatários estão sem WhatsApp cadastrado: "
+                        + ", ".join([o["nome"] for o in without_wa][:8])
+                        + ("..." if len(without_wa) > 8 else "")
+                    )
 
+                if not with_wa:
+                    st.error("Nenhum destinatário tem WhatsApp cadastrado. Cadastre em 'Vincular gestores' → 'Telefones WhatsApp'.")
+                else:
+                    # Seleciona um destinatário por vez para evitar múltiplos components.html (popup-blocker / Brave)
+                    sel = st.selectbox(
+                        "Selecione o destinatário para envio assistido",
+                        with_wa,
+                        format_func=lambda o: f"{o['nome']} — {o['phone_digits']}",
+                        key="wa_assist_dest_select",
+                    )
 
-                        for i, p in enumerate(partes_assist, start=1):
-                            st.markdown(f"**Parte {i}/{len(partes_assist)}**")
-                            if phone_digits:
-                                _whatsapp_js_buttons(phone_digits, p, key=f"wa_{to_user_id}_p{i}", label_prefix=f"Parte {i}")
-                            _copy_to_clipboard_button(f"📋 Copiar (só texto) parte {i}", p, key=f"copy_{to_user_id}_{i}")
-                            st.text_area("", value=p, height=140, key=f"assist_text_{to_user_id}_{i}")
+                    part_idx = st.selectbox(
+                        "Selecione a parte da mensagem",
+                        list(range(1, len(partes_assist) + 1)),
+                        format_func=lambda i: f"Parte {i}/{len(partes_assist)}",
+                        key="wa_assist_part_select",
+                    ) - 1
+
+                    st.text_area("Mensagem (para revisão)", value=partes_assist[part_idx], height=220, key="wa_assist_preview")
+
+                    # Painel único com botões JS (abre a mesma aba e copia)
+                    _whatsapp_js_buttons(
+                        sel["phone_digits"],
+                        partes_assist[part_idx],
+                        key=f"wa_panel_{sel['user_id']}_p{part_idx+1}",
+                        label_prefix=f"Parte {part_idx+1}",
+                    )
+
+                    # ✅ Marcação manual (auditável) — grava um job 'sent_manual' para o destinatário selecionado
+                    if st.button("✅ Marcar como enviado (manual)", key=f"mark_manual_{sel['user_id']}_{part_idx+1}"):
+                        try:
+                            admin = _supabase_admin()
+                            admin.table("report_jobs").insert(
+                                {
+                                    "tenant_id": tenant_id,
+                                    "created_by": created_by,
+                                    "channel": "whatsapp",
+                                    "to_user_id": sel["user_id"],
+                                    "report_type": "materiais_entregues",
+                                    "dt_ini": st.session_state.get("rep_dt_ini"),
+                                    "dt_fim": st.session_state.get("rep_dt_fim"),
+                                    "message_text": partes_assist[part_idx],
+                                    "status": "sent_manual",
+                                }
+                            ).execute()
+                            st.success("Marcado como enviado.")
+                        except Exception as e:
+                            st.warning(f"Não consegui marcar como enviado: {e}")
 
         st.markdown("---")
 
