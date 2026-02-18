@@ -169,22 +169,25 @@ def _coerce_float(x):
 
 
 def _calc_valor_total_row(row: pd.Series) -> float:
-    """Calcula valor_total priorizando preço unitário/última compra quando existir."""
+    """Calcula valor_total = qtde_solicitada * preço.
+
+    Prioridade de preço (pra bater com sua planilha):
+    1) valor_unitario (negociado / atual)
+    2) valor_ultima_compra (histórico)
+    3) valor_ultima (alias)
+    4) fallback: valor_total informado
+    """
     qtde = _coerce_float(row.get("qtde_solicitada")) or 0.0
 
-    # Aceita várias convenções de coluna (você pode manter sua planilha como está)
     unit = (
-        # prioridade: última compra (o que você usa na planilha)
-        _coerce_float(row.get("valor_ultima_compra"))
+        _coerce_float(row.get("valor_unitario"))
+        or _coerce_float(row.get("valor_ultima_compra"))
         or _coerce_float(row.get("valor_ultima"))
-        # fallback: preço unitário (se a planilha trouxer)
-        or _coerce_float(row.get("valor_unitario"))
     )
 
     if unit is not None and unit > 0 and qtde > 0:
         return float(qtde * unit)
 
-    # fallback: usa valor_total informado (se houver)
     vt = _coerce_float(row.get("valor_total"))
     return float(vt or 0.0)
 
