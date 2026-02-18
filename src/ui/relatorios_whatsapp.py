@@ -3,6 +3,7 @@ from datetime import datetime, time, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
+from supabase import create_client
 
 try:
     # storage3 é usado internamente pelo supabase-py (Streamlit Cloud)
@@ -11,29 +12,36 @@ except Exception:  # pragma: no cover
     StorageException = Exception  # fallback
 
 
-def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: bytes) -> str | None:
-    """Faz upload do CSV no bucket 'reports' e registra em report_artifacts.
+def _get_supabase_admin():
+    return create_client(
+        st.secrets["SUPABASE_URL"],
+        st.secrets["SUPABASE_SERVICE_ROLE_KEY"],
+    )
 
-    - Usa upsert para evitar erro quando o arquivo já existe.
-    - Não quebra o envio caso falhe (apenas mostra aviso).
-    Retorna storage_path se ok, senão None.
-    """
+def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: bytes) -> str | None:
+    """Upload do CSV usando SERVICE ROLE (bypass RLS)."""
+
     if not csv_bytes:
         return None
 
-    # proteção simples contra uploads enormes (evita crash por limites do Storage)
-    # ajuste o limite conforme sua realidade
     if len(csv_bytes) > 8 * 1024 * 1024:
-        st.warning("CSV muito grande para upload automático. O envio foi enfileirado sem anexo.")
+        st.warning("CSV muito grande. Enfileirado sem anexo.")
         return None
 
     storage_path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
+
     try:
-        _upload_csv_artifact_safe(supabase, tenant_id, job_id, csv_bytes)
-        storage_path(
+        admin = _supabase_admin()
+
+        admin.storage.from_("reports").upload(
+            storage_path,
             csv_bytes,
-            {"content-type": "text/csv", "x-upsert": "true"},
+            {
+                "content-type": "text/csv",
+                "x-upsert": "true",
+            },
         )
+
         supabase.table("report_artifacts").insert(
             {
                 "job_id": job_id,
@@ -42,21 +50,16 @@ def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: 
                 "storage_path": storage_path,
             }
         ).execute()
+
         return storage_path
-    except StorageException as e:
-        st.warning(
-            "Não consegui anexar o CSV no Storage (bucket 'reports'). "
-            "O envio foi enfileirado mesmo assim. "
-            f"Detalhe: {e}"
-        )
-        return None
+
     except Exception as e:
         st.warning(
-            "Falha inesperada ao anexar o CSV. "
-            "O envio foi enfileirado mesmo assim. "
+            "Falha ao anexar o CSV. O envio foi enfileirado mesmo assim. "
             f"Detalhe: {e}"
         )
         return None
+
 
 
 
