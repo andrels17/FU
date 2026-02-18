@@ -1120,7 +1120,7 @@ with st.expander("📞 Telefones WhatsApp dos destinatários", expanded=False):
             texto = st.session_state.get("_rep_texto")
             if df is None or texto is None:
                 st.error("Gere a prévia primeiro.")
-                return
+                
 
             destinos = sorted({g for g in mapa.values() if g})
 
