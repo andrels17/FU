@@ -400,7 +400,8 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
     }
 
     with tab_link:
-        st.subheader("Vincular gestor por departamento")
+        st.subheader("Vínculo Departamento → Destinatário")
+
         deps = _load_departamentos_from_pedidos(supabase, tenant_id)
 
         if not deps:
@@ -413,51 +414,137 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             )
             st.caption("Se seu sistema usa outro nome de role (ex.: 'manager'), ajuste roles_destino no código.")
         else:
+            links = _load_links(supabase, tenant_id)
+            mapa_links = {l.get("departamento"): l.get("gestor_user_id") for l in (links or [])}
 
-            c1, c2 = st.columns([1.2, 1])
+            st.markdown("### Vincular / editar vínculo individual")
+
+            c1, c2, c3 = st.columns([1.2, 1.3, 0.8])
             with c1:
                 dep = st.selectbox("Departamento", options=deps, key="rep_link_dep")
             with c2:
                 gestor_id = st.selectbox(
-                    "Gestor",
+                    "Destinatário",
                     options=list(labels_g.keys()),
                     format_func=lambda uid: labels_g.get(uid, uid),
                     key="rep_link_gestor",
                 )
+            with c3:
+                st.caption("")
 
+            dep_ok = (dep or "").strip()
             if st.button("Salvar vínculo", type="primary", use_container_width=True, key="rep_link_save"):
-                _upsert_link(supabase, tenant_id, dep, gestor_id)
-                st.success("Vínculo salvo.")
-                st.rerun()
+                if not dep_ok:
+                    st.error("Departamento inválido (vazio).")
+                else:
+                    _upsert_link(supabase, tenant_id, dep_ok, gestor_id)
+                    st.success("Vínculo salvo.")
+                    st.rerun()
 
             st.divider()
-            links = _load_links(supabase, tenant_id)
+
+            st.markdown("### Vínculos existentes (listar / editar / remover)")
 
             if links:
                 rows = []
                 for l in links:
-                    g = gestores_by_id.get(l["gestor_user_id"], {})
+                    dep_l = (l.get("departamento") or "").strip()
+                    g_id = l.get("gestor_user_id")
+                    g = gestores_by_id.get(g_id, {})
                     rows.append(
                         {
-                            "departamento": l["departamento"],
-                            "gestor": g.get("nome") or g.get("email") or l["gestor_user_id"],
-                            "id": l["id"],
+                            "id": l.get("id"),
+                            "departamento": dep_l,
+                            "gestor_user_id": g_id,
+                            "destinatário": (g.get("nome") or g.get("email") or labels_g.get(g_id) or g_id),
                         }
                     )
-                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-                rm_id = st.selectbox(
-                    "Remover vínculo",
-                    options=[r["id"] for r in rows],
-                    format_func=lambda x: next((r["departamento"] for r in rows if r["id"] == x), x),
-                    key="rep_link_rm",
-                )
-                if st.button("Remover", use_container_width=True, key="rep_link_rm_btn"):
-                    _delete_link(supabase, rm_id)
-                    st.success("Removido.")
-                    st.rerun()
+                df_links = pd.DataFrame(rows)
+
+                # Editor (permite trocar o destinatário por departamento)
+                try:
+                    edited = st.data_editor(
+                        df_links,
+                        use_container_width=True,
+                        hide_index=True,
+                        disabled=["id", "departamento", "destinatário"],
+                        column_config={
+                            "gestor_user_id": st.column_config.SelectboxColumn(
+                                "Destinatário",
+                                options=list(labels_g.keys()),
+                                format_func=lambda uid: labels_g.get(uid, uid),
+                                required=True,
+                            ),
+                        },
+                        key="rep_links_editor",
+                    )
+                except Exception:
+                    st.dataframe(df_links[["departamento", "destinatário"]], use_container_width=True, hide_index=True)
+                    edited = df_links
+
+                c_save, c_rm = st.columns([1, 1])
+                with c_save:
+                    if st.button("Salvar alterações do grid", use_container_width=True, key="rep_links_save_grid"):
+                        changed = 0
+                        for _, r in edited.iterrows():
+                            dep_l = (r.get("departamento") or "").strip()
+                            g_id = r.get("gestor_user_id")
+                            if not dep_l:
+                                continue
+                            if mapa_links.get(dep_l) != g_id:
+                                _upsert_link(supabase, tenant_id, dep_l, g_id)
+                                changed += 1
+                        st.success(f"Alterações aplicadas: {changed}.")
+                        st.rerun()
+
+                with c_rm:
+                    rm_deps = st.multiselect(
+                        "Remover vínculo(s) (por departamento)",
+                        options=sorted([r["departamento"] for r in rows if r.get("departamento")]),
+                        key="rep_links_rm_deps",
+                    )
+                    if st.button("Remover selecionados", use_container_width=True, key="rep_links_rm_btn"):
+                        if not rm_deps:
+                            st.warning("Selecione ao menos um departamento para remover.")
+                        else:
+                            ids_to_rm = [l.get("id") for l in links if (l.get("departamento") or "").strip() in set(rm_deps)]
+                            for lid in ids_to_rm:
+                                if lid:
+                                    _delete_link(supabase, lid)
+                            st.success(f"Removidos: {len(ids_to_rm)}.")
+                            st.rerun()
             else:
                 st.caption("Nenhum vínculo cadastrado ainda.")
+
+            st.divider()
+
+            st.markdown("### Vincular todos os departamentos para um destinatário")
+
+            c_all1, c_all2 = st.columns([1.3, 0.9])
+            with c_all1:
+                gestor_all = st.selectbox(
+                    "Destinatário para todos",
+                    options=list(labels_g.keys()),
+                    format_func=lambda uid: labels_g.get(uid, uid),
+                    key="rep_link_all_gestor",
+                )
+            with c_all2:
+                aplicar_somente_faltantes = st.checkbox("Somente departamentos sem vínculo", value=True, key="rep_link_all_only_missing")
+
+            if st.button("Vincular todos para este destinatário", use_container_width=True, key="rep_link_all_btn"):
+                alvo = gestor_all
+                total = 0
+                for d in deps:
+                    d_ok = (d or "").strip()
+                    if not d_ok:
+                        continue
+                    if aplicar_somente_faltantes and mapa_links.get(d_ok):
+                        continue
+                    _upsert_link(supabase, tenant_id, d_ok, alvo)
+                    total += 1
+                st.success(f"Vínculos atualizados: {total}.")
+                st.rerun()
     with tab_send:
         st.subheader("Enviar relatório de entregues (sob demanda)")
 
