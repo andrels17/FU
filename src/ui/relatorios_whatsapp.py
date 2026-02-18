@@ -16,15 +16,26 @@ import urllib.parse
 
 def _normalize_whatsapp(value: str) -> str:
     """Normaliza número WhatsApp para formato wa.me (somente dígitos com DDI).
-    Aceita inputs como '+55 (84) 99999-9999' e retorna '5584999999999'.
+
+    - Remove tudo que não for dígito
+    - Se vier com 10/11 dígitos (padrão BR sem DDI), prefixa com 55
+    - Aceita inputs como '+55 (84) 99999-9999' e retorna '5584999999999'
     """
     if value is None:
         return ""
     s = str(value).strip()
     if not s:
         return ""
-    # remove tudo que não for dígito
     digits = re.sub(r"\D+", "", s)
+
+    # remove zeros à esquerda comuns (ex.: 0DDI/0DDD)
+    digits = digits.lstrip("0")
+
+    # Se o usuário digitou só DDD+numero (10/11 dígitos), assume Brasil e adiciona 55
+    if len(digits) in (10, 11) and not digits.startswith("55"):
+        digits = "55" + digits
+
+    # Se veio com +55 e etc já vira digits iniciando com 55 (ok)
     return digits
 
 def _wa_me_link(phone_digits: str, text: str) -> str:
