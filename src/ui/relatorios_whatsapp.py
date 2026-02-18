@@ -5,6 +5,12 @@ import pandas as pd
 import streamlit as st
 from supabase import create_client
 
+try:
+    # storage3 é usado internamente pelo supabase-py (Streamlit Cloud)
+    from storage3.utils import StorageException  # type: ignore
+except Exception:  # pragma: no cover
+    StorageException = Exception  # fallback
+
 
 
 try:
@@ -16,35 +22,55 @@ except Exception:  # pragma: no cover
 
 @st.cache_resource(show_spinner=False)
 def _supabase_admin():
+    """Client Supabase com SERVICE ROLE (bypass RLS). Use APENAS no backend (Streamlit)."""
     return create_client(
         st.secrets["SUPABASE_URL"],
         st.secrets["SUPABASE_SERVICE_ROLE_KEY"],
     )
 
-def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: bytes) -> str | None:
-    """Upload do CSV usando SERVICE ROLE (bypass RLS)."""
 
+def _signed_url_reports(storage_path: str, expires_in: int = 300) -> str | None:
+    """Gera uma URL assinada para baixar um arquivo privado do bucket 'reports'."""
+    if not storage_path:
+        return None
+    try:
+        admin = _supabase_admin()
+        # supabase-py/storage3: create_signed_url(path, expires_in)
+        res = admin.storage.from_("reports").create_signed_url(storage_path, expires_in)
+        # res pode ser dict com 'signedURL' ou 'signedUrl' dependendo da versão
+        if isinstance(res, dict):
+            return res.get("signedURL") or res.get("signedUrl") or res.get("signed_url")
+        return None
+    except Exception:
+        return None
+
+
+def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: bytes) -> str | None:
+    """Faz upload do CSV no bucket 'reports' usando SERVICE ROLE e registra em report_artifacts.
+
+    - Bypass RLS no Storage (Service Role).
+    - Usa upsert para evitar erro quando o arquivo já existe.
+    - Não quebra o envio caso falhe (apenas mostra aviso).
+    Retorna storage_path se ok, senão None.
+    """
     if not csv_bytes:
         return None
 
+    # proteção simples contra uploads enormes (evita crash por limites do Storage)
     if len(csv_bytes) > 8 * 1024 * 1024:
-        st.warning("CSV muito grande. Enfileirado sem anexo.")
+        st.warning("CSV muito grande para upload automático. O envio foi enfileirado sem anexo.")
         return None
 
     storage_path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
-
     try:
         admin = _supabase_admin()
-
         admin.storage.from_("reports").upload(
             storage_path,
             csv_bytes,
-            {
-                "content-type": "text/csv",
-                "x-upsert": "true",
-            },
+            {"content-type": "text/csv", "x-upsert": "true"},
         )
 
+        # mantém o insert do artifact com o client normal (respeita RLS da sua tabela de app)
         supabase.table("report_artifacts").insert(
             {
                 "job_id": job_id,
@@ -53,9 +79,7 @@ def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: 
                 "storage_path": storage_path,
             }
         ).execute()
-
         return storage_path
-
     except Exception as e:
         st.warning(
             "Falha ao anexar o CSV. O envio foi enfileirado mesmo assim. "
@@ -64,7 +88,62 @@ def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: 
         return None
 
 
+def _find_csv_artifact_for_period(supabase, tenant_id: str, dt_ini_iso: str, dt_fim_iso: str, report_type: str = "materiais_entregues") -> str | None:
+    """Tenta localizar um CSV já anexado para um período (reuso no reenviar e download no histórico)."""
+    try:
+        # pega jobs mais recentes do período
+        jobs = (
+            supabase.table("report_jobs")
+            .select("id")
+            .eq("tenant_id", tenant_id)
+            .eq("channel", "whatsapp")
+            .eq("report_type", report_type)
+            .eq("dt_ini", dt_ini_iso)
+            .eq("dt_fim", dt_fim_iso)
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+            .data
+            or []
+        )
+        job_ids = [j.get("id") for j in jobs if j.get("id")]
+        if not job_ids:
+            return None
 
+        arts = (
+            supabase.table("report_artifacts")
+            .select("storage_path, file_type, job_id")
+            .eq("tenant_id", tenant_id)
+            .eq("file_type", "csv")
+            .in_("job_id", job_ids)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not arts:
+            return None
+        return arts[0].get("storage_path")
+    except Exception:
+        return None
+
+
+def _attach_existing_csv_artifact(supabase, tenant_id: str, job_id: str, storage_path: str) -> None:
+    """Anexa um CSV já existente ao job (sem reupload)."""
+    if not storage_path:
+        return
+    try:
+        supabase.table("report_artifacts").insert(
+            {
+                "job_id": job_id,
+                "tenant_id": tenant_id,
+                "file_type": "csv",
+                "storage_path": storage_path,
+            }
+        ).execute()
+    except Exception:
+        pass
 
 
 def _split_text(texto: str, max_chars: int = 3500) -> list[str]:
@@ -862,6 +941,40 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
         except Exception:
             st.caption("Não foi possível calcular métricas da fila.")
 
+        
+        # 🔎 Diagnóstico rápido (últimos jobs)
+        with st.expander("🔎 Diagnóstico: últimos jobs WhatsApp", expanded=False):
+            try:
+                # tenta trazer colunas extras (erro/attempt) sem quebrar se não existirem
+                cols = "created_at, to_user_id, status, dt_ini, dt_fim"
+                try:
+                    res = (
+                        supabase.table("report_jobs")
+                        .select(cols + ", attempt, error_message")
+                        .eq("tenant_id", tenant_id)
+                        .eq("channel", "whatsapp")
+                        .order("created_at", desc=True)
+                        .limit(100)
+                        .execute()
+                    )
+                    rows = res.data or []
+                except Exception:
+                    res = (
+                        supabase.table("report_jobs")
+                        .select(cols)
+                        .eq("tenant_id", tenant_id)
+                        .eq("channel", "whatsapp")
+                        .order("created_at", desc=True)
+                        .limit(100)
+                        .execute()
+                    )
+                    rows = res.data or []
+                if rows:
+                    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                else:
+                    st.caption("Sem jobs recentes.")
+            except Exception as e:
+                st.caption(f"Não foi possível carregar o diagnóstico: {e}")
         st.markdown("---")
         st.markdown("### 🔁 Reenviar um relatório do histórico")
 
@@ -896,6 +1009,20 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
         )
 
         row = df_sel[df_sel["label"] == escolhido].iloc[0]
+        # 📎 CSV do período (bucket privado): gera link assinado para download
+        existing_storage_path = _find_csv_artifact_for_period(supabase, tenant_id, str(row["dt_ini"]), str(row["dt_fim"]))
+        if existing_storage_path:
+            url = _signed_url_reports(existing_storage_path, expires_in=600)
+            if url:
+                try:
+                    st.link_button("⬇️ Baixar CSV (link expira em 10 min)", url, use_container_width=True)
+                except Exception:
+                    st.markdown(f"[⬇️ Baixar CSV (link expira em 10 min)]({url})")
+            else:
+                st.caption("CSV encontrado, mas não consegui gerar URL assinada agora.")
+        else:
+            st.caption("Nenhum CSV anexado encontrado para este período.")
+
 
         # Controle de tentativas (se a coluna existir na tabela report_jobs, usamos; senão, só informativo)
         max_tentativas = st.number_input(
@@ -953,6 +1080,8 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             buf = io.StringIO()
             (df if isinstance(df, pd.DataFrame) else pd.DataFrame()).to_csv(buf, index=False)
             csv_bytes = buf.getvalue().encode("utf-8")
+            existing_storage_path = _find_csv_artifact_for_period(supabase, tenant_id, dt_ini_iso, dt_fim_iso)
+
 
             ok = 0
 
@@ -999,8 +1128,11 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
                     if job_id and idx_parte == 1:
                         try:
-                            path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
-                            _upload_csv_artifact_safe(supabase, tenant_id, job_id, csv_bytes)
+                            # Reuso do CSV existente no período (evita reupload). Se não existir, faz upload.
+                            if existing_storage_path:
+                                _attach_existing_csv_artifact(supabase, tenant_id, job_id, existing_storage_path)
+                            else:
+                                _upload_csv_artifact_safe(supabase, tenant_id, job_id, csv_bytes)
                         except Exception:
                             pass
 
@@ -1056,4 +1188,3 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                 else:
                     n = _enqueue_reenvio(alvos, True)
                     st.success(f"{n} destinatário(s) com falha reenfileirado(s).")
-                
