@@ -82,133 +82,97 @@ def _supabase_admin():
         st.secrets["SUPABASE_SERVICE_ROLE_KEY"],
     )
 
-def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_prefix: str = ""):
-    encoded_text = urllib.parse.quote(text)
-    whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_text}"
+def _render_whatsapp_controller():
+    """Controlador JS persistente para reutilizar a mesma aba do WhatsApp Web.
 
-    # Escapar corretamente para JS
-    url_js = json.dumps(whatsapp_url)
-    msg_js = json.dumps(text)
-
+    Importante: Em Streamlit, cada components.html roda em um iframe. Para manter referência
+    da aba (window.__waTab) entre cliques, renderizamos este controller UMA vez e os botões
+    enviam comandos via postMessage.
+    """
     components.html(
-        f"""
+        """
         <script>
-        if (!window.__waTab) {{
-            window.__waTab = null;
-        }}
+        // Controller persistente (mesmo iframe)
+        window.__waTab = window.__waTab || null;
 
-        function waEnsureTab() {{
-            if (!window.__waTab || window.__waTab.closed) {{
-                window.__waTab = window.open("https://web.whatsapp.com/", "whatsapp_tab");
-            }}
-            if (window.__waTab) {{
-                window.__waTab.focus();
-            }}
-        }}
+        function ensureTab() {
+          if (!window.__waTab || window.__waTab.closed) {
+            window.__waTab = window.open("https://web.whatsapp.com/", "whatsapp_tab");
+          }
+          if (window.__waTab) window.__waTab.focus();
+        }
 
-        function waGo() {{
-            waEnsureTab();
-            const url = {url_js};
-            if (window.__waTab) {{
-                window.__waTab.location.href = url;
-                window.__waTab.focus();
-            }} else {{
-                window.open(url, "whatsapp_tab");
-            }}
-        }}
+        async function copyText(t) {
+          try { await navigator.clipboard.writeText(t); } catch (e) {}
+        }
 
-        async function waCopyAndGo() {{
-            try {{
-                await navigator.clipboard.writeText({msg_js});
-            }} catch (e) {{}}
-            waGo();
-        }}
+        window.addEventListener("message", async (event) => {
+          const data = event.data || {};
+          if (!data.type) return;
+
+          if (data.type === "WA_FIX") {
+            ensureTab();
+            return;
+          }
+
+          if (data.type === "WA_OPEN") {
+            ensureTab();
+            try {
+              window.__waTab.location.href = data.url;
+              window.__waTab.focus();
+            } catch (e) {
+              window.open(data.url, "whatsapp_tab");
+            }
+            return;
+          }
+
+          if (data.type === "WA_COPY_OPEN") {
+            await copyText(data.text || "");
+            ensureTab();
+            try {
+              window.__waTab.location.href = data.url;
+              window.__waTab.focus();
+            } catch (e) {
+              window.open(data.url, "whatsapp_tab");
+            }
+            return;
+          }
+        });
         </script>
-
-        <button onclick="waGo()" style="
-            padding:0.6rem 1rem;
-            border-radius:0.6rem;
-            background:#25D366;
-            color:white;
-            border:none;
-            font-weight:600;
-            cursor:pointer;
-            margin-right:8px;
-        ">
-            🌐 {label_prefix} WhatsApp
-        </button>
-
-        <button onclick="waCopyAndGo()" style="
-            padding:0.6rem 1rem;
-            border-radius:0.6rem;
-            background:#1f2937;
-            color:white;
-            border:none;
-            font-weight:600;
-            cursor:pointer;
-        ">
-            📋 Copiar + Abrir
-        </button>
         """,
-        height=110,
+        height=0,
     )
 
+def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_prefix: str = ""):
+    """Botões JS para abrir/copiar reutilizando a MESMA aba do WhatsApp (via controller)."""
+    phone_digits = _normalize_whatsapp(phone_digits)
+    encoded_text = urllib.parse.quote(text or "", safe="")
+    whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_text}" if phone_digits else ""
 
+    url_js = json.dumps(whatsapp_url)
+    msg_js = json.dumps(text or "")
     prefix = (label_prefix + " ") if label_prefix else ""
-    # IDs únicos por instância
-    btn_open = f"{key}_open"
-    btn_copy = f"{key}_copy"
-    btn_both = f"{key}_both"
 
     components.html(
         f"""
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-          <button id="{btn_open}" style="padding:0.45rem 0.7rem;border-radius:0.6rem;border:1px solid rgba(255,255,255,0.2);cursor:pointer;">
-            🌐 {prefix}Abrir WhatsApp
+          <button onclick='parent.postMessage({{type:"WA_FIX"}}, "*")'
+            style="padding:0.45rem 0.75rem;border-radius:0.6rem;border:1px solid rgba(49,51,63,0.25);background:white;cursor:pointer;font-weight:600;">
+            📌 {prefix}Fixar WhatsApp
           </button>
-          <button id="{btn_copy}" style="padding:0.45rem 0.7rem;border-radius:0.6rem;border:1px solid rgba(255,255,255,0.2);cursor:pointer;">
-            📋 {prefix}Copiar
+
+          <button onclick='parent.postMessage({{type:"WA_OPEN", url:{url_js}}}, "*")'
+            style="padding:0.45rem 0.75rem;border-radius:0.6rem;border:none;background:#25D366;color:white;cursor:pointer;font-weight:700;">
+            🌐 {prefix}Abrir
           </button>
-          <button id="{btn_both}" style="padding:0.45rem 0.7rem;border-radius:0.6rem;border:1px solid rgba(255,255,255,0.2);cursor:pointer;">
-            🚀 {prefix}Copiar + Abrir
+
+          <button onclick='parent.postMessage({{type:"WA_COPY_OPEN", url:{url_js}, text:{msg_js}}}, "*")'
+            style="padding:0.45rem 0.75rem;border-radius:0.6rem;border:none;background:#1f2937;color:white;cursor:pointer;font-weight:700;">
+            📋 {prefix}Copiar + Abrir
           </button>
-          <span id="{key}_status" style="font-size:0.85rem; opacity:0.8;"></span>
+
+          <span style="font-size:0.85rem; opacity:0.8;">(reutiliza a mesma aba)</span>
         </div>
-
-        <script>
-          const url = {url_js};
-          const msg = {msg_js};
-          const statusEl = document.getElementById("{key}_status");
-
-          function setStatus(t) {{
-            if (!statusEl) return;
-            statusEl.textContent = t;
-            setTimeout(() => {{ statusEl.textContent = ""; }}, 2000);
-          }}
-
-          async function doCopy() {{
-            try {{
-              await navigator.clipboard.writeText(msg);
-              setStatus("Copiado!");
-              return true;
-            }} catch (e) {{
-              setStatus("Não consegui copiar (permissão do navegador).");
-              return false;
-            }}
-          }}
-
-          function doOpen() {{
-            window.open(url, "whatsapp_tab");
-            setStatus("Abrindo...");
-          }}
-
-          document.getElementById("{btn_open}").onclick = () => doOpen();
-          document.getElementById("{btn_copy}").onclick = () => doCopy();
-          document.getElementById("{btn_both}").onclick = async () => {{
-            await doCopy();
-            doOpen();
-          }};
-        </script>
         """,
         height=70,
     )
@@ -1351,6 +1315,8 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             st.success(f"{ok} envio(s) enfileirado(s).")
 
 
+
+        _render_whatsapp_controller()
 
         st.subheader("📲 Envio assistido (WhatsApp Web)")
         st.caption("Sem integração: abre o WhatsApp Web com a mensagem pronta. Você revisa e clica em enviar.")
