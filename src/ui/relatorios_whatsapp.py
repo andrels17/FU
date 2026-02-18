@@ -4,6 +4,61 @@ from datetime import datetime, time, timedelta, timezone
 import pandas as pd
 import streamlit as st
 
+try:
+    # storage3 é usado internamente pelo supabase-py (Streamlit Cloud)
+    from storage3.utils import StorageException  # type: ignore
+except Exception:  # pragma: no cover
+    StorageException = Exception  # fallback
+
+
+def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: bytes) -> str | None:
+    """Faz upload do CSV no bucket 'reports' e registra em report_artifacts.
+
+    - Usa upsert para evitar erro quando o arquivo já existe.
+    - Não quebra o envio caso falhe (apenas mostra aviso).
+    Retorna storage_path se ok, senão None.
+    """
+    if not csv_bytes:
+        return None
+
+    # proteção simples contra uploads enormes (evita crash por limites do Storage)
+    # ajuste o limite conforme sua realidade
+    if len(csv_bytes) > 8 * 1024 * 1024:
+        st.warning("CSV muito grande para upload automático. O envio foi enfileirado sem anexo.")
+        return None
+
+    storage_path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
+    try:
+        _upload_csv_artifact_safe(supabase, tenant_id, job_id, csv_bytes)
+        storage_path(
+            csv_bytes,
+            {"content-type": "text/csv", "x-upsert": "true"},
+        )
+        supabase.table("report_artifacts").insert(
+            {
+                "job_id": job_id,
+                "tenant_id": tenant_id,
+                "file_type": "csv",
+                "storage_path": storage_path,
+            }
+        ).execute()
+        return storage_path
+    except StorageException as e:
+        st.warning(
+            "Não consegui anexar o CSV no Storage (bucket 'reports'). "
+            "O envio foi enfileirado mesmo assim. "
+            f"Detalhe: {e}"
+        )
+        return None
+    except Exception as e:
+        st.warning(
+            "Falha inesperada ao anexar o CSV. "
+            "O envio foi enfileirado mesmo assim. "
+            f"Detalhe: {e}"
+        )
+        return None
+
+
 
 
 def _split_text(texto: str, max_chars: int = 3500) -> list[str]:
@@ -711,15 +766,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
                     if idx_parte == 1:
                         path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
-                        supabase.storage.from_("reports").upload(path, csv_bytes, {"content-type": "text/csv"})
-                        supabase.table("report_artifacts").insert(
-                            {
-                                "job_id": job_id,
-                                "tenant_id": tenant_id,
-                                "file_type": "csv",
-                                "storage_path": path,
-                            }
-                        ).execute()
+                        _upload_csv_artifact_safe(supabase, tenant_id, job_id, csv_bytes)
 
                 ok += 1
 
@@ -947,10 +994,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                     if job_id and idx_parte == 1:
                         try:
                             path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
-                            supabase.storage.from_("reports").upload(path, csv_bytes, {"content-type": "text/csv"})
-                            supabase.table("report_artifacts").insert(
-                                {"job_id": job_id, "tenant_id": tenant_id, "file_type": "csv", "storage_path": path}
-                            ).execute()
+                            _upload_csv_artifact_safe(supabase, tenant_id, job_id, csv_bytes)
                         except Exception:
                             pass
 
@@ -1006,3 +1050,4 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                 else:
                     n = _enqueue_reenvio(alvos, True)
                     st.success(f"{n} destinatário(s) com falha reenfileirado(s).")
+                
