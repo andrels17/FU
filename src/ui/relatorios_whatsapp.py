@@ -368,15 +368,70 @@ def _insert_report_job_safe(supabase, payload: dict):
 def _load_gestores(supabase, tenant_id: str, roles=None):
     """
     Destinatários = membros do tenant (todas as roles por padrão).
-    Para evitar problemas com RLS (usuário vendo só a si mesmo), usa RPC SECURITY DEFINER.
-    Requer criar a função no Supabase: public.rpc_tenant_members(p_tenant_id uuid).
+
+    Fluxo:
+    1) Tenta RPC (recomendado): public.rpc_tenant_members(p_tenant_id uuid)
+    2) Se vier vazio (ou falhar), faz fallback via SERVICE ROLE:
+       tenant_users (por tenant) + usuarios (nome/email/whatsapp)
+
+    Observação: o fallback exige SUPABASE_SERVICE_ROLE_KEY nos secrets e deve rodar apenas no backend (Streamlit).
     """
     roles = roles  # None => todas as roles
 
-    res = supabase.rpc("rpc_tenant_members", {"p_tenant_id": tenant_id}).execute()
-    rows = res.data or []
+    rows = []
+    try:
+        res = supabase.rpc("rpc_tenant_members", {"p_tenant_id": tenant_id}).execute()
+        rows = res.data or []
+    except Exception:
+        rows = []
 
-    if roles:
+    # Fallback: se a RPC retornar vazio (muito comum em setups com RLS/tenants em formação)
+    if not rows:
+        try:
+            admin = _supabase_admin()
+
+            tu_rows = (
+                admin.table("tenant_users")
+                .select("user_id, role")
+                .eq("tenant_id", tenant_id)
+                .limit(5000)
+                .execute()
+                .data
+                or []
+            )
+            user_ids = [r.get("user_id") for r in tu_rows if r.get("user_id")]
+            if user_ids:
+                u_rows = (
+                    admin.table("usuarios")
+                    .select("id, nome, email, whatsapp")
+                    .in_("id", user_ids)
+                    .limit(5000)
+                    .execute()
+                    .data
+                    or []
+                )
+            else:
+                u_rows = []
+
+            u_by_id = {u.get("id"): u for u in (u_rows or [])}
+            role_by_uid = {r.get("user_id"): (r.get("role") or "") for r in (tu_rows or [])}
+
+            rows = []
+            for uid in user_ids:
+                u = u_by_id.get(uid) or {}
+                rows.append(
+                    {
+                        "user_id": uid,
+                        "nome": u.get("nome"),
+                        "email": u.get("email"),
+                        "whatsapp": u.get("whatsapp"),
+                        "role": role_by_uid.get(uid),
+                    }
+                )
+        except Exception:
+            rows = []
+
+    if roles and rows:
         roles_set = set(roles)
         rows = [r for r in rows if (r.get("role") in roles_set)]
 
