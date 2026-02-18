@@ -272,6 +272,102 @@ def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
 
     return cabecalho + "\n".join(linhas)
 
+
+def _reenfileirar_a_partir_de_log(supabase, tenant_id: str, created_by: str, log_row: dict) -> tuple[int, int, int]:
+    """Regera o relatório (dados + texto) e reenfileira jobs para os mesmos destinatários.
+    Retorna: (qtd_destinatarios, total_itens, total_mensagens_por_destinatario)
+    """
+    if not log_row:
+        return (0, 0, 0)
+
+    dt_ini_s = log_row.get("dt_ini")
+    dt_fim_s = log_row.get("dt_fim")
+    departamentos = log_row.get("departamentos") or []
+    destinatarios = log_row.get("destinatarios") or log_row.get("destinatários") or []
+
+    if not dt_ini_s or not dt_fim_s or not destinatarios:
+        return (0, 0, 0)
+
+    # dt_fim é armazenado como fim EXCLUSIVO (date+1d). Para exibir ao usuário, usamos fim inclusivo.
+    dt_ini = pd.to_datetime(dt_ini_s, errors="coerce", utc=True)
+    dt_fim = pd.to_datetime(dt_fim_s, errors="coerce", utc=True)
+    if pd.isna(dt_ini) or pd.isna(dt_fim):
+        return (0, 0, 0)
+
+    d_ini = dt_ini.date()
+    d_fim_inclusivo = (dt_fim - timedelta(days=1)).date()
+
+    df = _load_entregues(supabase, tenant_id, dt_ini, dt_fim, departamentos)
+    texto = _build_message(d_ini, d_fim_inclusivo, df, departamentos)
+
+    partes = _split_text(texto, max_chars=3500)
+    total_itens = int(len(df)) if isinstance(df, pd.DataFrame) else 0
+
+    # CSV do período (o mesmo para todos os destinatários)
+    buf = io.StringIO()
+    (df if isinstance(df, pd.DataFrame) else pd.DataFrame()).to_csv(buf, index=False)
+    csv_bytes = buf.getvalue().encode("utf-8")
+
+    for to_user_id in destinatarios:
+        for idx_parte, parte in enumerate(partes, start=1):
+            if len(partes) > 1:
+                parte_envio = f"Relatório de Entregas ({idx_parte}/{len(partes)})\n\n" + parte
+            else:
+                parte_envio = parte
+
+            job = (
+                supabase.table("report_jobs")
+                .insert(
+                    {
+                        "tenant_id": tenant_id,
+                        "created_by": created_by,
+                        "channel": "whatsapp",
+                        "to_user_id": to_user_id,
+                        "report_type": "materiais_entregues",
+                        "dt_ini": dt_ini.isoformat(),
+                        "dt_fim": dt_fim.isoformat(),
+                        "message_text": parte_envio,
+                        "status": "queued",
+                    }
+                )
+                .execute()
+            )
+            job_id = job.data[0]["id"]
+
+            if idx_parte == 1:
+                path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
+                supabase.storage.from_("reports").upload(path, csv_bytes, {"content-type": "text/csv"})
+                supabase.table("report_artifacts").insert(
+                    {
+                        "job_id": job_id,
+                        "tenant_id": tenant_id,
+                        "file_type": "csv",
+                        "storage_path": path,
+                    }
+                ).execute()
+
+    # tenta registrar novo log (sem depender de colunas extras)
+    try:
+        base_log = {
+            "tenant_id": tenant_id,
+            "created_by": created_by,
+            "dt_ini": dt_ini.isoformat(),
+            "dt_fim": dt_fim.isoformat(),
+            "departamentos": departamentos,
+            "destinatarios": destinatarios,
+            "total_itens": total_itens,
+            "total_mensagens": len(partes),
+        }
+        # se existir uma coluna 'reenviado_de', registramos o vínculo
+        if log_row.get("id"):
+            base_log["reenviado_de"] = log_row.get("id")
+        supabase.table("whatsapp_relatorios_log").insert(base_log).execute()
+    except Exception:
+        pass
+
+    return (len(destinatarios), total_itens, len(partes))
+
+
 def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
     """
     Tela única com 2 abas:
@@ -600,6 +696,44 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                 )
 
                 st.dataframe(df_logs, use_container_width=True, hide_index=True)
+
+
+st.markdown("### 🔁 Reenviar um relatório do histórico")
+
+# Seleciona um registro do histórico para reenviar
+# (usa índice do dataframe para evitar depender de colunas específicas)
+opcao_idx = st.selectbox(
+    "Escolha um envio para reenviar",
+    options=list(range(len(df_logs))),
+    format_func=lambda i: (
+        f"{df_logs.loc[i, 'criado_em']} | {df_logs.loc[i, 'dt_ini']} → {df_logs.loc[i, 'dt_fim']} | "
+        f"itens: {df_logs.loc[i, 'itens']} | msgs: {df_logs.loc[i, 'msgs']}"
+    ),
+    key="rep_reenviar_sel",
+)
+
+# mostra detalhes
+sel_row = logs[int(opcao_idx)] if logs and 0 <= int(opcao_idx) < len(logs) else None
+if sel_row:
+    with st.expander("Ver detalhes do envio selecionado", expanded=False):
+        st.json(sel_row)
+
+if st.button("🔁 Reenviar", type="primary", use_container_width=True, key="rep_reenviar_btn"):
+    if not sel_row:
+        st.error("Seleção inválida.")
+    else:
+        with st.spinner("Regerando relatório e reenfileirando mensagens..."):
+            qtd_dest, total_itens, total_msgs = _reenfileirar_a_partir_de_log(
+                supabase, tenant_id, created_by, sel_row
+            )
+        if qtd_dest == 0:
+            st.error("Não foi possível reenviar (verifique dt_ini/dt_fim/destinatários no log).")
+        else:
+            st.success(
+                f"Reenvio enfileirado para {qtd_dest} destinatário(s). "
+                f"Itens no período: {total_itens}. "
+                f"Mensagens por destinatário: {total_msgs}."
+            )
 
         except Exception:
 
