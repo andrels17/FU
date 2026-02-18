@@ -183,9 +183,9 @@ def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
                 if col_qtd:
                     partes.append(f"Qtd: {row.get(col_qtd, '')}")
                 if col_equip:
-                    partes.append(f"Frota: {row.get(col_equip, '')}")
+                    partes.append(f"Eqp: {row.get(col_equip, '')}")
                 if col_mat:
-                    partes.append(f"Material: {row.get(col_mat, '')}")
+                    partes.append(f"Mat: {row.get(col_mat, '')}")
                 linhas.append(f"  {i}. " + " | ".join(partes))
             linhas.append("")
     else:
@@ -196,9 +196,9 @@ def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
             if col_qtd:
                 partes.append(f"Qtd: {row.get(col_qtd, '')}")
             if col_equip:
-                partes.append(f"Frota: {row.get(col_equip, '')}")
+                partes.append(f"Eqp: {row.get(col_equip, '')}")
             if col_mat:
-                partes.append(f"Material: {row.get(col_mat, '')}")
+                partes.append(f"Mat: {row.get(col_mat, '')}")
             linhas.append(f"{i}. " + " | ".join(partes))
 
     return cabecalho + "\n".join(linhas)
@@ -290,11 +290,41 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
         st.caption("Destinatários: todos os usuários do tenant (todas as roles).")
 
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            d_ini = st.date_input("Data inicial", value=(datetime.now().date() - timedelta(days=7)), key="rep_dt_ini")
-        with c2:
-            d_fim = st.date_input("Data final", value=datetime.now().date(), key="rep_dt_fim")
+        # Períodos rápidos (padrão: últimos 7 dias)
+        periodo = st.radio(
+            "Período",
+            options=["Últimos 7 dias", "Hoje", "Mês atual", "Personalizado"],
+            horizontal=True,
+            key="rep_periodo",
+        )
+
+        hoje = datetime.now().date()
+        if periodo == "Últimos 7 dias":
+            st.session_state["rep_dt_ini"] = hoje - timedelta(days=7)
+            st.session_state["rep_dt_fim"] = hoje
+        elif periodo == "Hoje":
+            st.session_state["rep_dt_ini"] = hoje
+            st.session_state["rep_dt_fim"] = hoje
+        elif periodo == "Mês atual":
+            st.session_state["rep_dt_ini"] = hoje.replace(day=1)
+            st.session_state["rep_dt_fim"] = hoje
+
+        c_dt1, c_dt2 = st.columns(2)
+        with c_dt1:
+            d_ini = st.date_input(
+                "Data inicial",
+                value=st.session_state.get("rep_dt_ini", hoje - timedelta(days=7)),
+                key="rep_dt_ini",
+            )
+        with c_dt2:
+            d_fim = st.date_input(
+                "Data final",
+                value=st.session_state.get("rep_dt_fim", hoje),
+                key="rep_dt_fim",
+            )
+
+        if periodo != "Personalizado":
+            st.caption("Dica: selecione 'Personalizado' para editar as datas livremente.")
 
         dt_ini, dt_fim = _dt_range_utc(d_ini, d_fim)
 
@@ -313,7 +343,10 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
         if faltando:
             st.warning("Sem gestor vinculado: " + ", ".join(faltando))
 
-        if st.button("Gerar prévia", type="primary", use_container_width=True, key="rep_preview"):
+        with st.spinner("Gerando prévia..."):
+
+
+            # Prévia atualiza automaticamente quando você muda os filtros
             df = _load_entregues(supabase, tenant_id, dt_ini, dt_fim, deps_sel)
             texto = _build_message(d_ini, d_fim, df, deps_sel)
 
