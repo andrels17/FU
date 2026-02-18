@@ -4,6 +4,7 @@ from datetime import datetime, time, timedelta, timezone
 import pandas as pd
 import streamlit as st
 from supabase import create_client
+import re
 
 try:
     # storage3 é usado internamente pelo supabase-py (Streamlit Cloud)
@@ -11,13 +12,52 @@ try:
 except Exception:  # pragma: no cover
     StorageException = Exception  # fallback
 
+import urllib.parse
 
+def _normalize_whatsapp(value: str) -> str:
+    """Normaliza número WhatsApp para formato wa.me (somente dígitos com DDI).
+    Aceita inputs como '+55 (84) 99999-9999' e retorna '5584999999999'.
+    """
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s:
+        return ""
+    # remove tudo que não for dígito
+    digits = re.sub(r"\D+", "", s)
+    return digits
 
-try:
-    # storage3 é usado internamente pelo supabase-py (Streamlit Cloud)
-    from storage3.utils import StorageException  # type: ignore
-except Exception:  # pragma: no cover
-    StorageException = Exception  # fallback
+def _wa_me_link(phone_digits: str, text: str) -> str:
+    """Monta link wa.me com texto pré-preenchido."""
+    phone_digits = _normalize_whatsapp(phone_digits)
+    q = urllib.parse.quote(text or "", safe="")
+    return f"https://wa.me/{phone_digits}?text={q}" if phone_digits else ""
+
+def _copy_to_clipboard_button(label: str, text: str, key: str):
+    """Botão de copiar via JS (cliente)."""
+    import streamlit.components.v1 as components
+    safe_text = (text or "").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+    html = f"""
+    <button id="{key}" style="padding:0.35rem 0.6rem;border-radius:0.5rem;border:1px solid rgba(49,51,63,0.2);background:white;cursor:pointer;">
+      {label}
+    </button>
+    <script>
+      const btn = document.getElementById("{key}");
+      if (btn) {{
+        btn.onclick = async () => {{
+          try {{
+            await navigator.clipboard.writeText(`{safe_text}`);
+            btn.innerText = "✅ Copiado";
+            setTimeout(()=>btn.innerText="{label}", 1500);
+          }} catch(e) {{
+            btn.innerText = "⚠️ Falhou";
+            setTimeout(()=>btn.innerText="{label}", 1500);
+          }}
+        }}
+      }}
+    </script>
+    """
+    components.html(html, height=45)
 
 
 @st.cache_resource(show_spinner=False)
@@ -535,12 +575,66 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
     gestores = _load_gestores(supabase, tenant_id, roles=roles_destino)
     gestores_by_id = {g["user_id"]: g for g in gestores}
     labels_g = {
-        g["user_id"]: f'{g.get("nome") or "Sem nome"} — {g.get("email") or ""}'
+        g["user_id"]: f'{g.get("nome") or "Sem nome"} — {g.get("email") or ""}' + (f' | {g.get("whatsapp")}' if g.get("whatsapp") else "")
         for g in gestores
     }
 
     with tab_link:
         st.subheader("Vínculo Departamento → Destinatário")
+
+
+        st.caption("Cadastre/atualize o número WhatsApp dos destinatários para habilitar o envio assistido (WhatsApp Web).")
+
+        with st.expander("📞 Telefones WhatsApp dos destinatários", expanded=False):
+            # Lista membros do tenant via RPC (já retorna whatsapp se você adicionou na função)
+            df_users = pd.DataFrame(gestores or [])
+            if df_users.empty:
+                st.caption("Nenhum usuário retornado pela RPC.")
+            else:
+                # normaliza colunas
+                if "user_id" not in df_users.columns and "id" in df_users.columns:
+                    df_users = df_users.rename(columns={"id": "user_id"})
+                cols_show = [c for c in ["user_id", "nome", "email", "whatsapp", "role"] if c in df_users.columns]
+                df_users = df_users[cols_show].copy()
+                if "whatsapp" not in df_users.columns:
+                    df_users["whatsapp"] = ""
+
+                edited_users = st.data_editor(
+                    df_users,
+                    use_container_width=True,
+                    hide_index=True,
+                    disabled=[c for c in ["user_id", "nome", "email", "role"] if c in df_users.columns],
+                    column_config={
+                        "whatsapp": st.column_config.TextColumn(
+                            "WhatsApp (com DDI)",
+                            help="Ex.: +55 84 99999-9999 (recomendado) ou 5584999999999",
+                        )
+                    },
+                    key="rep_users_whatsapp_editor",
+                )
+
+                if st.button("Salvar telefones WhatsApp", use_container_width=True, key="rep_users_whatsapp_save"):
+                    updated = 0
+                    invalid = 0
+                    for _, r in edited_users.iterrows():
+                        uid = r.get("user_id")
+                        raw = r.get("whatsapp")
+                        digits = _normalize_whatsapp(raw)
+                        # validação mínima: não aceitar string não vazia com menos de 10 dígitos
+                        if raw and str(raw).strip() and len(digits) < 10:
+                            invalid += 1
+                            continue
+                        # grava no formato digit-only (wa.me) para facilitar
+                        try:
+                            supabase.table("usuarios").update({"whatsapp": digits}).eq("id", uid).execute()
+                            updated += 1
+                        except Exception as e:
+                            st.warning(f"Falha ao salvar WhatsApp de {uid}: {e}")
+                    if invalid:
+                        st.warning(f"{invalid} número(s) ignorado(s) por formato inválido (muito curto).")
+                    st.success(f"Telefones salvos: {updated}.")
+                    st.rerun()
+
 
         deps = _load_departamentos_from_pedidos(supabase, tenant_id)
 
@@ -873,6 +967,46 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
             st.success(f"{ok} envio(s) enfileirado(s).")
 
+
+
+        st.subheader("📲 Envio assistido (WhatsApp Web)")
+        st.caption("Sem integração: abre o WhatsApp Web com a mensagem pronta. Você revisa e clica em enviar.")
+        st.caption("Dica: cadastre o WhatsApp dos destinatários na aba 'Vincular gestores' → 'Telefones WhatsApp'.")
+
+        df_prev_cache = st.session_state.get("_rep_df")
+        texto_cache = st.session_state.get("_rep_texto")
+
+        if df_prev_cache is None or texto_cache is None:
+            st.info("Gere a prévia acima para habilitar o envio assistido.")
+        else:
+            # Destinos pelos vínculos atuais (ou seleção manual)
+            destinos_assist = sorted({g for g in mapa.values() if g})
+            if not destinos_assist:
+                destinos_assist = st.session_state.get("rep_manual_destinos", []) or []
+
+            if not destinos_assist:
+                st.warning("Nenhum destinatário definido (vincule departamentos ou selecione manualmente).")
+            else:
+                partes_assist = _split_text(texto_cache, max_chars=3500)
+                st.info(f"Mensagem dividida em {len(partes_assist)} parte(s).")
+
+                for to_user_id in destinos_assist:
+                    g = gestores_by_id.get(to_user_id, {}) if isinstance(gestores_by_id, dict) else {}
+                    nome = g.get("nome") or g.get("email") or str(to_user_id)
+                    phone = g.get("whatsapp") or ""
+                    phone_digits = _normalize_whatsapp(phone)
+
+                    with st.expander(f"👤 {nome}", expanded=False):
+                        if not phone_digits:
+                            st.warning("Este destinatário está sem WhatsApp cadastrado.")
+                        else:
+                            link = _wa_me_link(phone_digits, partes_assist[0])
+                            st.link_button("🌐 Abrir WhatsApp Web", link, use_container_width=True)
+
+                        for i, p in enumerate(partes_assist, start=1):
+                            st.markdown(f"**Parte {i}/{len(partes_assist)}**")
+                            _copy_to_clipboard_button(f"📋 Copiar parte {i}", p, key=f"copy_{to_user_id}_{i}")
+                            st.text_area("", value=p, height=140, key=f"assist_text_{to_user_id}_{i}")
 
         st.markdown("---")
 
