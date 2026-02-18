@@ -153,6 +153,40 @@ def _coerce_date(x):
     return dt.strftime("%Y-%m-%d")
 
 
+def _coerce_float(x):
+    """Converte números vindo de CSV/Excel (aceita vírgula) para float ou None."""
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    try:
+        if isinstance(x, str):
+            xs = x.strip().replace(".", "").replace(",", ".")  # PT-BR -> float
+            if xs == "":
+                return None
+            return float(xs)
+        return float(x)
+    except Exception:
+        return None
+
+
+def _calc_valor_total_row(row: pd.Series) -> float:
+    """Calcula valor_total priorizando preço unitário/última compra quando existir."""
+    qtde = _coerce_float(row.get("qtde_solicitada")) or 0.0
+
+    # Aceita várias convenções de coluna (você pode manter sua planilha como está)
+    unit = (
+        _coerce_float(row.get("valor_unitario"))
+        or _coerce_float(row.get("valor_ultima_compra"))
+        or _coerce_float(row.get("valor_ultima"))
+    )
+
+    if unit is not None and unit > 0 and qtde > 0:
+        return float(qtde * unit)
+
+    # fallback: usa valor_total informado (se houver)
+    vt = _coerce_float(row.get("valor_total"))
+    return float(vt or 0.0)
+
+
 def _validate_upload_df(df_upload: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     if df_upload is None or df_upload.empty:
         return df_upload, pd.DataFrame([{"linha": "-", "erro": "Arquivo vazio"}])
@@ -177,6 +211,11 @@ def _validate_upload_df(df_upload: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
         df["valor_total"] = pd.to_numeric(df["valor_total"], errors="coerce").fillna(0)
     else:
         df["valor_total"] = 0
+
+    # Preços auxiliares (opcionais) para cálculo automático do valor_total
+    for c in ["valor_unitario", "valor_ultima_compra", "valor_ultima"]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
 
     # Datas (podem vir vazias)
     for c in ["data_solicitacao", "data_oc", "previsao_entrega"]:
@@ -549,6 +588,8 @@ def exibir_gestao_pedidos(_supabase):
             "cod_material": ["MAT-001"],
             "descricao": ["Exemplo de material"],
             "qtde_solicitada": [10],
+            "valor_unitario": [150.00],
+            "valor_ultima_compra": [150.00],
             "cod_fornecedor": [6691],
             "nome_fornecedor": ["Nome do Fornecedor (opcional)"],
             "cidade_fornecedor": ["São Paulo (opcional)"],
@@ -1198,7 +1239,7 @@ def exibir_gestao_pedidos(_supabase):
                                     if pd.notna(row.get("previsao_entrega"))
                                     else None,
                                     "status": str(row.get("status", "Sem OC")).strip(),
-                                    "valor_total": float(row.get("valor_total", 0) or 0),
+                                    "valor_total": _calc_valor_total_row(row),
                                     "fornecedor_id": fornecedor_id,
                                 }
 
@@ -2196,3 +2237,4 @@ def exibir_gestao_pedidos(_supabase):
                             st.rerun()
                     except Exception as e:
                         st.error(f"Erro ao aplicar fornecedor: {e}")
+
