@@ -1,11 +1,13 @@
 import io
 from datetime import datetime, time, timedelta, timezone
-
+import json
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 from supabase import create_client
 import re
+import urllib.parse
+
 
 try:
     # storage3 é usado internamente pelo supabase-py (Streamlit Cloud)
