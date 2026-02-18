@@ -82,64 +82,62 @@ def _supabase_admin():
         st.secrets["SUPABASE_SERVICE_ROLE_KEY"],
     )
 
-def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_prefix: str = ""):
-    """Painel único de envio assistido (Brave-friendly).
+def _whatsapp_single_panel(phone_digits: str, text: str):
+    import streamlit.components.v1 as components
+    import urllib.parse
+    import json
 
-    Importante: manter como UM único components.html por vez. O window.open precisa
-    acontecer diretamente no clique do usuário para não ser bloqueado por popup blockers.
-    """
-    # Monta URL do WhatsApp Web com texto pré-preenchido
-    encoded_text = urllib.parse.quote(text or "")
+    encoded_text = urllib.parse.quote(text)
     whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_text}"
 
-    # Escape seguro para JS/HTML
     url_js = json.dumps(whatsapp_url)
-    msg_js = json.dumps(text or "")
-
-    # Sufixo de ids (evita conflitos). Mantém curto e seguro.
-    suffix = re.sub(r"[^a-zA-Z0-9_\-]", "_", (key or "wa_panel"))[:60]
-    label = (label_prefix or "WhatsApp").strip()
+    msg_js = json.dumps(text)
 
     components.html(
         f"""
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          <button id="wa_fix_{suffix}" style="padding:10px 14px;border-radius:10px;border:1px solid #374151;background:#111827;color:#fff;font-weight:700;cursor:pointer;">
+          <button id="wa_fix"
+            style="padding:10px 14px;border-radius:10px;border:1px solid #374151;background:#111827;color:#fff;font-weight:700;cursor:pointer;">
             📌 Fixar WhatsApp
           </button>
 
-          <button id="wa_open_{suffix}" style="padding:10px 14px;border-radius:10px;border:none;background:#25D366;color:#fff;font-weight:800;cursor:pointer;">
-            🌐 {label} — Abrir
+          <button id="wa_open"
+            style="padding:10px 14px;border-radius:10px;border:none;background:#25D366;color:#fff;font-weight:800;cursor:pointer;">
+            🌐 Abrir (popup fixo)
           </button>
 
-          <button id="wa_copy_{suffix}" style="padding:10px 14px;border-radius:10px;border:1px solid #374151;background:#1f2937;color:#fff;font-weight:800;cursor:pointer;">
+          <button id="wa_copy"
+            style="padding:10px 14px;border-radius:10px;border:1px solid #374151;background:#1f2937;color:#fff;font-weight:800;cursor:pointer;">
             📋 Copiar
           </button>
 
-          <button id="wa_copy_open_{suffix}" style="padding:10px 14px;border-radius:10px;border:none;background:#0f172a;color:#fff;font-weight:800;cursor:pointer;">
+          <button id="wa_copy_open"
+            style="padding:10px 14px;border-radius:10px;border:none;background:#0f172a;color:#fff;font-weight:800;cursor:pointer;">
             📋 Copiar + Abrir
           </button>
 
-          <span id="wa_status_{suffix}" style="font-weight:600;opacity:.85;"></span>
+          <span id="wa_status" style="font-weight:600;opacity:.85;"></span>
         </div>
 
         <script>
+          const FEATS = "popup=yes,width=1200,height=900,left=80,top=60";
           const url = {url_js};
           const msg = {msg_js};
-          const statusEl = document.getElementById("wa_status_{suffix}");
+          const statusEl = document.getElementById("wa_status");
 
           function setStatus(t) {{
             if (statusEl) statusEl.textContent = t || "";
-            setTimeout(() => {{ if (statusEl) statusEl.textContent = ""; }}, 2200);
+            setTimeout(() => {{ if (statusEl) statusEl.textContent = ""; }}, 2500);
           }}
 
           function fixTab() {{
-            window.open("https://web.whatsapp.com/", "whatsapp_tab");
-            setStatus("WhatsApp Web fixado ✅");
+            window.open("https://web.whatsapp.com/", "whatsapp_tab", FEATS);
+            setStatus("Popup fixado ✅");
           }}
 
           function openTab() {{
-            window.open(url, "whatsapp_tab");
-            setStatus("Abrindo no WhatsApp Web…");
+            window.open(url, "whatsapp_tab", FEATS);
+            setStatus("Abrindo WhatsApp...");
           }}
 
           async function copyOnly() {{
@@ -147,7 +145,7 @@ def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_pref
               await navigator.clipboard.writeText(msg);
               setStatus("Copiado ✅");
             }} catch (e) {{
-              setStatus("Falha ao copiar (permissão)");
+              setStatus("Falha ao copiar");
             }}
           }}
 
@@ -156,14 +154,15 @@ def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_pref
             openTab();
           }}
 
-          document.getElementById("wa_fix_{suffix}").onclick = fixTab;
-          document.getElementById("wa_open_{suffix}").onclick = openTab;
-          document.getElementById("wa_copy_{suffix}").onclick = copyOnly;
-          document.getElementById("wa_copy_open_{suffix}").onclick = copyAndOpen;
+          document.getElementById("wa_fix").onclick = fixTab;
+          document.getElementById("wa_open").onclick = openTab;
+          document.getElementById("wa_copy").onclick = copyOnly;
+          document.getElementById("wa_copy_open").onclick = copyAndOpen;
         </script>
         """,
-        height=90,
+        height=100,
     )
+
 
 def _fetch_user_profiles_admin(admin, user_ids: list[str]):
     """Busca perfis dos usuários. Tenta tabelas/colunas comuns e é tolerante a schema.
