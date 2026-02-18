@@ -721,58 +721,154 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
         st.caption("Cadastre/atualize o número WhatsApp dos destinatários para habilitar o envio assistido (WhatsApp Web).")
 
-        with st.expander("📞 Telefones WhatsApp dos destinatários", expanded=False):
-            # Lista membros do tenant via RPC (já retorna whatsapp se você adicionou na função)
-            df_users = pd.DataFrame(gestores or [])
-            if df_users.empty:
-                st.caption("Nenhum usuário retornado pela RPC.")
+        
+with st.expander("📞 Telefones WhatsApp dos destinatários", expanded=False):
+    # Visão geral (somente leitura)
+    df_users = pd.DataFrame(gestores or [])
+    if df_users.empty:
+        st.caption("Nenhum usuário retornado (RPC/fallback).")
+    else:
+        if "user_id" not in df_users.columns and "id" in df_users.columns:
+            df_users = df_users.rename(columns={"id": "user_id"})
+        for c in ["nome", "email", "role", "whatsapp"]:
+            if c not in df_users.columns:
+                df_users[c] = ""
+
+        cols_show = ["user_id", "nome", "email", "role", "whatsapp"]
+        st.dataframe(df_users[cols_show], use_container_width=True, hide_index=True)
+
+        st.markdown("#### Editar WhatsApp de um destinatário")
+        user_options = df_users["user_id"].tolist()
+
+        def _fmt_user(uid: str) -> str:
+            row = df_users.loc[df_users["user_id"] == uid].head(1)
+            if row.empty:
+                return uid
+            nome = (row["nome"].iloc[0] or "Sem nome")
+            email = (row["email"].iloc[0] or "")
+            w = (row["whatsapp"].iloc[0] or "")
+            w_disp = f" | {w}" if w else ""
+            return f"{nome} — {email}{w_disp}"
+
+        uid_sel = st.selectbox(
+            "Destinatário",
+            options=user_options,
+            format_func=_fmt_user,
+            key="rep_whats_uid_sel",
+        )
+
+        cur_digits = ""
+        try:
+            cur_digits = _normalize_whatsapp(
+                df_users.loc[df_users["user_id"] == uid_sel, "whatsapp"].iloc[0]
+            )
+        except Exception:
+            cur_digits = ""
+
+        # Defaults BR friendly
+        ddi_def = "55"
+        ddd_def = ""
+        num_def = ""
+        if cur_digits.startswith("55") and len(cur_digits) >= 12:
+            ddi_def = "55"
+            rest = cur_digits[2:]
+            ddd_def = rest[:2]
+            num_def = rest[2:]
+        elif cur_digits:
+            ddi_def = cur_digits[:2]
+            rest = cur_digits[2:]
+            ddd_def = rest[:2] if len(rest) >= 2 else ""
+            num_def = rest[2:] if len(rest) > 2 else ""
+
+        cddi, cddd, cnum = st.columns([0.6, 0.6, 1.2])
+        with cddi:
+            ddi = st.text_input("DDI", value=ddi_def, max_chars=3, help="Ex.: 55 (Brasil)", key="rep_whats_ddi")
+        with cddd:
+            ddd = st.text_input("DDD", value=ddd_def, max_chars=2, help="Ex.: 83", key="rep_whats_ddd")
+        with cnum:
+            numero = st.text_input(
+                "Número",
+                value=num_def,
+                max_chars=9,
+                help="Somente o número (8 ou 9 dígitos). Ex.: 986392013",
+                key="rep_whats_num",
+            )
+
+        ddi_d = re.sub(r"\D+", "", ddi or "").strip() or "55"
+        ddd_d = re.sub(r"\D+", "", ddd or "").strip()
+        num_d = re.sub(r"\D+", "", numero or "").strip()
+
+        full_digits = (ddi_d + ddd_d + num_d) if (ddd_d or num_d) else ""
+        full_digits = full_digits.lstrip("0")
+
+        valid = True
+        errs = []
+        if full_digits:
+            if not ddi_d.isdigit() or len(ddi_d) not in (1, 2, 3):
+                valid = False
+                errs.append("DDI inválido")
+            if ddi_d == "55":
+                if len(ddd_d) != 2:
+                    valid = False
+                    errs.append("DDD deve ter 2 dígitos")
+                if len(num_d) not in (8, 9):
+                    valid = False
+                    errs.append("Número deve ter 8 ou 9 dígitos")
             else:
-                # normaliza colunas
-                if "user_id" not in df_users.columns and "id" in df_users.columns:
-                    df_users = df_users.rename(columns={"id": "user_id"})
-                cols_show = [c for c in ["user_id", "nome", "email", "whatsapp", "role"] if c in df_users.columns]
-                df_users = df_users[cols_show].copy()
-                if "whatsapp" not in df_users.columns:
-                    df_users["whatsapp"] = ""
+                if len(full_digits) < 10:
+                    valid = False
+                    errs.append("Número muito curto")
 
-                edited_users = st.data_editor(
-                    df_users,
-                    use_container_width=True,
-                    hide_index=True,
-                    disabled=[c for c in ["user_id", "nome", "email", "role"] if c in df_users.columns],
-                    column_config={
-                        "whatsapp": st.column_config.TextColumn(
-                            "WhatsApp (com DDI)",
-                            help="Ex.: +55 84 99999-9999 (recomendado) ou 5584999999999",
-                        )
-                    },
-                    key="rep_users_whatsapp_editor",
-                )
+        def _fmt_preview(ddi_d: str, ddd_d: str, num_d: str) -> str:
+            if not (ddi_d and (ddd_d or num_d)):
+                return ""
+            if num_d:
+                if len(num_d) == 9:
+                    num_fmt = f"{num_d[:5]}-{num_d[5:]}"
+                elif len(num_d) == 8:
+                    num_fmt = f"{num_d[:4]}-{num_d[4:]}"
+                else:
+                    num_fmt = num_d
+            else:
+                num_fmt = ""
+            mid = f"{ddd_d} {num_fmt}".strip()
+            return f"+{ddi_d} {mid}".strip()
 
-                if st.button("Salvar telefones WhatsApp", use_container_width=True, key="rep_users_whatsapp_save"):
-                    updated = 0
-                    invalid = 0
-                    for _, r in edited_users.iterrows():
-                        uid = r.get("user_id")
-                        raw = r.get("whatsapp")
-                        digits = _normalize_whatsapp(raw)
-                        # validação mínima: não aceitar string não vazia com menos de 10 dígitos
-                        if raw and str(raw).strip() and len(digits) < 10:
-                            invalid += 1
-                            continue
-                        # grava no formato digit-only (wa.me) para facilitar
-                        try:
-                            ok_upd = _update_user_whatsapp(supabase, uid, digits)
-                            if ok_upd:
-                                updated += 1
-                            else:
-                                st.warning(f"Não consegui salvar WhatsApp de {uid} (verifique tabela/coluna).")
-                        except Exception as e:
-                            st.warning(f"Falha ao salvar WhatsApp de {uid}: {e}")
-                    if invalid:
-                        st.warning(f"{invalid} número(s) ignorado(s) por formato inválido (muito curto).")
-                    st.success(f"Telefones salvos: {updated}.")
+        preview = _fmt_preview(ddi_d, ddd_d, num_d)
+        if preview:
+            st.caption(f"Formato final: **{preview}**")
+            st.caption(f"wa.me: **https://wa.me/{full_digits}**")
+
+        if full_digits and not valid:
+            st.warning("Ajuste: " + "; ".join(errs))
+
+        csave, ctest, cclear = st.columns([1, 1, 1])
+        with csave:
+            if st.button("Salvar WhatsApp", type="primary", use_container_width=True, key="rep_whats_save_one"):
+                if not full_digits:
+                    st.error("Informe ao menos DDD e número.")
+                elif not valid:
+                    st.error("Número inválido: " + "; ".join(errs))
+                else:
+                    ok_upd = _update_user_whatsapp(supabase, uid_sel, full_digits)
+                    if ok_upd:
+                        st.success("WhatsApp salvo.")
+                        st.rerun()
+                    else:
+                        st.error("Não consegui salvar (verifique coluna user_profiles.whatsapp e policies).")
+        with ctest:
+            if full_digits:
+                st.link_button("Testar abrir WhatsApp Web", url=f"https://wa.me/{full_digits}", use_container_width=True)
+            else:
+                st.button("Testar abrir WhatsApp Web", disabled=True, use_container_width=True)
+        with cclear:
+            if st.button("Limpar WhatsApp", use_container_width=True, key="rep_whats_clear_one"):
+                ok_upd = _update_user_whatsapp(supabase, uid_sel, "")
+                if ok_upd:
+                    st.success("WhatsApp removido.")
                     st.rerun()
+                else:
+                    st.error("Não consegui limpar (verifique policies).")
 
 
         deps = _load_departamentos_from_pedidos(supabase, tenant_id)
