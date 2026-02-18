@@ -82,48 +82,64 @@ def _supabase_admin():
         st.secrets["SUPABASE_SERVICE_ROLE_KEY"],
     )
 
-def _whatsapp_single_panel(phone_digits: str, text: str):
-    import streamlit.components.v1 as components
-    import urllib.parse
-    import json
+def _whatsapp_single_panel(phone_digits: str, text: str, key: str = "wa", label_prefix: str = ""):
+    """Painel único (JS) para abrir WhatsApp Web em POPUP fixo e reutilizável.
 
-    encoded_text = urllib.parse.quote(text)
+    Importante:
+    - Usamos POPUP + window.open(name, features) para aumentar a chance de reuso no Brave/COOP.
+    - IDs HTML são sufixados com `key` para evitar colisão quando o Streamlit re-renderiza.
+    """
+    phone_digits = _normalize_whatsapp(phone_digits)
+    if not phone_digits:
+        st.warning("Destinatário sem WhatsApp cadastrado.")
+        return
+
+    # Link WhatsApp Web com texto
+    encoded_text = urllib.parse.quote(text or "", safe="")
     whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_text}"
 
+    # Escapar corretamente para JS
     url_js = json.dumps(whatsapp_url)
-    msg_js = json.dumps(text)
+    msg_js = json.dumps(text or "")
+
+    # IDs únicos por render
+    fix_id = f"{key}_wa_fix"
+    open_id = f"{key}_wa_open"
+    copy_id = f"{key}_wa_copy"
+    copy_open_id = f"{key}_wa_copy_open"
+    status_id = f"{key}_wa_status"
 
     components.html(
         f"""
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          <button id="wa_fix"
+          <button id="{fix_id}"
             style="padding:10px 14px;border-radius:10px;border:1px solid #374151;background:#111827;color:#fff;font-weight:700;cursor:pointer;">
             📌 Fixar WhatsApp
           </button>
 
-          <button id="wa_open"
+          <button id="{open_id}"
             style="padding:10px 14px;border-radius:10px;border:none;background:#25D366;color:#fff;font-weight:800;cursor:pointer;">
-            🌐 Abrir (popup fixo)
+            🌐 {label_prefix} Abrir (popup fixo)
           </button>
 
-          <button id="wa_copy"
+          <button id="{copy_id}"
             style="padding:10px 14px;border-radius:10px;border:1px solid #374151;background:#1f2937;color:#fff;font-weight:800;cursor:pointer;">
             📋 Copiar
           </button>
 
-          <button id="wa_copy_open"
+          <button id="{copy_open_id}"
             style="padding:10px 14px;border-radius:10px;border:none;background:#0f172a;color:#fff;font-weight:800;cursor:pointer;">
             📋 Copiar + Abrir
           </button>
 
-          <span id="wa_status" style="font-weight:600;opacity:.85;"></span>
+          <span id="{status_id}" style="font-weight:600;opacity:.85;"></span>
         </div>
 
         <script>
           const FEATS = "popup=yes,width=1200,height=900,left=80,top=60";
           const url = {url_js};
           const msg = {msg_js};
-          const statusEl = document.getElementById("wa_status");
+          const statusEl = document.getElementById("{status_id}");
 
           function setStatus(t) {{
             if (statusEl) statusEl.textContent = t || "";
@@ -154,15 +170,22 @@ def _whatsapp_single_panel(phone_digits: str, text: str):
             openTab();
           }}
 
-          document.getElementById("wa_fix").onclick = fixTab;
-          document.getElementById("wa_open").onclick = openTab;
-          document.getElementById("wa_copy").onclick = copyOnly;
-          document.getElementById("wa_copy_open").onclick = copyAndOpen;
+          document.getElementById("{fix_id}").onclick = fixTab;
+          document.getElementById("{open_id}").onclick = openTab;
+          document.getElementById("{copy_id}").onclick = copyOnly;
+          document.getElementById("{copy_open_id}").onclick = copyAndOpen;
         </script>
         """,
-        height=100,
+        height=110,
     )
 
+
+def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_prefix: str = ""):
+    """Compat: em vários pontos da tela a chamada está como _whatsapp_js_buttons(...).
+    Mantemos esse nome chamando o painel único de popup.
+    """
+    k = key or "wa"
+    _whatsapp_single_panel(phone_digits, text, key=k, label_prefix=label_prefix)
 
 def _fetch_user_profiles_admin(admin, user_ids: list[str]):
     """Busca perfis dos usuários. Tenta tabelas/colunas comuns e é tolerante a schema.
