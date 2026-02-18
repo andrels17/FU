@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.core.db import init_supabase_admin
 from src.repositories.pedidos import carregar_pedidos
@@ -42,13 +43,68 @@ def _download_name(prefix: str, dt_ini: date, dt_fim: date) -> str:
     return f"{prefix}_{dt_ini.isoformat()}_a_{dt_fim.isoformat()}.csv"
 
 
+def _init_filter_state():
+    dt_ini_def, dt_fim_def = _date_defaults()
+    st.session_state.setdefault("rg_dt_ini", dt_ini_def)
+    st.session_state.setdefault("rg_dt_fim", dt_fim_def)
+    st.session_state.setdefault("rg_date_field_label", "Solicitação")
+    st.session_state.setdefault("rg_entregue_label", "Todos")
+    st.session_state.setdefault("rg_depts", [])
+    st.session_state.setdefault("rg_frotas", [])
+    st.session_state.setdefault("rg_applied", False)
+
+
+def _build_filtros_from_state() -> tuple[FiltrosGastos, date, date]:
+    date_field_map = {
+        "Solicitação": "data_solicitacao",
+        "OC": "data_oc",
+        "Entrega real": "data_entrega_real",
+        "Criação": "criado_em",
+    }
+    dt_ini = st.session_state.get("rg_dt_ini")
+    dt_fim = st.session_state.get("rg_dt_fim")
+    date_field = date_field_map.get(st.session_state.get("rg_date_field_label", "Solicitação"), "data_solicitacao")
+
+    entregue_opt = st.session_state.get("rg_entregue_label", "Todos")
+    entregue = None
+    if entregue_opt == "Entregues":
+        entregue = True
+    elif entregue_opt == "Pendentes":
+        entregue = False
+
+    filtros = FiltrosGastos(
+        dt_ini=dt_ini,
+        dt_fim=dt_fim,
+        date_field=date_field,
+        entregue=entregue,
+        departamentos=list(st.session_state.get("rg_depts") or []),
+        frotas=list(st.session_state.get("rg_frotas") or []),
+    )
+    return filtros, dt_ini, dt_fim
+
+
+def _pill_style():
+    # micro UX: compacta multiselects
+    st.markdown(
+        """
+        <style>
+        div[data-baseweb="select"] > div { min-height: 38px; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_relatorios_gerenciais(_supabase, tenant_id: str):
     st.title("📈 Relatórios Gerenciais")
-    st.caption("Gastos por Gestor, Frota (cód. equipamento) e Departamento.")
+    st.caption("Visão de gastos por Gestor, Frota (cód. equipamento) e Departamento.")
 
     if not tenant_id:
         st.error("Tenant não identificado.")
         st.stop()
+
+    _init_filter_state()
+    _pill_style()
 
     # Admin (service role) para leituras que podem sofrer RLS
     try:
@@ -56,244 +112,262 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str):
     except Exception:
         supabase_admin = None
 
-    # ===== Filtros (card no topo) =====
-    dt_ini_def, dt_fim_def = _date_defaults()
+    # ===== Carregar pedidos uma vez (base para filtros + análise) =====
+    with st.spinner("Carregando pedidos..."):
+        df_pedidos = carregar_pedidos(_supabase, tenant_id=tenant_id)
 
-    with st.container(border=True):
-        st.markdown("### 🔎 Filtros")
-        with st.form("rg_filtros_form", clear_on_submit=False):
-            c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-
-            with c1:
-                dt_ini = st.date_input("Data inicial", value=dt_ini_def, key="rg_dt_ini")
-            with c2:
-                dt_fim = st.date_input("Data final", value=dt_fim_def, key="rg_dt_fim")
-            with c3:
-                date_field_label = st.selectbox(
-                    "Campo de data",
-                    ["Solicitação", "OC", "Entrega real", "Criação"],
-                    index=0,
-                    key="rg_date_field",
-                )
-            with c4:
-                entregue_opt = st.selectbox(
-                    "Situação",
-                    ["Todos", "Entregues", "Pendentes"],
-                    index=0,
-                    key="rg_entregue",
-                )
-
-            date_field_map = {
-                "Solicitação": "data_solicitacao",
-                "OC": "data_oc",
-                "Entrega real": "data_entrega_real",
-                "Criação": "criado_em",
-            }
-            date_field = date_field_map.get(date_field_label, "data_solicitacao")
-
-            entregue = None
-            if entregue_opt == "Entregues":
-                entregue = True
-            elif entregue_opt == "Pendentes":
-                entregue = False
-
-            # Carregar pedidos (para popular filtros de dept/frota)
-            # Obs: carregamos aqui porque as opções dependem do DF
-            with st.spinner("Carregando pedidos para montar filtros..."):
-                df_pedidos = carregar_pedidos(_supabase, tenant_id=tenant_id)
-
-            if df_pedidos is None or df_pedidos.empty:
-                st.info("Nenhum pedido encontrado para este tenant.")
-                st.stop()
-
-            df_tmp = df_pedidos.copy()
-            for col in ["departamento", "cod_equipamento"]:
-                if col not in df_tmp.columns:
-                    df_tmp[col] = ""
-                df_tmp[col] = df_tmp[col].astype(str).fillna("").str.strip()
-
-            departamentos = sorted([d for d in df_tmp["departamento"].unique().tolist() if d])
-            frotas = sorted([f for f in df_tmp["cod_equipamento"].unique().tolist() if f])
-
-            f1, f2 = st.columns([1, 1])
-            with f1:
-                sel_dept = st.multiselect("Departamentos (opcional)", departamentos, default=[], key="rg_dept")
-            with f2:
-                sel_frota = st.multiselect(
-                    "Frotas / Equipamentos (cod_equipamento) (opcional)",
-                    frotas,
-                    default=[],
-                    key="rg_frota",
-                )
-
-            apply = st.form_submit_button("✅ Aplicar filtros", use_container_width=True)
-
-    # Para não rodar a página vazia, aplica automático na primeira vez
-    if "rg_applied" not in st.session_state:
-        st.session_state["rg_applied"] = True
-        apply = True
-
-    if not apply:
-        st.info("Ajuste os filtros e clique em **Aplicar filtros**.")
+    if df_pedidos is None or df_pedidos.empty:
+        st.info("Nenhum pedido encontrado para este tenant.")
         st.stop()
 
-    # ===== Dataset base =====
-    filtros = FiltrosGastos(
-        dt_ini=dt_ini,
-        dt_fim=dt_fim,
-        date_field=date_field,  # type: ignore
-        entregue=entregue,
-        departamentos=sel_dept or None,
-        cod_equipamentos=sel_frota or None,
-    )
+    # Opções de filtros (evita repetir)
+    df_tmp = df_pedidos.copy()
+    for col in ["departamento", "cod_equipamento"]:
+        if col in df_tmp.columns:
+            df_tmp[col] = df_tmp[col].fillna("").astype(str).str.strip()
+        else:
+            df_tmp[col] = ""
 
-    df_base = filtrar_pedidos_base(df_pedidos, filtros)
+    dept_opts = sorted([d for d in df_tmp["departamento"].unique().tolist() if d])
+    frota_opts = sorted([f for f in df_tmp["cod_equipamento"].unique().tolist() if f])
 
-    total_geral = _as_float(df_base.get("valor_total", pd.Series(dtype=float)).sum()) if df_base is not None and not df_base.empty else 0.0
-    qtd_geral = int(len(df_base)) if df_base is not None else 0
+    # ===== Carregar vínculos e mapa de usuários (1x) =====
+    with st.spinner("Carregando vínculos e usuários..."):
+        links = carregar_links_departamento_gestor(supabase_admin or _supabase, tenant_id=tenant_id)
+        user_map = carregar_mapa_usuarios_tenant(supabase_admin or _supabase, tenant_id=tenant_id)
+
+    # ===== Aplicar filtros (estado aplicado) =====
+    filtros, dt_ini, dt_fim = _build_filtros_from_state()
+
+    # Dataset base já filtrado (serve para KPIs + abas)
+    df_base = filtrar_pedidos_base(df_pedidos, filtros=filtros)
+
+    total_geral = _as_float(df_base.get("valor_total", pd.Series(dtype=float)).fillna(0).sum()) if not df_base.empty else 0.0
+    qtd_geral = int(len(df_base)) if not df_base.empty else 0
     ticket = (total_geral / qtd_geral) if qtd_geral else 0.0
 
+    # ===== Resumo primeiro (como você pediu) =====
     with st.container(border=True):
-        st.markdown("### 📌 Resumo do período")
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Pedidos no filtro", qtd_geral)
-        k2.metric("Gasto total", formatar_moeda_br(total_geral))
-        k3.metric("Ticket médio", formatar_moeda_br(ticket))
+        st.markdown("### 📌 Resumo do período aplicado")
+        a1, a2, a3 = st.columns(3)
+        a1.metric("Pedidos", qtd_geral)
+        a2.metric("Gasto total", formatar_moeda_br(total_geral))
+        a3.metric("Ticket médio", formatar_moeda_br(ticket))
+
+        st.caption(
+            f"Período: **{dt_ini.strftime('%d/%m/%Y')}** a **{dt_fim.strftime('%d/%m/%Y')}** · "
+            f"Data: **{filtros.date_field}** · Situação: **{st.session_state.get('rg_entregue_label','Todos')}**"
+        )
+
+    # ===== Filtros abaixo do resumo (sempre visíveis) =====
+    with st.container(border=True):
+        st.markdown("### 🔎 Filtros")
+        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+        with c1:
+            st.date_input("Data inicial", value=st.session_state["rg_dt_ini"], key="rg_dt_ini")
+        with c2:
+            st.date_input("Data final", value=st.session_state["rg_dt_fim"], key="rg_dt_fim")
+        with c3:
+            st.selectbox(
+                "Campo de data",
+                ["Solicitação", "OC", "Entrega real", "Criação"],
+                index=["Solicitação", "OC", "Entrega real", "Criação"].index(st.session_state.get("rg_date_field_label", "Solicitação")),
+                key="rg_date_field_label",
+            )
+        with c4:
+            st.selectbox(
+                "Situação",
+                ["Todos", "Entregues", "Pendentes"],
+                index=["Todos", "Entregues", "Pendentes"].index(st.session_state.get("rg_entregue_label", "Todos")),
+                key="rg_entregue_label",
+            )
+
+        d1, d2, d3 = st.columns([2, 2, 1])
+        with d1:
+            st.multiselect(
+                "Departamentos",
+                options=dept_opts,
+                default=[x for x in (st.session_state.get("rg_depts") or []) if x in dept_opts],
+                key="rg_depts",
+            )
+        with d2:
+            st.multiselect(
+                "Frotas (cód. equipamento)",
+                options=frota_opts,
+                default=[x for x in (st.session_state.get("rg_frotas") or []) if x in frota_opts],
+                key="rg_frotas",
+            )
+        with d3:
+            aplicar = st.button("✅ Aplicar filtros", use_container_width=True)
+            limpar = st.button("🧹 Limpar", use_container_width=True)
+
+        if limpar:
+            dt_ini_def, dt_fim_def = _date_defaults()
+            st.session_state["rg_dt_ini"] = dt_ini_def
+            st.session_state["rg_dt_fim"] = dt_fim_def
+            st.session_state["rg_date_field_label"] = "Solicitação"
+            st.session_state["rg_entregue_label"] = "Todos"
+            st.session_state["rg_depts"] = []
+            st.session_state["rg_frotas"] = []
+            st.session_state["rg_applied"] = True
+            st.rerun()
+
+        if aplicar:
+            st.session_state["rg_applied"] = True
+            st.rerun()
+
+    # Micro-UX: aviso quando não há dados
+    if df_base.empty:
+        st.warning("Nenhum pedido no filtro atual. Ajuste o período/filtros.")
+        st.stop()
 
     st.divider()
 
-    tab_gestor, tab_frota, tab_dept = st.tabs(["👤 Por Gestor", "🚜 Por Frota (equipamento)", "🏢 Por Departamento"])
+    # ===== Abas =====
+    tab_gestor, tab_frota, tab_dept = st.tabs(["👤 Por Gestor", "🚜 Por Frota", "🏢 Por Departamento"])
 
-    # ===================== Por Gestor =====================
+    def _top_selector(prefix: str) -> int | None:
+        opt = st.radio(
+            "Exibir",
+            ["Top 10", "Top 20", "Top 50", "Todos"],
+            horizontal=True,
+            key=f"{prefix}_top",
+            index=0,
+        )
+        if opt == "Top 10":
+            return 10
+        if opt == "Top 20":
+            return 20
+        if opt == "Top 50":
+            return 50
+        return None
+
+    def _render_common_actions(df_out: pd.DataFrame, filename_prefix: str):
+        csv = df_out.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Baixar CSV",
+            csv,
+            _download_name(filename_prefix, dt_ini, dt_fim),
+            "text/csv",
+            use_container_width=True,
+        )
+
+    # ===== Aba Gestor =====
     with tab_gestor:
-        st.subheader("👤 Gastos por Gestor")
-        st.caption("Atribuição via vínculo Departamento → Gestor (gestor_departamentos).")
+        st.subheader("Gastos por Gestor")
+        topn = _top_selector("rg_gestor")
 
-        top_n = st.selectbox("Mostrar", [10, 20, 50, "Todos"], index=0, key="rg_top_gestor")
-        with st.spinner("Carregando vínculos e usuários..."):
-            links = carregar_links_departamento_gestor(supabase_admin or _supabase, tenant_id)
-            user_map = carregar_mapa_usuarios_tenant(supabase_admin or _supabase, tenant_id)
+        df_g = gastos_por_gestor(df_base, links=links, user_map=user_map)
+        if df_g is None or df_g.empty:
+            st.info("Sem dados para o agrupamento por Gestor (verifique vínculos de departamento → gestor).")
+            st.stop()
 
-        df_g = gastos_por_gestor(df_base, links, user_map)
+        # KPIs da aba
+        with st.container(border=True):
+            g1, g2, g3 = st.columns(3)
+            g1.metric("Gestores no período", int(df_g["gestor_user_id"].nunique()) if "gestor_user_id" in df_g.columns else len(df_g))
+            g2.metric("Gasto total", formatar_moeda_br(_as_float(df_g["total"].sum())))
+            g3.metric("Pedidos", int(_as_float(df_g["qtd_pedidos"].sum())))
 
-        if df_g.empty:
-            st.info("Sem dados para exibir. Verifique se existem vínculos Departamento → Gestor e pedidos no período.")
+        df_g = df_g.copy()
+        df_g["participacao_pct"] = df_g["total"].apply(lambda v: _share_percent(total_geral, _as_float(v)))
+        df_g = df_g.sort_values("total", ascending=False)
+        if topn:
+            df_plot = df_g.head(topn)
         else:
-            df_g = df_g.copy()
-            df_g["total"] = pd.to_numeric(df_g["total"], errors="coerce").fillna(0.0)
-            df_g["participacao_pct"] = df_g["total"].apply(lambda v: _share_percent(total_geral, float(v)))
+            df_plot = df_g
 
-            df_plot = df_g.sort_values("total", ascending=False)
-            if top_n != "Todos":
-                df_plot = df_plot.head(int(top_n))
+        st.bar_chart(df_plot.set_index("gestor_nome")[["total"]], height=280)
 
-            # gráfico
-            chart_df = df_plot[["gestor_nome", "total"]].copy()
-            chart_df["gestor_nome"] = chart_df["gestor_nome"].fillna("(Sem nome)").astype(str)
-            chart_df = chart_df.set_index("gestor_nome")
-            st.bar_chart(chart_df, height=280)
+        # UX: busca rápida
+        q = st.text_input("Buscar gestor", value="", key="rg_busca_gestor", placeholder="Digite parte do nome ou e-mail…")
+        df_show = df_g.copy()
+        df_show["Gestor"] = df_show["gestor_nome"].fillna("(Sem nome)")
+        df_show["E-mail"] = df_show.get("gestor_email", pd.Series([""] * len(df_show))).fillna("")
+        if q.strip():
+            qq = q.strip().lower()
+            df_show = df_show[df_show["Gestor"].str.lower().str.contains(qq) | df_show["E-mail"].str.lower().str.contains(qq)]
 
-            # tabela
-            df_show = df_g.copy()
-            df_show["Gestor"] = df_show["gestor_nome"].fillna("(Sem nome)")
-            df_show["Email"] = df_show["gestor_email"].fillna("")
-            df_show["Pedidos"] = df_show["qtd_pedidos"].fillna(0).astype(int)
-            df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(float(x or 0)))
-            df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{float(x):.1f}%")
-            df_show["Departamentos"] = df_show.get("departamentos", "").fillna("")
-            df_show = df_show[["Gestor", "Email", "Pedidos", "Total", "% do total", "Departamentos"]]
-            df_show = df_show.sort_values(by=["Pedidos"], ascending=False)
-            st.dataframe(df_show, use_container_width=True, hide_index=True)
+        df_show["Pedidos"] = df_show["qtd_pedidos"].fillna(0).astype(int)
+        df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
+        df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
+        cols = ["Gestor", "E-mail", "Pedidos", "Total", "% do total"]
+        st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
 
-            csv = df_g.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "⬇️ Baixar CSV (Gestor)",
-                csv,
-                _download_name("gastos_por_gestor", dt_ini, dt_fim),
-                "text/csv",
-                use_container_width=True,
-            )
+        _render_common_actions(df_g, "gastos_por_gestor")
 
-    # ===================== Por Frota =====================
+    # ===== Aba Frota =====
     with tab_frota:
-        st.subheader("🚜 Gastos por Frota / Equipamento")
-        st.caption("Agrupamento por cod_equipamento (proxy de frota).")
-
-        top_n = st.selectbox("Mostrar", [10, 20, 50, "Todos"], index=0, key="rg_top_frota")
+        st.subheader("Gastos por Frota (cód. equipamento)")
+        topn = _top_selector("rg_frota")
 
         df_f = gastos_por_frota(df_base)
-        if df_f.empty:
-            st.info("Sem dados para exibir com os filtros atuais.")
-        else:
-            df_f = df_f.copy()
-            df_f["total"] = pd.to_numeric(df_f["total"], errors="coerce").fillna(0.0)
-            df_f["participacao_pct"] = df_f["total"].apply(lambda v: _share_percent(total_geral, float(v)))
+        if df_f is None or df_f.empty:
+            st.info("Sem dados para o agrupamento por Frota (cod_equipamento).")
+            st.stop()
 
-            df_plot = df_f.sort_values("total", ascending=False)
-            if top_n != "Todos":
-                df_plot = df_plot.head(int(top_n))
+        with st.container(border=True):
+            f1, f2, f3 = st.columns(3)
+            f1.metric("Frotas no período", int(df_f["cod_equipamento"].nunique()) if "cod_equipamento" in df_f.columns else len(df_f))
+            f2.metric("Gasto total", formatar_moeda_br(_as_float(df_f["total"].sum())))
+            f3.metric("Pedidos", int(_as_float(df_f["qtd_pedidos"].sum())))
 
-            chart_df = df_plot[["cod_equipamento", "total"]].copy()
-            chart_df["cod_equipamento"] = chart_df["cod_equipamento"].fillna("(Sem código)").astype(str)
-            chart_df = chart_df.set_index("cod_equipamento")
-            st.bar_chart(chart_df, height=280)
+        df_f = df_f.copy()
+        df_f["participacao_pct"] = df_f["total"].apply(lambda v: _share_percent(total_geral, _as_float(v)))
+        df_f = df_f.sort_values("total", ascending=False)
+        df_plot = df_f.head(topn) if topn else df_f
 
-            df_show = df_f.copy()
-            df_show["Equipamento"] = df_show["cod_equipamento"].fillna("(Sem código)")
-            df_show["Pedidos"] = df_show["qtd_pedidos"].fillna(0).astype(int)
-            df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(float(x or 0)))
-            df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{float(x):.1f}%")
-            df_show = df_show[["Equipamento", "Pedidos", "Total", "% do total"]]
-            df_show = df_show.sort_values(by=["Total"], ascending=False)
-            st.dataframe(df_show, use_container_width=True, hide_index=True)
+        chart_df = df_plot.set_index("cod_equipamento")[["total"]]
+        st.bar_chart(chart_df, height=280)
 
-            csv = df_f.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "⬇️ Baixar CSV (Frota)",
-                csv,
-                _download_name("gastos_por_frota", dt_ini, dt_fim),
-                "text/csv",
-                use_container_width=True,
-            )
+        q = st.text_input("Buscar frota (cód.)", value="", key="rg_busca_frota", placeholder="Digite parte do código…")
+        df_show = df_f.copy()
+        df_show["Frota"] = df_show["cod_equipamento"].fillna("(Sem código)")
+        if q.strip():
+            qq = q.strip().lower()
+            df_show = df_show[df_show["Frota"].astype(str).str.lower().str.contains(qq)]
 
-    # ===================== Por Departamento =====================
+        df_show["Pedidos"] = df_show["qtd_pedidos"].fillna(0).astype(int)
+        df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
+        df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
+        st.dataframe(df_show[["Frota", "Pedidos", "Total", "% do total"]], use_container_width=True, hide_index=True)
+
+        _render_common_actions(df_f, "gastos_por_frota")
+
+    # ===== Aba Departamento =====
     with tab_dept:
-        st.subheader("🏢 Gastos por Departamento")
-        st.caption("Agrupamento por departamento (derivado dos pedidos).")
-
-        top_n = st.selectbox("Mostrar", [10, 20, 50, "Todos"], index=0, key="rg_top_dept")
+        st.subheader("Gastos por Departamento")
+        topn = _top_selector("rg_dept")
 
         df_d = gastos_por_departamento(df_base)
-        if df_d.empty:
-            st.info("Sem dados para exibir com os filtros atuais.")
-        else:
-            df_d = df_d.copy()
-            df_d["total"] = pd.to_numeric(df_d["total"], errors="coerce").fillna(0.0)
-            df_d["participacao_pct"] = df_d["total"].apply(lambda v: _share_percent(total_geral, float(v)))
+        if df_d is None or df_d.empty:
+            st.info("Sem dados para o agrupamento por Departamento.")
+            st.stop()
 
-            df_plot = df_d.sort_values("total", ascending=False)
-            if top_n != "Todos":
-                df_plot = df_plot.head(int(top_n))
+        with st.container(border=True):
+            d1, d2, d3 = st.columns(3)
+            d1.metric("Departamentos", int(df_d["departamento"].nunique()) if "departamento" in df_d.columns else len(df_d))
+            d2.metric("Gasto total", formatar_moeda_br(_as_float(df_d["total"].sum())))
+            d3.metric("Pedidos", int(_as_float(df_d["qtd_pedidos"].sum())))
 
-            chart_df = df_plot[["departamento", "total"]].copy()
-            chart_df["departamento"] = chart_df["departamento"].fillna("(Sem dept)").astype(str)
-            chart_df = chart_df.set_index("departamento")
-            st.bar_chart(chart_df, height=280)
+        df_d = df_d.copy()
+        df_d["participacao_pct"] = df_d["total"].apply(lambda v: _share_percent(total_geral, _as_float(v)))
+        df_d = df_d.sort_values("total", ascending=False)
+        df_plot = df_d.head(topn) if topn else df_d
+        chart_df = df_plot.set_index("departamento")[["total"]]
+        st.bar_chart(chart_df, height=280)
 
-            df_show = df_d.copy()
-            df_show["Departamento"] = df_show["departamento"].fillna("(Sem dept)")
-            df_show["Pedidos"] = df_show["qtd_pedidos"].fillna(0).astype(int)
-            df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(float(x or 0)))
-            df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{float(x):.1f}%")
-            df_show = df_show[["Departamento", "Pedidos", "Total", "% do total"]]
-            df_show = df_show.sort_values(by=["Total"], ascending=False)
-            st.dataframe(df_show, use_container_width=True, hide_index=True)
+        q = st.text_input("Buscar departamento", value="", key="rg_busca_dept", placeholder="Digite parte do nome…")
+        df_show = df_d.copy()
+        df_show["Departamento"] = df_show["departamento"].fillna("(Sem dept)").astype(str)
+        if q.strip():
+            qq = q.strip().lower()
+            df_show = df_show[df_show["Departamento"].str.lower().str.contains(qq)]
 
-            csv = df_d.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "⬇️ Baixar CSV (Departamento)",
-                csv,
-                _download_name("gastos_por_departamento", dt_ini, dt_fim),
-                "text/csv",
-                use_container_width=True,
-            )
+        df_show["Pedidos"] = df_show["qtd_pedidos"].fillna(0).astype(int)
+        df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
+        df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
+        st.dataframe(df_show[["Departamento", "Pedidos", "Total", "% do total"]], use_container_width=True, hide_index=True)
+
+        _render_common_actions(df_d, "gastos_por_departamento")
+
