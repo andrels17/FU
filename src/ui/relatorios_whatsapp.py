@@ -489,36 +489,118 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             csv_bytes = buf.getvalue().encode("utf-8")
 
             ok = 0
-            for to_user_id in destinos:
-                job = (
-                    supabase.table("report_jobs")
-                    .insert(
-                        {
-                            "tenant_id": tenant_id,
-                            "created_by": created_by,
-                            "channel": "whatsapp",
-                            "to_user_id": to_user_id,
-                            "report_type": "materiais_entregues",
-                            "dt_ini": st.session_state.get("_rep_dt_ini"),
-                            "dt_fim": st.session_state.get("_rep_dt_fim"),
-                            "message_text": texto,
-                            "status": "queued",
-                        }
-                    )
-                    .execute()
-                )
-                job_id = job.data[0]["id"]
+            partes = _split_text(texto, max_chars=3500)
+            total_itens = int(len(df)) if isinstance(df, pd.DataFrame) else 0
 
-                path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
-                supabase.storage.from_("reports").upload(path, csv_bytes, {"content-type": "text/csv"})
-                supabase.table("report_artifacts").insert(
-                    {
-                        "job_id": job_id,
-                        "tenant_id": tenant_id,
-                        "file_type": "csv",
-                        "storage_path": path,
-                    }
-                ).execute()
+            for to_user_id in destinos:
+                for idx_parte, parte in enumerate(partes, start=1):
+                    if len(partes) > 1:
+                        parte_envio = f"Relatório de Entregas ({idx_parte}/{len(partes)})\n\n" + parte
+                    else:
+                        parte_envio = parte
+
+                    job = (
+                        supabase.table("report_jobs")
+                        .insert(
+                            {
+                                "tenant_id": tenant_id,
+                                "created_by": created_by,
+                                "channel": "whatsapp",
+                                "to_user_id": to_user_id,
+                                "report_type": "materiais_entregues",
+                                "dt_ini": st.session_state.get("_rep_dt_ini"),
+                                "dt_fim": st.session_state.get("_rep_dt_fim"),
+                                "message_text": parte_envio,
+                                "status": "queued",
+                            }
+                        )
+                        .execute()
+                    )
+                    job_id = job.data[0]["id"]
+
+                    if idx_parte == 1:
+                        path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
+                        supabase.storage.from_("reports").upload(path, csv_bytes, {"content-type": "text/csv"})
+                        supabase.table("report_artifacts").insert(
+                            {
+                                "job_id": job_id,
+                                "tenant_id": tenant_id,
+                                "file_type": "csv",
+                                "storage_path": path,
+                            }
+                        ).execute()
+
                 ok += 1
 
+            try:
+                supabase.table("whatsapp_relatorios_log").insert(
+                    {
+                        "tenant_id": tenant_id,
+                        "created_by": created_by,
+                        "dt_ini": st.session_state.get("_rep_dt_ini"),
+                        "dt_fim": st.session_state.get("_rep_dt_fim"),
+                        "departamentos": deps_sel or [],
+                        "destinatarios": destinos,
+                        "total_itens": total_itens,
+                        "total_mensagens": len(partes),
+                    }
+                ).execute()
+            except Exception:
+                pass
+
             st.success(f"{ok} envio(s) enfileirado(s).")
+
+
+        st.markdown("---")
+
+        st.subheader("Histórico de envios")
+
+        try:
+
+            logs = (
+
+                supabase.table("whatsapp_relatorios_log")
+
+                .select("created_at, dt_ini, dt_fim, total_itens, total_mensagens, destinatarios, departamentos")
+
+                .eq("tenant_id", tenant_id)
+
+                .order("created_at", desc=True)
+
+                .limit(20)
+
+                .execute()
+
+                .data
+
+                or []
+
+            )
+
+            if not logs:
+
+                st.caption("Sem envios registrados ainda.")
+
+            else:
+
+                df_logs = pd.DataFrame(logs).rename(
+
+                    columns={
+
+                        "created_at": "criado_em",
+
+                        "total_itens": "itens",
+
+                        "total_mensagens": "msgs",
+
+                        "destinatarios": "destinatários",
+
+                    }
+
+                )
+
+                st.dataframe(df_logs, use_container_width=True, hide_index=True)
+
+        except Exception:
+
+            st.caption("Não foi possível carregar o histórico (verifique a tabela/policies).")
