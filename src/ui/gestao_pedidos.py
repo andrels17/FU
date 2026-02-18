@@ -192,6 +192,100 @@ def _calc_valor_total_row(row: pd.Series) -> float:
     return float(vt or 0.0)
 
 
+def _float_eq(a, b, tol: float = 0.005) -> bool:
+    """Comparação de floats com tolerância (evita ruído de centavos por arredondamento)."""
+    try:
+        if a is None and b is None:
+            return True
+        if a is None:
+            a = 0.0
+        if b is None:
+            b = 0.0
+        return abs(float(a) - float(b)) <= float(tol)
+    except Exception:
+        return False
+
+
+def _prever_qtd_valor_atualiza(_supabase, df: pd.DataFrame, tenant_id: str) -> int:
+    """Conta quantos registros (que serão UPDATE por OC/SOL) terão mudança real em valor_total."""
+    if df is None or df.empty or not tenant_id:
+        return 0
+
+    # Coleta chaves do arquivo
+    ocs: list[str] = []
+    sols: list[str] = []
+
+    if "nr_oc" in df.columns:
+        ocs_series = df["nr_oc"].fillna("").astype(str).str.strip()
+        ocs = [x for x in ocs_series.tolist() if x]
+
+    if "nr_solicitacao" in df.columns:
+        mask_sem_oc = df.get("nr_oc", "").fillna("").astype(str).str.strip().eq("")
+        sols_series = df.loc[mask_sem_oc, "nr_solicitacao"].fillna("").astype(str).str.strip()
+        sols = [x for x in sols_series.tolist() if x]
+
+    # Prefetch banco
+    oc_map: dict[str, float] = {}          # OC -> valor_total
+    sol_map: dict[str, float] = {}         # SOL (sem OC no banco) -> valor_total
+    sol_com_oc: set[str] = set()           # SOL que já tem OC no banco (não deve sobrescrever)
+
+    if ocs:
+        try:
+            res = (
+                _supabase.table("pedidos")
+                .select("nr_oc,valor_total")
+                .eq("tenant_id", tenant_id)
+                .in_("nr_oc", ocs)
+                .execute()
+            )
+            for r in (res.data or []):
+                k = str(r.get("nr_oc") or "").strip()
+                if k:
+                    oc_map[k] = float(r.get("valor_total") or 0)
+        except Exception:
+            pass
+
+    if sols:
+        try:
+            res = (
+                _supabase.table("pedidos")
+                .select("nr_solicitacao,nr_oc,valor_total")
+                .eq("tenant_id", tenant_id)
+                .in_("nr_solicitacao", sols)
+                .execute()
+            )
+            for r in (res.data or []):
+                sol = str(r.get("nr_solicitacao") or "").strip()
+                oc = str(r.get("nr_oc") or "").strip()
+                if not sol:
+                    continue
+                if oc:
+                    sol_com_oc.add(sol)
+                else:
+                    sol_map[sol] = float(r.get("valor_total") or 0)
+        except Exception:
+            pass
+
+    count = 0
+    for _, row in df.iterrows():
+        nr_oc = str(row.get("nr_oc") or "").strip()
+        nr_sol = str(row.get("nr_solicitacao") or "").strip()
+
+        old_val = None
+        if nr_oc and nr_oc in oc_map:
+            old_val = oc_map[nr_oc]
+        elif (not nr_oc) and nr_sol and (nr_sol not in sol_com_oc) and (nr_sol in sol_map):
+            old_val = sol_map[nr_sol]
+        else:
+            continue  # não é update (ou é pulado)
+
+        new_val = _calc_valor_total_row(row)
+        if not _float_eq(new_val, old_val):
+            count += 1
+
+    return int(count)
+
+
 def _validate_upload_df(df_upload: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     if df_upload is None or df_upload.empty:
         return df_upload, pd.DataFrame([{"linha": "-", "erro": "Arquivo vazio"}])
@@ -928,11 +1022,20 @@ def exibir_gestao_pedidos(_supabase):
 
                 # Pré-visualização do que vai acontecer
                 insere_prev, atualiza_prev, pula_prev = _resolve_import_plan(_supabase, df_norm, tenant_id=st.session_state.get("tenant_id"))
-                cprev1, cprev2, cprev3, cprev4 = st.columns(4)
+
+                # NOVO: quantos updates vão alterar valor_total de fato
+                _tid_prev = str(st.session_state.get("tenant_id") or "")
+                try:
+                    valor_atualiza_prev = _prever_qtd_valor_atualiza(_supabase, df_norm, _tid_prev) if _tid_prev else 0
+                except Exception:
+                    valor_atualiza_prev = 0
+
+                cprev1, cprev2, cprev3, cprev4, cprev5 = st.columns(5)
                 cprev1.metric("Registros válidos", len(df_norm))
                 cprev2.metric("Previsão inserir", int(insere_prev))
                 cprev3.metric("Previsão atualizar", int(atualiza_prev))
                 cprev4.metric("Previsão pular", int(pula_prev))
+                cprev5.metric("Valor será atualizado", int(valor_atualiza_prev))
 
                 if modo_simulacao:
                     st.info("🔎 Modo simulação ativado: nada será gravado no banco.")
