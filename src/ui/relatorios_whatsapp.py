@@ -86,27 +86,32 @@ def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_pref
     encoded_text = urllib.parse.quote(text)
     whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_text}"
 
+    # Escapar corretamente para JS
     url_js = json.dumps(whatsapp_url)
-    text_js = json.dumps(text)
+    msg_js = json.dumps(text)
 
     components.html(
         f"""
         <script>
+        if (!window.__waTab) {{
+            window.__waTab = null;
+        }}
+
         function waEnsureTab() {{
-            if (!window.__wa || window.__wa.closed) {{
-                window.__wa = window.open("https://web.whatsapp.com/", "whatsapp_tab");
+            if (!window.__waTab || window.__waTab.closed) {{
+                window.__waTab = window.open("https://web.whatsapp.com/", "whatsapp_tab");
             }}
-            if (window.__wa) {{
-                window.__wa.focus();
+            if (window.__waTab) {{
+                window.__waTab.focus();
             }}
         }}
 
         function waGo() {{
             waEnsureTab();
             const url = {url_js};
-            if (window.__wa) {{
-                window.__wa.location.href = url;
-                window.__wa.focus();
+            if (window.__waTab) {{
+                window.__waTab.location.href = url;
+                window.__waTab.focus();
             }} else {{
                 window.open(url, "whatsapp_tab");
             }}
@@ -114,7 +119,7 @@ def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_pref
 
         async function waCopyAndGo() {{
             try {{
-                await navigator.clipboard.writeText({text_js});
+                await navigator.clipboard.writeText({msg_js});
             }} catch (e) {{}}
             waGo();
         }}
@@ -147,6 +152,7 @@ def _whatsapp_js_buttons(phone_digits: str, text: str, key: str = "", label_pref
         """,
         height=110,
     )
+
 
     prefix = (label_prefix + " ") if label_prefix else ""
     # IDs únicos por instância
