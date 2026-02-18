@@ -765,27 +765,27 @@ def exibir_ficha_material(_supabase):
                                     chips.append("⏳ Pendente")
 
                                 equip_list = row.get("Equipamentos", []) if "Equipamentos" in row else []
-if isinstance(equip_list, str):
-    equip_list = [e.strip() for e in equip_list.split(",") if e.strip()]
-elif not isinstance(equip_list, (list, tuple, set)):
-    equip_list = [str(equip_list).strip()] if str(equip_list).strip() else []
-equip_list = [str(e).strip() for e in equip_list if str(e).strip()]
+                                if isinstance(equip_list, str):
+                                    equip_list = [e.strip() for e in equip_list.split(",") if e.strip()]
+                                elif not isinstance(equip_list, (list, tuple, set)):
+                                    equip_list = [str(equip_list).strip()] if str(equip_list).strip() else []
+                                equip_list = [str(e).strip() for e in equip_list if str(e).strip()]
 
-show_max = 4
-show = equip_list[:show_max]
-rest = max(0, len(equip_list) - len(show))
+                                show_max = 4
+                                show = equip_list[:show_max]
+                                rest = max(0, len(equip_list) - len(show))
 
-equip_summary = "—"
-if show:
-    equip_summary = show[0] + (f" +{len(equip_list)-1}" if len(equip_list) > 1 else "")
+                                equip_summary = "—"
+                                if show:
+                                    equip_summary = show[0] + (f" +{len(equip_list)-1}" if len(equip_list) > 1 else "")
 
-equip_chips_html = ""
-if show:
-    equip_chips_html = "".join([f"<span class='fm-chip'>{e}</span>" for e in show])
-    if rest > 0:
-        equip_chips_html += f"<span class='fm-chip'>+{rest}</span>"
+                                equip_chips_html = ""
+                                if show:
+                                    equip_chips_html = "".join([f"<span class='fm-chip'>{e}</span>" for e in show])
+                                    if rest > 0:
+                                        equip_chips_html += f"<span class='fm-chip'>+{rest}</span>"
 
-        card_html = f"""
+                                card_html = f"""
                                 <div class="fm-card {severity}">
                                   <div class="fm-title">{titulo}</div>
                                   <div class="fm-sub">{(" • ".join(chips)) if chips else "🟢 Dentro do prazo"}</div>
@@ -799,22 +799,22 @@ if show:
                                 </div>
                                 """
 
-        c_left, c_btn = st.columns([6, 1])
-        with c_left:
-            st.markdown(card_html, unsafe_allow_html=True)
-        with c_btn:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("Ver Ficha", key=f"dep_{idx}"):
-                st.session_state["material_fixo"] = {"cod": cod, "desc": desc}
-                st.session_state["tipo_busca_ficha"] = "departamento"
-                st.session_state["equipamento_ctx"] = (
-                    filtro_equipamento_dep if filtro_equipamento_dep != "Todos" else ""
-                )
-                st.session_state["departamento_ctx"] = departamento_selecionado
-                st.session_state["modo_ficha_material"] = True
-                st.rerun()
+                                c_left, c_btn = st.columns([6, 1])
+                                with c_left:
+                                    st.markdown(card_html, unsafe_allow_html=True)
+                                with c_btn:
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    if st.button("Ver Ficha", key=f"dep_{idx}"):
+                                        st.session_state["material_fixo"] = {"cod": cod, "desc": desc}
+                                        st.session_state["tipo_busca_ficha"] = "departamento"
+                                        st.session_state["equipamento_ctx"] = (
+                                            filtro_equipamento_dep if filtro_equipamento_dep != "Todos" else ""
+                                        )
+                                        st.session_state["departamento_ctx"] = departamento_selecionado
+                                        st.session_state["modo_ficha_material"] = True
+                                        st.rerun()
 
-        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+                                st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
 
 
