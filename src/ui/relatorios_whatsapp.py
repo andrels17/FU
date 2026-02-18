@@ -79,6 +79,77 @@ def _supabase_admin():
         st.secrets["SUPABASE_SERVICE_ROLE_KEY"],
     )
 
+def _whatsapp_js_buttons(phone_digits: str, text: str, key: str, label_prefix: str = ""):
+    """Renderiza botões JS que reutilizam a mesma aba do WhatsApp Web (window.open).
+    Inclui: Abrir, Copiar, Copiar+Abrir.
+    """
+    phone_digits = phone_digits or ""
+    msg = text or ""
+    # URL do WhatsApp Web (melhor que wa.me no desktop)
+    import urllib.parse, json
+    url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={urllib.parse.quote(msg)}"
+    url_js = json.dumps(url)
+    msg_js = json.dumps(msg)
+
+    prefix = (label_prefix + " ") if label_prefix else ""
+    # IDs únicos por instância
+    btn_open = f"{key}_open"
+    btn_copy = f"{key}_copy"
+    btn_both = f"{key}_both"
+
+    components.html(
+        f"""
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+          <button id="{btn_open}" style="padding:0.45rem 0.7rem;border-radius:0.6rem;border:1px solid rgba(255,255,255,0.2);cursor:pointer;">
+            🌐 {prefix}Abrir WhatsApp
+          </button>
+          <button id="{btn_copy}" style="padding:0.45rem 0.7rem;border-radius:0.6rem;border:1px solid rgba(255,255,255,0.2);cursor:pointer;">
+            📋 {prefix}Copiar
+          </button>
+          <button id="{btn_both}" style="padding:0.45rem 0.7rem;border-radius:0.6rem;border:1px solid rgba(255,255,255,0.2);cursor:pointer;">
+            🚀 {prefix}Copiar + Abrir
+          </button>
+          <span id="{key}_status" style="font-size:0.85rem; opacity:0.8;"></span>
+        </div>
+
+        <script>
+          const url = {url_js};
+          const msg = {msg_js};
+          const statusEl = document.getElementById("{key}_status");
+
+          function setStatus(t) {{
+            if (!statusEl) return;
+            statusEl.textContent = t;
+            setTimeout(() => {{ statusEl.textContent = ""; }}, 2000);
+          }}
+
+          async function doCopy() {{
+            try {{
+              await navigator.clipboard.writeText(msg);
+              setStatus("Copiado!");
+              return true;
+            }} catch (e) {{
+              setStatus("Não consegui copiar (permissão do navegador).");
+              return false;
+            }}
+          }}
+
+          function doOpen() {{
+            window.open(url, "whatsapp_tab");
+            setStatus("Abrindo...");
+          }}
+
+          document.getElementById("{btn_open}").onclick = () => doOpen();
+          document.getElementById("{btn_copy}").onclick = () => doCopy();
+          document.getElementById("{btn_both}").onclick = async () => {{
+            await doCopy();
+            doOpen();
+          }};
+        </script>
+        """,
+        height=70,
+    )
+
 
 def _fetch_user_profiles_admin(admin, user_ids: list[str]):
     """Busca perfis dos usuários. Tenta tabelas/colunas comuns e é tolerante a schema.
@@ -1249,18 +1320,35 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                         if not phone_digits:
                             st.warning("Este destinatário está sem WhatsApp cadastrado.")
                         else:
-                            link = _wa_me_link(phone_digits, partes_assist[0])
-                            st.markdown(
-    f'<a href="{link}" target="whatsapp_tab" ' 
-    f'style="display:inline-block;width:100%;text-align:center;padding:0.6rem 0.75rem;'
-    f'border:1px solid rgba(255,255,255,0.2);border-radius:0.6rem;'
-    f'text-decoration:none;">🌐 Abrir WhatsApp Web</a>',
-    unsafe_allow_html=True,
-)
+                            # Botões JS que reutilizam a mesma aba do WhatsApp Web
+                            # (não abre múltiplas abas)
+                            _whatsapp_js_buttons(phone_digits, partes_assist[0], key=f"wa_{to_user_id}_p1", label_prefix="Parte 1")
+
+                            # ✅ Marcação manual (auditável) — grava um job 'sent_manual'
+                            if st.button("✅ Marcar como enviado (manual)", key=f"mark_manual_{to_user_id}"):
+                                try:
+                                    admin = _supabase_admin()
+                                    admin.table("report_jobs").insert({
+                                        "tenant_id": tenant_id,
+                                        "created_by": created_by,
+                                        "channel": "whatsapp",
+                                        "to_user_id": to_user_id,
+                                        "report_type": "materiais_entregues",
+                                        "dt_ini": st.session_state.get("_rep_dt_ini"),
+                                        "dt_fim": st.session_state.get("_rep_dt_fim"),
+                                        "message_text": (partes_assist[0] or "")[:3500],
+                                        "status": "sent_manual",
+                                    }).execute()
+                                    st.success("Marcado como enviado.")
+                                except Exception as e:
+                                    st.warning(f"Não consegui marcar como enviado: {e}")
+
 
                         for i, p in enumerate(partes_assist, start=1):
                             st.markdown(f"**Parte {i}/{len(partes_assist)}**")
-                            _copy_to_clipboard_button(f"📋 Copiar parte {i}", p, key=f"copy_{to_user_id}_{i}")
+                            if phone_digits:
+                                _whatsapp_js_buttons(phone_digits, p, key=f"wa_{to_user_id}_p{i}", label_prefix=f"Parte {i}")
+                            _copy_to_clipboard_button(f"📋 Copiar (só texto) parte {i}", p, key=f"copy_{to_user_id}_{i}")
                             st.text_area("", value=p, height=140, key=f"assist_text_{to_user_id}_{i}")
 
         st.markdown("---")
