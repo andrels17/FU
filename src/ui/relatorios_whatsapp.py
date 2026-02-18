@@ -81,6 +81,110 @@ def _dt_range_utc(d_ini, d_fim):
     return dt_ini, dt_fim
 
 
+def _load_jobs_for_period(supabase, tenant_id: str, dt_ini_iso: str, dt_fim_iso: str, report_type: str = "materiais_entregues"):
+    """
+    Carrega jobs do report_jobs para um período (dt_ini/dt_fim).
+    Tolerante ao schema: tenta trazer colunas extras como 'attempt' se existirem.
+    """
+    cols_base = "id, to_user_id, status, created_at, dt_ini, dt_fim"
+    cols_attempt = cols_base + ", attempt"
+    # Tentamos com attempt; se falhar, caímos no básico.
+    try:
+        res = (
+            supabase.table("report_jobs")
+            .select(cols_attempt)
+            .eq("tenant_id", tenant_id)
+            .eq("channel", "whatsapp")
+            .eq("report_type", report_type)
+            .eq("dt_ini", dt_ini_iso)
+            .eq("dt_fim", dt_fim_iso)
+            .order("created_at", desc=True)
+            .limit(5000)
+            .execute()
+        )
+        rows = res.data or []
+    except Exception:
+        res = (
+            supabase.table("report_jobs")
+            .select(cols_base)
+            .eq("tenant_id", tenant_id)
+            .eq("channel", "whatsapp")
+            .eq("report_type", report_type)
+            .eq("dt_ini", dt_ini_iso)
+            .eq("dt_fim", dt_fim_iso)
+            .order("created_at", desc=True)
+            .limit(5000)
+            .execute()
+        )
+        rows = res.data or []
+    return pd.DataFrame(rows)
+
+
+def _latest_status_por_destinatario(df_jobs: pd.DataFrame) -> pd.DataFrame:
+    """
+    Para cada to_user_id, pega o job mais recente (por created_at) e retorna status/attempt.
+    """
+    if df_jobs is None or df_jobs.empty:
+        return pd.DataFrame(columns=["to_user_id", "status", "created_at", "attempt"])
+    df = df_jobs.copy()
+    if "created_at" in df.columns:
+        df["_created_at"] = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
+        df = df.sort_values("_created_at", ascending=False, kind="mergesort")
+    else:
+        df["_created_at"] = pd.NaT
+    cols = ["to_user_id", "status", "created_at"]
+    if "attempt" in df.columns:
+        cols.append("attempt")
+    out = df.groupby("to_user_id", as_index=False).first()
+    return out[cols]
+
+
+def _count_queue_metrics(supabase, tenant_id: str):
+    """
+    Contador simples (compatível) para jobs WhatsApp do tenant.
+    """
+    try:
+        rows = (
+            supabase.table("report_jobs")
+            .select("status")
+            .eq("tenant_id", tenant_id)
+            .eq("channel", "whatsapp")
+            .order("created_at", desc=True)
+            .limit(5000)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return {"queued": 0, "processing": 0, "sent": 0, "failed": 0, "total": 0}
+
+    status_list = [(r.get("status") or "").lower().strip() for r in rows]
+    def c(*names):
+        return sum(1 for s in status_list if s in names)
+
+    return {
+        "queued": c("queued"),
+        "processing": c("processing", "sending", "in_progress"),
+        "sent": c("sent", "delivered", "done", "success"),
+        "failed": c("failed", "error"),
+        "total": len(status_list),
+    }
+
+
+def _insert_report_job_safe(supabase, payload: dict):
+    """
+    Insere em report_jobs com tolerância a colunas opcionais.
+    """
+    # tenta direto
+    try:
+        return supabase.table("report_jobs").insert(payload).execute()
+    except Exception:
+        # remove chaves possivelmente inexistentes e tenta de novo
+        slim = payload.copy()
+        for k in ["attempt", "metadata", "origin_log_id", "retry_of_job_id"]:
+            slim.pop(k, None)
+        return supabase.table("report_jobs").insert(slim).execute()
+
 def _load_gestores(supabase, tenant_id: str, roles=None):
     """
     Destinatários = membros do tenant (todas as roles por padrão).
@@ -271,102 +375,6 @@ def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
             linhas.append(f"{i}. " + " | ".join(partes))
 
     return cabecalho + "\n".join(linhas)
-
-
-def _reenfileirar_a_partir_de_log(supabase, tenant_id: str, created_by: str, log_row: dict) -> tuple[int, int, int]:
-    """Regera o relatório (dados + texto) e reenfileira jobs para os mesmos destinatários.
-    Retorna: (qtd_destinatarios, total_itens, total_mensagens_por_destinatario)
-    """
-    if not log_row:
-        return (0, 0, 0)
-
-    dt_ini_s = log_row.get("dt_ini")
-    dt_fim_s = log_row.get("dt_fim")
-    departamentos = log_row.get("departamentos") or []
-    destinatarios = log_row.get("destinatarios") or log_row.get("destinatários") or []
-
-    if not dt_ini_s or not dt_fim_s or not destinatarios:
-        return (0, 0, 0)
-
-    # dt_fim é armazenado como fim EXCLUSIVO (date+1d). Para exibir ao usuário, usamos fim inclusivo.
-    dt_ini = pd.to_datetime(dt_ini_s, errors="coerce", utc=True)
-    dt_fim = pd.to_datetime(dt_fim_s, errors="coerce", utc=True)
-    if pd.isna(dt_ini) or pd.isna(dt_fim):
-        return (0, 0, 0)
-
-    d_ini = dt_ini.date()
-    d_fim_inclusivo = (dt_fim - timedelta(days=1)).date()
-
-    df = _load_entregues(supabase, tenant_id, dt_ini, dt_fim, departamentos)
-    texto = _build_message(d_ini, d_fim_inclusivo, df, departamentos)
-
-    partes = _split_text(texto, max_chars=3500)
-    total_itens = int(len(df)) if isinstance(df, pd.DataFrame) else 0
-
-    # CSV do período (o mesmo para todos os destinatários)
-    buf = io.StringIO()
-    (df if isinstance(df, pd.DataFrame) else pd.DataFrame()).to_csv(buf, index=False)
-    csv_bytes = buf.getvalue().encode("utf-8")
-
-    for to_user_id in destinatarios:
-        for idx_parte, parte in enumerate(partes, start=1):
-            if len(partes) > 1:
-                parte_envio = f"Relatório de Entregas ({idx_parte}/{len(partes)})\n\n" + parte
-            else:
-                parte_envio = parte
-
-            job = (
-                supabase.table("report_jobs")
-                .insert(
-                    {
-                        "tenant_id": tenant_id,
-                        "created_by": created_by,
-                        "channel": "whatsapp",
-                        "to_user_id": to_user_id,
-                        "report_type": "materiais_entregues",
-                        "dt_ini": dt_ini.isoformat(),
-                        "dt_fim": dt_fim.isoformat(),
-                        "message_text": parte_envio,
-                        "status": "queued",
-                    }
-                )
-                .execute()
-            )
-            job_id = job.data[0]["id"]
-
-            if idx_parte == 1:
-                path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
-                supabase.storage.from_("reports").upload(path, csv_bytes, {"content-type": "text/csv"})
-                supabase.table("report_artifacts").insert(
-                    {
-                        "job_id": job_id,
-                        "tenant_id": tenant_id,
-                        "file_type": "csv",
-                        "storage_path": path,
-                    }
-                ).execute()
-
-    # tenta registrar novo log (sem depender de colunas extras)
-    try:
-        base_log = {
-            "tenant_id": tenant_id,
-            "created_by": created_by,
-            "dt_ini": dt_ini.isoformat(),
-            "dt_fim": dt_fim.isoformat(),
-            "departamentos": departamentos,
-            "destinatarios": destinatarios,
-            "total_itens": total_itens,
-            "total_mensagens": len(partes),
-        }
-        # se existir uma coluna 'reenviado_de', registramos o vínculo
-        if log_row.get("id"):
-            base_log["reenviado_de"] = log_row.get("id")
-        supabase.table("whatsapp_relatorios_log").insert(base_log).execute()
-    except Exception:
-        pass
-
-    return (len(destinatarios), total_itens, len(partes))
-
 
 def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
     """
@@ -697,44 +705,217 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
                 st.dataframe(df_logs, use_container_width=True, hide_index=True)
 
-
-st.markdown("### 🔁 Reenviar um relatório do histórico")
-
-# Seleciona um registro do histórico para reenviar
-# (usa índice do dataframe para evitar depender de colunas específicas)
-opcao_idx = st.selectbox(
-    "Escolha um envio para reenviar",
-    options=list(range(len(df_logs))),
-    format_func=lambda i: (
-        f"{df_logs.loc[i, 'criado_em']} | {df_logs.loc[i, 'dt_ini']} → {df_logs.loc[i, 'dt_fim']} | "
-        f"itens: {df_logs.loc[i, 'itens']} | msgs: {df_logs.loc[i, 'msgs']}"
-    ),
-    key="rep_reenviar_sel",
-)
-
-# mostra detalhes
-sel_row = logs[int(opcao_idx)] if logs and 0 <= int(opcao_idx) < len(logs) else None
-if sel_row:
-    with st.expander("Ver detalhes do envio selecionado", expanded=False):
-        st.json(sel_row)
-
-if st.button("🔁 Reenviar", type="primary", use_container_width=True, key="rep_reenviar_btn"):
-    if not sel_row:
-        st.error("Seleção inválida.")
-    else:
-        with st.spinner("Regerando relatório e reenfileirando mensagens..."):
-            qtd_dest, total_itens, total_msgs = _reenfileirar_a_partir_de_log(
-                supabase, tenant_id, created_by, sel_row
-            )
-        if qtd_dest == 0:
-            st.error("Não foi possível reenviar (verifique dt_ini/dt_fim/destinatários no log).")
-        else:
-            st.success(
-                f"Reenvio enfileirado para {qtd_dest} destinatário(s). "
-                f"Itens no período: {total_itens}. "
-                f"Mensagens por destinatário: {total_msgs}."
-            )
-
         except Exception:
 
             st.caption("Não foi possível carregar o histórico (verifique a tabela/policies).")
+
+
+        st.markdown("### 📊 Situação da fila (WhatsApp)")
+        try:
+            m = _count_queue_metrics(supabase, tenant_id)
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.metric("⏳ Queued", m.get("queued", 0))
+            c2.metric("🔄 Processando", m.get("processing", 0))
+            c3.metric("✅ Enviados", m.get("sent", 0))
+            c4.metric("❌ Falhas", m.get("failed", 0))
+            c5.metric("📦 Total", m.get("total", 0))
+        except Exception:
+            st.caption("Não foi possível calcular métricas da fila.")
+
+        st.markdown("---")
+        st.markdown("### 🔁 Reenviar um relatório do histórico")
+
+        if "df_logs" not in locals() or df_logs is None or df_logs.empty:
+            st.caption("Carregue o histórico acima para habilitar o reenviar.")
+            return
+
+        # Monta labels para seleção
+        df_sel = df_logs.copy()
+
+        # Normaliza colunas esperadas
+        if "criado_em" not in df_sel.columns and "created_at" in df_sel.columns:
+            df_sel = df_sel.rename(columns={"created_at": "criado_em"})
+        if "destinatários" not in df_sel.columns and "destinatarios" in df_sel.columns:
+            df_sel = df_sel.rename(columns={"destinatarios": "destinatários"})
+
+        df_sel["label"] = (
+            df_sel["criado_em"].astype(str)
+            + " | "
+            + df_sel["dt_ini"].astype(str)
+            + " → "
+            + df_sel["dt_fim"].astype(str)
+            + " | "
+            + df_sel.get("msgs", pd.Series(["?"] * len(df_sel))).astype(str)
+            + " msg(s)"
+        )
+
+        escolhido = st.selectbox(
+            "Selecione um envio anterior",
+            options=df_sel["label"].tolist(),
+            key="rep_reenvio_select",
+        )
+
+        row = df_sel[df_sel["label"] == escolhido].iloc[0]
+
+        # Controle de tentativas (se a coluna existir na tabela report_jobs, usamos; senão, só informativo)
+        max_tentativas = st.number_input(
+            "Limite de tentativas (quando suportado pela tabela report_jobs)",
+            min_value=1,
+            max_value=10,
+            value=3,
+            step=1,
+            key="rep_reenvio_max_tentativas",
+        )
+
+        auto_retry = st.checkbox(
+            "🔁 Auto-retry de falhas (tenta reenfileirar ao abrir esta seção, respeitando o limite acima quando possível)",
+            value=False,
+            key="rep_reenvio_auto",
+        )
+
+        # Carrega jobs do período selecionado (para status por destinatário)
+        dt_ini_iso = str(row["dt_ini"])
+        dt_fim_iso = str(row["dt_fim"])
+        deps_sel = row.get("departamentos") or []
+        destinos = row.get("destinatários") or []
+
+        df_jobs = _load_jobs_for_period(supabase, tenant_id, dt_ini_iso, dt_fim_iso)
+        df_latest = _latest_status_por_destinatario(df_jobs)
+
+        # Tabela resumida por destinatário
+        if not df_latest.empty:
+            df_show = df_latest.copy()
+            # deixa mais legível
+            df_show = df_show.rename(columns={"to_user_id": "destinatário"})
+            st.caption("Status mais recente por destinatário (para este período).")
+            st.dataframe(df_show, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Não encontrei jobs para esse período (ou a tabela report_jobs não está acessível).")
+
+        # Define falhas com base no último status
+        failed_users = []
+        if not df_latest.empty and "status" in df_latest.columns:
+            st_fail = df_latest["status"].astype(str).str.lower()
+            failed_users = df_latest.loc[st_fail.isin(["failed", "error"]), "to_user_id"].tolist()
+
+        if destinos and not failed_users:
+            st.info("Não há falhas detectadas no período (ou não foi possível verificar).")
+
+        def _enqueue_reenvio(destinos_alvo, somente_falhas: bool):
+            # Recarrega entregues e regenera conteúdo
+            dt_ini_pd = pd.to_datetime(dt_ini_iso, errors="coerce", utc=True)
+            dt_fim_pd = pd.to_datetime(dt_fim_iso, errors="coerce", utc=True)
+
+            df = _load_entregues(supabase, tenant_id, dt_ini_pd, dt_fim_pd, deps_sel)
+            texto = _build_message(dt_ini_iso, dt_fim_iso, df, deps_sel)
+            partes = _split_text(texto, max_chars=3500)
+
+            buf = io.StringIO()
+            (df if isinstance(df, pd.DataFrame) else pd.DataFrame()).to_csv(buf, index=False)
+            csv_bytes = buf.getvalue().encode("utf-8")
+
+            ok = 0
+
+            # tenta pegar attempts atuais (se existir)
+            attempt_map = {}
+            if not df_latest.empty and "attempt" in df_latest.columns:
+                for _, rr in df_latest.iterrows():
+                    try:
+                        attempt_map[rr["to_user_id"]] = int(rr.get("attempt") or 0)
+                    except Exception:
+                        attempt_map[rr["to_user_id"]] = 0
+
+            for to_user_id in destinos_alvo:
+                prev_attempt = attempt_map.get(to_user_id, 0)
+                next_attempt = prev_attempt + 1
+
+                # se temos attempt, respeita limite
+                if (to_user_id in attempt_map) and (next_attempt > int(max_tentativas)):
+                    continue
+
+                for idx_parte, parte in enumerate(partes, start=1):
+                    parte_envio = (
+                        f"Relatório de Entregas ({idx_parte}/{len(partes)})\n\n{parte}"
+                        if len(partes) > 1 else parte
+                    )
+
+                    payload = {
+                        "tenant_id": tenant_id,
+                        "created_by": created_by,
+                        "channel": "whatsapp",
+                        "to_user_id": to_user_id,
+                        "report_type": "materiais_entregues",
+                        "dt_ini": dt_ini_iso,
+                        "dt_fim": dt_fim_iso,
+                        "message_text": parte_envio,
+                        "status": "queued",
+                        # opcionais:
+                        "attempt": next_attempt,
+                        "origin_log_id": str(row.get("criado_em") or ""),
+                    }
+
+                    job = _insert_report_job_safe(supabase, payload)
+                    job_id = (job.data or [{}])[0].get("id")
+
+                    if job_id and idx_parte == 1:
+                        try:
+                            path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
+                            supabase.storage.from_("reports").upload(path, csv_bytes, {"content-type": "text/csv"})
+                            supabase.table("report_artifacts").insert(
+                                {"job_id": job_id, "tenant_id": tenant_id, "file_type": "csv", "storage_path": path}
+                            ).execute()
+                        except Exception:
+                            pass
+
+                ok += 1
+
+            # tenta logar reenfileiramento
+            try:
+                supabase.table("whatsapp_relatorios_log").insert(
+                    {
+                        "tenant_id": tenant_id,
+                        "created_by": created_by,
+                        "dt_ini": dt_ini_iso,
+                        "dt_fim": dt_fim_iso,
+                        "departamentos": deps_sel or [],
+                        "destinatarios": destinos_alvo,
+                        "total_itens": int(len(df)) if isinstance(df, pd.DataFrame) else 0,
+                        "total_mensagens": len(partes),
+                        "reenviado_de": str(row.get("criado_em") or ""),
+                        "somente_falhas": bool(somente_falhas),
+                    }
+                ).execute()
+            except Exception:
+                pass
+
+            return ok
+
+        # Auto retry (opcional)
+        if auto_retry and destinos:
+            alvos = failed_users if failed_users else []
+            if alvos:
+                n = _enqueue_reenvio(alvos, True)
+                if n:
+                    st.success(f"Auto-retry: {n} destinatário(s) reenfileirado(s).")
+                else:
+                    st.info("Auto-retry: nada para reenfileirar (pode ter batido o limite de tentativas).")
+
+        cbtn1, cbtn2 = st.columns(2)
+        with cbtn1:
+            if st.button("🔁 Reenviar para TODOS os destinatários", use_container_width=True, key="rep_reenvio_all"):
+                if not destinos:
+                    st.error("Este log não possui lista de destinatários.")
+                else:
+                    n = _enqueue_reenvio(destinos, False)
+                    st.success(f"{n} destinatário(s) reenfileirado(s).")
+
+        with cbtn2:
+            if st.button("🔁 Reenviar SOMENTE falhas", use_container_width=True, key="rep_reenvio_failed"):
+                alvos = failed_users
+                if not destinos:
+                    st.error("Este log não possui lista de destinatários.")
+                elif not alvos:
+                    st.info("Nenhuma falha detectada para reenviar.")
+                else:
+                    n = _enqueue_reenvio(alvos, True)
+                    st.success(f"{n} destinatário(s) com falha reenfileirado(s).")
