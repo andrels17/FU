@@ -34,7 +34,7 @@ def render_landing() -> None:
                 background: radial-gradient(900px 380px at 15% 0%, rgba(245,158,11,0.12), transparent 55%),
                             radial-gradient(900px 380px at 85% 15%, rgba(59,130,246,0.10), transparent 55%),
                             rgba(255,255,255,0.02);
-                border-radius: 26px;
+                border-radius: 16px;
                 padding: 26px;
                 box-shadow: 0 18px 55px rgba(0,0,0,0.35);
               }
@@ -66,7 +66,7 @@ def render_landing() -> None:
               .fu-card{
                 border: 1px solid rgba(255,255,255,0.08);
                 background: rgba(255,255,255,0.02);
-                border-radius: 20px;
+                border-radius: 16px;
                 padding: 18px 18px 14px 18px;
               }
               .fu-card h3{ margin: 0 0 6px 0; font-size: 1.05rem; }
@@ -86,13 +86,13 @@ def render_landing() -> None:
         st.markdown(
             """
             <div class="fu-hero">
-              <h1>📊 Sistema de Follow-Up</h1>
+              <h1>Sistema de Follow-Up</h1>
               <p>Controle de pedidos, prazos, fornecedores e alertas — com visão executiva, mapa geográfico e relatórios.</p>
               <div class="fu-badges">
-                <span class="fu-badge">✅ Alertas automáticos</span>
-                <span class="fu-badge">🗺️ Mapa por estado</span>
-                <span class="fu-badge">📄 PDF executivo</span>
-                <span class="fu-badge">👥 Gestão de usuários</span>
+                <span class="fu-badge">Alertas automáticos</span>
+                <span class="fu-badge">Mapa por estado</span>
+                <span class="fu-badge">Relatório executivo (PDF)</span>
+                <span class="fu-badge">Gestão de usuários</span>
               </div>
             </div>
             """,
@@ -109,20 +109,20 @@ def render_landing() -> None:
             st.markdown("""<div class="fu-card"><h3>Gestão</h3><p>Usuários, empresas, e processos com auditoria.</p></div>""", unsafe_allow_html=True)
 
     with col_right:
-        st.subheader("Acessar")
+        st.subheader("Acesso")
         st.caption("Use sua conta para entrar. Se ainda não tem acesso, solicite o convite.")
         st.write("")
 
-        if st.button("🔐 Entrar no sistema", use_container_width=True):
+        if st.button("Entrar no sistema", use_container_width=True):
             _set_page("login")
 
         st.write("")
         cta1, cta2 = st.columns(2, gap="small")
         with cta1:
-            if st.button("✨ Primeiro acesso", use_container_width=True):
+            if st.button("Primeiro acesso", use_container_width=True):
                 _set_page("first_access")
         with cta2:
-            if st.button("🔁 Esqueci minha senha", use_container_width=True):
+            if st.button("Esqueci minha senha", use_container_width=True):
                 _set_page("reset_request")
 
         st.divider()
