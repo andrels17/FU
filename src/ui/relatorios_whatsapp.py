@@ -69,6 +69,87 @@ def _supabase_admin():
     )
 
 
+def _fetch_user_profiles_admin(admin, user_ids: list[str]):
+    """Busca perfis dos usuários. Tenta tabelas/colunas comuns e é tolerante a schema.
+    Retorna dict por user_id com chaves: nome, email, whatsapp.
+    """
+    if not user_ids:
+        return {}
+
+    # Tentativa 1: tabela user_profiles (PK = user_id)
+    for cols in ["user_id, nome, email, whatsapp", "user_id, nome, email"]:
+        try:
+            rows = (
+                admin.table("user_profiles")
+                .select(cols)
+                .in_("user_id", user_ids)
+                .limit(5000)
+                .execute()
+                .data
+                or []
+            )
+            by = {}
+            for r in rows:
+                uid = r.get("user_id")
+                if uid:
+                    by[uid] = {
+                        "nome": r.get("nome"),
+                        "email": r.get("email"),
+                        "whatsapp": r.get("whatsapp"),
+                    }
+            if by:
+                return by
+            # Se consultou ok mas veio vazio, ainda pode tentar outras tabelas
+        except Exception:
+            pass
+
+    # Tentativa 2: tabela usuarios (PK = id)
+    for cols in ["id, nome, email, whatsapp", "id, nome, email"]:
+        try:
+            rows = (
+                admin.table("usuarios")
+                .select(cols)
+                .in_("id", user_ids)
+                .limit(5000)
+                .execute()
+                .data
+                or []
+            )
+            by = {}
+            for r in rows:
+                uid = r.get("id")
+                if uid:
+                    by[uid] = {
+                        "nome": r.get("nome"),
+                        "email": r.get("email"),
+                        "whatsapp": r.get("whatsapp"),
+                    }
+            if by:
+                return by
+        except Exception:
+            pass
+
+    return {}
+
+
+def _update_user_whatsapp(supabase, uid: str, whatsapp_digits: str) -> bool:
+    """Atualiza o WhatsApp do usuário tentando schemas comuns (user_profiles/usuarios)."""
+    # 1) user_profiles (coluna user_id)
+    try:
+        supabase.table("user_profiles").update({"whatsapp": whatsapp_digits}).eq("user_id", uid).execute()
+        return True
+    except Exception:
+        pass
+
+    # 2) usuarios (coluna id)
+    try:
+        supabase.table("usuarios").update({"whatsapp": whatsapp_digits}).eq("id", uid).execute()
+        return True
+    except Exception:
+        return False
+
+
+
 def _signed_url_reports(storage_path: str, expires_in: int = 300) -> str | None:
     """Gera uma URL assinada para baixar um arquivo privado do bucket 'reports'."""
     if not storage_path:
@@ -401,19 +482,8 @@ def _load_gestores(supabase, tenant_id: str, roles=None):
             )
             user_ids = [r.get("user_id") for r in tu_rows if r.get("user_id")]
             if user_ids:
-                u_rows = (
-                    admin.table("usuarios")
-                    .select("id, nome, email, whatsapp")
-                    .in_("id", user_ids)
-                    .limit(5000)
-                    .execute()
-                    .data
-                    or []
-                )
-            else:
-                u_rows = []
+                u_by_id = _fetch_user_profiles_admin(admin, user_ids)
 
-            u_by_id = {u.get("id"): u for u in (u_rows or [])}
             role_by_uid = {r.get("user_id"): (r.get("role") or "") for r in (tu_rows or [])}
 
             rows = []
@@ -681,8 +751,11 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                             continue
                         # grava no formato digit-only (wa.me) para facilitar
                         try:
-                            supabase.table("usuarios").update({"whatsapp": digits}).eq("id", uid).execute()
-                            updated += 1
+                            ok_upd = _update_user_whatsapp(supabase, uid, digits)
+                            if ok_upd:
+                                updated += 1
+                            else:
+                                st.warning(f"Não consegui salvar WhatsApp de {uid} (verifique tabela/coluna).")
                         except Exception as e:
                             st.warning(f"Falha ao salvar WhatsApp de {uid}: {e}")
                     if invalid:
