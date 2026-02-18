@@ -838,12 +838,12 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
           .fu-hero {padding: 16px 18px; border-radius: 16px; border: 1px solid rgba(49,51,63,.16);
                     background: linear-gradient(135deg, rgba(17,24,39,.08), rgba(37,99,235,.06));}
           .fu-hero h1 {margin: 0; font-size: 1.55rem; letter-spacing: -0.02em;}
-          .fu-hero p {margin: 6px 0 0 0; opacity: .85;}
+          .fu-hero p {margin: 6px 0 0 0; opacity: .9; color: #cbd5e1;}
           .fu-pill {display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px;
-                    border:1px solid rgba(49,51,63,.16); background: rgba(255,255,255,.75); font-weight:600; font-size:.85rem;}
-          .fu-sec {padding: 14px 14px; border-radius: 16px; border: 1px solid rgba(49,51,63,.14); background: rgba(255,255,255,.65);}
+                    border:1px solid rgba(148,163,184,.18); background: rgba(15,23,42,.7); color:#e5e7eb; font-weight:600; font-size:.85rem;}
+          .fu-sec {padding: 14px 14px; border-radius: 16px; border: 1px solid rgba(148,163,184,.16); background: rgba(15,23,42,.72); color:#e5e7eb;}
           .fu-sec h3 {margin: 0 0 8px 0; font-size: 1.05rem;}
-          .fu-muted {opacity: .78;}
+          .fu-muted {opacity: .85; color:#cbd5e1;}
           /* Botões */
           .stButton>button {border-radius: 12px;}
           /* Métricas */
@@ -851,10 +851,10 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             border-radius: 16px;
             border: 1px solid rgba(49,51,63,.12);
             padding: 14px;
-            background: rgba(255,255,255,.75);
+            background: rgba(2,6,23,.6); color:#e5e7eb;
           }
           /* Data editor / dataframe */
-          div[data-testid="stDataFrame"] {border-radius: 14px; overflow: hidden;}
+          div[data-testid="stDataFrame"] {border-radius: 14px; overflow: hidden; border: 1px solid rgba(148,163,184,.14);}
         </style>
         """,
         unsafe_allow_html=True,
@@ -966,7 +966,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                 deps_sel = st.multiselect(
                     "Departamentos",
                     options=deps,
-                    default=deps[:3] if len(deps) >= 3 else deps,
+                    default=[],
                     key="rep_deps_sel",
                 )
 
