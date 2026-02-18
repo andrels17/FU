@@ -39,10 +39,10 @@ def _normalize_whatsapp(value: str) -> str:
     return digits
 
 def _wa_me_link(phone_digits: str, text: str) -> str:
-    """Monta link wa.me com texto pré-preenchido."""
+    """Monta link do WhatsApp Web com texto pré-preenchido (reutilizando a mesma aba)."""
     phone_digits = _normalize_whatsapp(phone_digits)
     q = urllib.parse.quote(text or "", safe="")
-    return f"https://wa.me/{phone_digits}?text={q}" if phone_digits else ""
+    return f"https://web.whatsapp.com/send?phone={phone_digits}&text={q}" if phone_digits else ""
 
 def _copy_to_clipboard_button(label: str, text: str, key: str):
     """Botão de copiar via JS (cliente)."""
@@ -686,9 +686,9 @@ def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
                 if col_qtd:
                     partes.append(f"Qtd: {row.get(col_qtd, '')}")
                 if col_equip:
-                    partes.append(f"Frota: {row.get(col_equip, '')}")
+                    partes.append(f"Eqp: {row.get(col_equip, '')}")
                 if col_mat:
-                    partes.append(f"Material: {row.get(col_mat, '')}")
+                    partes.append(f"Mat: {row.get(col_mat, '')}")
                 linhas.append(f"  {i}. " + " | ".join(partes))
             linhas.append("")
     else:
@@ -699,9 +699,9 @@ def _build_message(d_ini, d_fim, df: pd.DataFrame, departamentos_sel) -> str:
             if col_qtd:
                 partes.append(f"Qtd: {row.get(col_qtd, '')}")
             if col_equip:
-                partes.append(f"Frota: {row.get(col_equip, '')}")
+                partes.append(f"Eqp: {row.get(col_equip, '')}")
             if col_mat:
-                partes.append(f"Material: {row.get(col_mat, '')}")
+                partes.append(f"Mat: {row.get(col_mat, '')}")
             linhas.append(f"{i}. " + " | ".join(partes))
 
     return cabecalho + "\n".join(linhas)
@@ -851,7 +851,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                 preview = _fmt_preview(ddi_d, ddd_d, num_d)
                 if preview:
                     st.caption(f"Formato final: **{preview}**")
-                    st.caption(f"wa.me: **https://wa.me/{full_digits}**")
+                    st.caption(f"WhatsApp Web: **https://web.whatsapp.com/send?phone={full_digits}**")
 
                 if full_digits and not valid:
                     st.warning("Ajuste: " + "; ".join(errs))
@@ -1250,7 +1250,13 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                             st.warning("Este destinatário está sem WhatsApp cadastrado.")
                         else:
                             link = _wa_me_link(phone_digits, partes_assist[0])
-                            st.link_button("🌐 Abrir WhatsApp Web", link, use_container_width=True)
+                            st.markdown(
+    f'<a href="{link}" target="whatsapp_tab" ' 
+    f'style="display:inline-block;width:100%;text-align:center;padding:0.6rem 0.75rem;'
+    f'border:1px solid rgba(255,255,255,0.2);border-radius:0.6rem;'
+    f'text-decoration:none;">🌐 Abrir WhatsApp Web</a>',
+    unsafe_allow_html=True,
+)
 
                         for i, p in enumerate(partes_assist, start=1):
                             st.markdown(f"**Parte {i}/{len(partes_assist)}**")
