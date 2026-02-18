@@ -1026,7 +1026,8 @@ def exibir_gestao_pedidos(_supabase):
                     atualiza_prev = 0
                     pula_prev = 0
                     valor_atualiza_prev = 0
-cprev1, cprev2, cprev3, cprev4, cprev5 = st.columns(5)
+
+                cprev1, cprev2, cprev3, cprev4, cprev5 = st.columns(5)
                 cprev1.metric("Registros válidos", len(df_norm))
                 cprev2.metric("Previsão inserir", int(insere_prev))
                 cprev3.metric("Previsão atualizar", int(atualiza_prev))
