@@ -558,6 +558,33 @@ def exibir_consulta_pedidos(_supabase):
     st.session_state.setdefault("consulta_selected_label", "")
     st.session_state.setdefault("go_key", "")
 
+
+    # -------------------- Presets/Atalhos (evita StreamlitAPIException)
+    # Quando o usuário escolhe um atalho, atualizamos os filtros via callback (executa antes da renderização dos widgets)
+    def _apply_preset_from_selectbox():
+        preset = st.session_state.get("consulta_preset") or "—"
+        if preset == "—":
+            return
+        if preset == "Atrasados":
+            st.session_state["c_atraso"] = True
+            st.session_state["c_status_list"] = []
+            st.session_state["c_pag"] = 1
+        elif preset == "Sem OC":
+            st.session_state["c_status_list"] = ["Sem OC"]
+            st.session_state["c_atraso"] = False
+            st.session_state["c_pag"] = 1
+        elif preset == "Em Transporte":
+            st.session_state["c_status_list"] = ["Em Transporte"]
+            st.session_state["c_atraso"] = False
+            st.session_state["c_pag"] = 1
+        elif preset == "Entregues":
+            st.session_state["c_status_list"] = ["Entregue"]
+            st.session_state["c_atraso"] = False
+            st.session_state["c_pag"] = 1
+
+        # volta o select para neutro (evita re-aplicar no próximo rerun)
+        st.session_state["consulta_preset"] = "—"
+
     # -------------------- Tabs para reduzir poluição
     st.session_state.setdefault("consulta_tab", "Lista")
     st.session_state.setdefault("consulta_tab_target", None)
@@ -635,23 +662,14 @@ def exibir_consulta_pedidos(_supabase):
                         st.session_state.pop(k, None)
                     st.rerun()
 
-        with c3:
-            # atalhos em um único menu (mais compacto)
-            atalho = st.selectbox(
+        with c3:            # atalhos em um único menu (mais compacto)
+            st.selectbox(
                 "Atalhos",
                 ["—", "Atrasados", "Sem OC", "Em Transporte", "Entregues"],
+                key="consulta_preset",
                 label_visibility="collapsed",
+                on_change=_apply_preset_from_selectbox,
             )
-            if atalho != "—":
-                if atalho == "Atrasados":
-                    st.session_state.update({"c_atraso": True, "c_status_list": [], "c_pag": 1})
-                elif atalho == "Sem OC":
-                    st.session_state.update({"c_status_list": ["Sem OC"], "c_atraso": False, "c_pag": 1})
-                elif atalho == "Em Transporte":
-                    st.session_state.update({"c_status_list": ["Em Transporte"], "c_atraso": False, "c_pag": 1})
-                elif atalho == "Entregues":
-                    st.session_state.update({"c_status_list": ["Entregue"], "c_atraso": False, "c_pag": 1})
-                st.rerun()
 
         # Aplicar filtros (sem “fake rerun”)
         df_f = _apply_filters(
