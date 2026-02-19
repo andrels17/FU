@@ -185,7 +185,10 @@ def _tabs_style() -> None:
 
 def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str, height: int = 420) -> None:
     """Gráfico de barras horizontal com rótulos (Plotly) e fallback.
-    - Se existir coluna 'tooltip_full', usa no hover (tooltip).
+
+    Melhorias de responsividade:
+    - Trunca automaticamente rótulos longos do eixo Y (sem perder informação).
+    - Usa tooltip completo (coluna 'tooltip_full' se existir; senão usa o rótulo original).
     - Se x_col == 'total', formata em BRL no rótulo.
     """
     if df is None or df.empty or y_col not in df.columns or x_col not in df.columns:
@@ -195,10 +198,41 @@ def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str,
     dfp = df.copy()
     dfp[y_col] = dfp[y_col].astype(str)
 
+    # tooltip completo (prioriza coluna existente)
+    if "tooltip_full" not in dfp.columns:
+        dfp["tooltip_full"] = dfp[y_col].astype(str)
+
+    # truncagem do eixo Y (apenas visual)
+    def _short(s: str, n: int = 52) -> str:
+        s = (s or "").strip()
+        return s if len(s) <= n else s[: n - 1] + "…"
+
+    dfp["_y_disp"] = dfp[y_col].astype(str).map(lambda s: _short(s, 52))
+
+    # desambigua labels truncados (evita barras “sumirem” por nomes iguais)
+    if dfp["_y_disp"].duplicated().any():
+        counts = {}
+        new_vals = []
+        for v in dfp["_y_disp"].tolist():
+            counts[v] = counts.get(v, 0) + 1
+            if counts[v] == 1:
+                new_vals.append(v)
+            else:
+                new_vals.append(f"{v} · {counts[v]}")
+        dfp["_y_disp"] = new_vals
+
+    # rótulos do valor
     if x_col == "total":
         dfp["_lbl"] = dfp[x_col].apply(lambda v: formatar_moeda_br(_as_float(v)))
     else:
-        dfp["_lbl"] = dfp[x_col].apply(lambda v: f"{_as_float(v):,.0f}".replace(",", "."))
+        # pode ser int ou float (rankings, contagens)
+        # se parecer float, mantém 2 casas; se inteiro, sem casas
+        def _fmt(v):
+            v = _as_float(v)
+            if abs(v - round(v)) < 1e-9:
+                return f"{v:,.0f}".replace(",", ".")
+            return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        dfp["_lbl"] = dfp[x_col].apply(_fmt)
 
     try:
         import plotly.express as px  # type: ignore
@@ -206,19 +240,16 @@ def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str,
         fig = px.bar(
             dfp,
             x=x_col,
-            y=y_col,
+            y="_y_disp",
             orientation="h",
             title=title,
             text="_lbl",
         )
 
-        if "tooltip_full" in dfp.columns:
-            fig.update_traces(
-                hovertext=dfp["tooltip_full"].astype(str),
-                hovertemplate="%{hovertext}<br><b>Valor</b>: %{x}<extra></extra>",
-            )
-        else:
-            fig.update_traces(hovertemplate="%{y}<br><b>Valor</b>: %{x}<extra></extra>")
+        fig.update_traces(
+            hovertext=dfp["tooltip_full"].astype(str),
+            hovertemplate="%{hovertext}<br><b>Valor</b>: %{x}<extra></extra>",
+        )
 
         fig.update_traces(textposition="outside", cliponaxis=False)
         fig.update_yaxes(type="category")
@@ -230,7 +261,7 @@ def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str,
         )
         st.plotly_chart(fig, use_container_width=True)
     except Exception:
-        st.bar_chart(dfp.set_index(y_col)[[x_col]], height=min(300, height))
+        st.bar_chart(dfp.set_index("_y_disp")[[x_col]], height=min(300, height))
 
 
 
