@@ -760,6 +760,35 @@ def _sync_empresa_nome(tenant_id: str | None, tenant_opts) -> None:
         pass
 
 
+def _fetch_almoxarifados_tenant(supabase_client, tenant_id: str) -> list[str]:
+    """Busca lista de almoxarifados do catálogo (por tenant).
+
+    - Não quebra o app caso a tabela ainda não exista (retorna lista vazia).
+    - Normaliza e remove vazios.
+    """
+    if not tenant_id or supabase_client is None:
+        return []
+    try:
+        res = (
+            supabase_client
+            .table("materiais")
+            .select("almoxarifado")
+            .eq("tenant_id", tenant_id)
+            .limit(20000)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        vals: list[str] = []
+        for r in rows:
+            v = (r or {}).get("almoxarifado")
+            if isinstance(v, str):
+                v = v.strip()
+            if v:
+                vals.append(str(v))
+        return sorted(list(dict.fromkeys(vals)))
+    except Exception:
+        return []
+
 def selecionar_empresa_no_login() -> bool:
     """Após autenticar, força seleção do tenant quando houver mais de uma empresa."""
 
@@ -1144,6 +1173,35 @@ def main():
         st.error("Não foi possível determinar sua empresa (tenant).")
         return
 
+    # ===== Contexto global: Almoxarifado (filtro global) =====
+    if "almox_ctx" not in st.session_state:
+        st.session_state["almox_ctx"] = "Todos"
+
+    # ===== Filtro global por Almoxarifado (contexto do app) =====
+    # Mostra apenas quando a sidebar está expandida (evita “prensar” no modo compacto/mobile).
+    if not st.session_state.get("fu_sidebar_hidden"):
+        with st.sidebar:
+            st.markdown("### Contexto")
+            almox_list = _fetch_almoxarifados_tenant(supabase, tenant_id)
+            options_almox = ["Todos"] + almox_list
+
+            current_almox = st.session_state.get("almox_ctx") or "Todos"
+            if current_almox not in options_almox:
+                current_almox = "Todos"
+                st.session_state["almox_ctx"] = "Todos"
+
+            selecionado = st.selectbox(
+                "Almoxarifado",
+                options=options_almox,
+                index=options_almox.index(current_almox),
+                help="Filtro global: ao selecionar, o sistema passa a mostrar apenas pedidos deste almoxarifado (quando disponível no catálogo).",
+            )
+
+            if selecionado != st.session_state.get("almox_ctx"):
+                st.session_state["almox_ctx"] = selecionado
+                st.rerun()
+
+
     # 🔐 Primeiro acesso: força troca de senha (se implementado em src.core.auth)
     try:
         from src.core.auth import verificar_primeiro_acesso, tela_troca_senha_primeiro_acesso
@@ -1157,6 +1215,15 @@ def main():
     with st.spinner("🔄 Carregando pedidos..."):
         df_pedidos = _cached_carregar_pedidos(supabase, tenant_id)
         st.session_state["last_update"] = datetime.now().strftime("%H:%M:%S")
+
+        # Aplica contexto global de almoxarifado (se o dataframe já contiver a coluna).
+        almox_ctx = st.session_state.get("almox_ctx") or "Todos"
+        if almox_ctx != "Todos":
+            # A coluna pode vir de uma view com JOIN no catálogo (recomendado).
+            for col in ("almoxarifado", "Almoxarifado"):
+                if col in df_pedidos.columns:
+                    df_pedidos = df_pedidos[df_pedidos[col].astype(str).fillna("").str.strip() == str(almox_ctx)]
+                    break
     with st.spinner("🔄 Carregando fornecedores..."):
         df_fornecedores = _cached_carregar_fornecedores(supabase, tenant_id)
 
