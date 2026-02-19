@@ -167,7 +167,7 @@ def _render_common_actions(df_out: pd.DataFrame, filename_prefix: str, dt_ini: d
 def _links_to_dept_map_df(links: Any) -> pd.DataFrame:
     """
     Normaliza links para DataFrame com colunas: departamento, gestor_user_id.
-    O serviço gastos_por_gestor exige DataFrame. fileciteturn10file0
+    O serviço gastos_por_gestor exige DataFrame. 
     """
     if links is None:
         return pd.DataFrame(columns=["departamento", "gestor_user_id"])
@@ -191,7 +191,7 @@ def _ensure_user_map_df(user_map: Any) -> pd.DataFrame:
     """
     Normaliza user_map para DataFrame com colunas:
       user_id, nome, email, whatsapp, role
-    O serviço gastos_por_gestor usa .empty e merge, então precisa DF. fileciteturn10file0
+    O serviço gastos_por_gestor usa .empty e merge, então precisa DF. 
     """
     if user_map is None:
         return pd.DataFrame(columns=["user_id", "nome", "email", "whatsapp", "role"])
@@ -233,7 +233,7 @@ def _ensure_user_map_df(user_map: Any) -> pd.DataFrame:
 
 def _safe_gastos_por_gestor(df_base: pd.DataFrame, links: Any, user_map: Any) -> pd.DataFrame:
     """
-    Chama o serviço gastos_por_gestor com os tipos corretos (DataFrames). fileciteturn10file0
+    Chama o serviço gastos_por_gestor com os tipos corretos (DataFrames). 
     """
     links_df = _links_to_dept_map_df(links)
     user_df = _ensure_user_map_df(user_map)
@@ -436,6 +436,79 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     st.divider()
 
+    
+    # ===== Governança estrutural + Performance global =====
+    with st.container(border=True):
+        st.markdown("### 🧭 Governança estrutural")
+        # Departamentos presentes nos pedidos do período aplicado
+        depts_base = set(df_base.get("departamento", pd.Series(dtype=str)).dropna().astype(str).str.strip().unique())
+        depts_base = {d for d in depts_base if d}
+        depts_vinculados = set(dept_map.keys())
+        depts_sem_gestor = sorted(list(depts_base - depts_vinculados))
+
+        # Gestores (no mapa) sem departamento vinculado
+        gestores_ids = set(user_df.get("user_id", pd.Series(dtype=str)).dropna().astype(str).unique()) if "user_id" in user_df.columns else set()
+        gestores_vinculados = set(str(v) for v in dept_map.values())
+        gestores_sem_dept = sorted(list(gestores_ids - gestores_vinculados))
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Departamentos no período", len(depts_base))
+        c2.metric("Deptos com gestor", len(depts_base & depts_vinculados))
+        c3.metric("Deptos sem gestor", len(depts_sem_gestor))
+        c4.metric("Gestores sem depto", len(gestores_sem_dept))
+
+        colA, colB = st.columns(2)
+        with colA:
+            if depts_sem_gestor:
+                st.warning("Departamentos sem gestor vinculado")
+                st.dataframe(pd.DataFrame({"departamento": depts_sem_gestor}), use_container_width=True, hide_index=True)
+            else:
+                st.success("Todos os departamentos do período têm gestor vinculado ✅")
+        with colB:
+            if gestores_sem_dept:
+                st.warning("Gestores no tenant sem departamento vinculado")
+                if "user_id" in user_df.columns:
+                    df_gs = user_df[user_df["user_id"].astype(str).isin(gestores_sem_dept)].copy()
+                    cols = [c for c in ["nome", "email", "role", "user_id"] if c in df_gs.columns]
+                    st.dataframe(df_gs[cols], use_container_width=True, hide_index=True)
+                else:
+                    st.write(gestores_sem_dept)
+            else:
+                st.success("Sem gestores “órfãos” de departamento ✅")
+
+    # Performance operacional (global)
+    with st.container(border=True):
+        st.markdown("### ⚙️ Performance operacional (visão geral)")
+        col1, col2, col3 = st.columns(3)
+
+        pct_atraso = None
+        if "atrasado" in df_base.columns:
+            s = pd.to_numeric(df_base["atrasado"], errors="coerce")
+            if s.notna().any():
+                pct_atraso = float(s.fillna(0).mean() * 100)
+
+        pct_pendente = None
+        if "entregue" in df_base.columns:
+            s = df_base["entregue"]
+            # entregue pode vir bool, 't/f', 0/1…
+            sb = s.apply(lambda x: bool(x) if isinstance(x, bool) else (str(x).strip().lower() in ("true","t","1","sim","s","yes")))
+            pct_pendente = float((~sb).mean() * 100) if len(sb) else None
+
+        # lead time (dias) se houver datas
+        lt_med = None
+        if "data_solicitacao" in df_base.columns and "data_entrega_real" in df_base.columns:
+            ds = pd.to_datetime(df_base["data_solicitacao"], errors="coerce")
+            de = pd.to_datetime(df_base["data_entrega_real"], errors="coerce")
+            lt = (de - ds).dt.days
+            lt = lt[lt.notna() & (lt >= 0)]
+            if len(lt) > 0:
+                lt_med = float(lt.median())
+
+        col1.metric("% Atraso", f"{pct_atraso:.1f}%" if pct_atraso is not None else "—")
+        col2.metric("% Pendentes", f"{pct_pendente:.1f}%" if pct_pendente is not None else "—")
+        col3.metric("Lead time mediano", f"{lt_med:.0f} dias" if lt_med is not None else "—")
+
+
     tab_gestor, tab_frota, tab_dept = st.tabs(["👤 Por Gestor", "🚜 Por Frota", "🏢 Por Departamento"])
 
     # ===== Aba Gestor =====
@@ -444,7 +517,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         topn = _top_selector("rg_gestor")
         comparar = st.toggle("Comparar com período anterior", value=True, key="rg_cmp_gestor")
 
-        # Aqui é o ponto: usa vínculo dept->gestor (serviço) fileciteturn10file0
+        # Aqui é o ponto: usa vínculo dept->gestor (serviço) 
         df_g = _safe_gastos_por_gestor(df_base, links_df, user_df)
 
         if df_g.empty:
@@ -499,9 +572,180 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         df_g["participacao_pct"] = df_g["total"].apply(lambda v: _share_percent(total_geral, _as_float(v)))
         df_g = df_g.sort_values("total", ascending=False)
 
-        # gráfico
+
+        # ===== Inteligência gerencial (ranking + destaques) =====
+        with st.container(border=True):
+            st.markdown("### 🏆 Ranking executivo")
+            top3 = df_g.head(3).copy()
+            cols = st.columns(3)
+            for i in range(3):
+                if i >= len(top3):
+                    cols[i].metric(f"#{i+1}", "—")
+                    continue
+                r = top3.iloc[i]
+                delta_txt = None
+                if "delta_pct" in df_g.columns:
+                    delta_txt = f"{_as_float(r.get('delta_pct')):.1f}%"
+                cols[i].metric(
+                    f"#{i+1} {r.get('gestor_nome','(Sem nome)')}",
+                    formatar_moeda_br(_as_float(r.get('total'))),
+                    f"{_as_float(r.get('participacao_pct')):.1f}% do total" + (f" · Δ {delta_txt}" if delta_txt else ""),
+                )
+
+        # Destaques (cresceu / caiu)
+        if "delta_pct" in df_g.columns:
+            alta = df_g[df_g["delta_pct"] > 20].copy()
+            queda = df_g[df_g["delta_pct"] < -20].copy()
+
+            if not alta.empty:
+                with st.expander("📈 Crescimentos relevantes (> 20%)", expanded=False):
+                    st.dataframe(
+                        alta[["gestor_nome", "total", "prev_total", "delta_pct"]]
+                        .assign(
+                            total=lambda x: x["total"].map(lambda v: formatar_moeda_br(_as_float(v))),
+                            prev_total=lambda x: x["prev_total"].map(lambda v: formatar_moeda_br(_as_float(v))),
+                            delta_pct=lambda x: x["delta_pct"].map(lambda v: f"{_as_float(v):.1f}%"),
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+            if not queda.empty:
+                with st.expander("📉 Quedas relevantes (< -20%)", expanded=False):
+                    st.dataframe(
+                        queda[["gestor_nome", "total", "prev_total", "delta_pct"]]
+                        .assign(
+                            total=lambda x: x["total"].map(lambda v: formatar_moeda_br(_as_float(v))),
+                            prev_total=lambda x: x["prev_total"].map(lambda v: formatar_moeda_br(_as_float(v))),
+                            delta_pct=lambda x: x["delta_pct"].map(lambda v: f"{_as_float(v):.1f}%"),
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+        # Insight automático
+        try:
+            top = df_g.iloc[0]
+            st.info(
+                f"🧠 No período aplicado, **{top.get('gestor_nome','(Sem nome)')}** foi o gestor com maior impacto, "
+                f"respondendo por **{_as_float(top.get('participacao_pct')):.1f}%** do gasto total."
+            )
+        except Exception:
+            pass
+
+        # ===== Heatmap Gestor x Departamento (matriz) =====
+        with st.expander("🗺️ Matriz Gestor × Departamento (gasto)", expanded=False):
+            if "departamento" not in df_base.columns:
+                st.caption("Sem coluna 'departamento' na base.")
+            else:
+                # atribui gestor por departamento usando links_df
+                tmp = df_base.copy()
+                tmp["departamento"] = tmp["departamento"].fillna("").astype(str).str.strip()
+
+                # garante colunas no links_df
+                ldf = links_df.copy()
+                if not ldf.empty:
+                    ldf["departamento"] = ldf["departamento"].fillna("").astype(str).str.strip()
+                    ldf["gestor_user_id"] = ldf["gestor_user_id"].astype(str)
+
+                tmp = tmp.merge(ldf[["departamento", "gestor_user_id"]], on="departamento", how="left")
+                # nome do gestor
+                um = user_df.copy()
+                if "user_id" in um.columns:
+                    um = um.rename(columns={"user_id": "gestor_user_id"})
+                tmp = tmp.merge(um[["gestor_user_id", "nome"]].rename(columns={"nome": "gestor_nome"}), on="gestor_user_id", how="left")
+
+                tmp["gestor_nome"] = tmp["gestor_nome"].fillna("(Sem gestor)")
+                tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
+
+                piv = tmp.pivot_table(index="gestor_nome", columns="departamento", values="_valor", aggfunc="sum", fill_value=0.0)
+                if piv.empty:
+                    st.caption("Sem dados para montar a matriz.")
+                else:
+                    st.dataframe(piv, use_container_width=True)
+                    try:
+                        import plotly.express as px  # type: ignore
+                        fig = px.imshow(piv, aspect="auto", title="Heatmap de gastos (Gestor × Departamento)")
+                        fig.update_layout(height=520, margin=dict(l=10, r=10, t=40, b=10))
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception:
+                        st.caption("Plotly não disponível para heatmap; exibindo tabela acima.")
+
+        # ===== Performance operacional por gestor =====
+        with st.expander("⚠️ Performance por gestor", expanded=False):
+            tmp = df_base.copy()
+            tmp["departamento"] = tmp.get("departamento", "").fillna("").astype(str).str.strip()
+            ldf = links_df.copy()
+            if not ldf.empty:
+                ldf["departamento"] = ldf["departamento"].fillna("").astype(str).str.strip()
+                ldf["gestor_user_id"] = ldf["gestor_user_id"].astype(str)
+                tmp = tmp.merge(ldf[["departamento", "gestor_user_id"]], on="departamento", how="left")
+            um = user_df.copy()
+            if "user_id" in um.columns:
+                um = um.rename(columns={"user_id": "gestor_user_id"})
+            if "nome" in um.columns:
+                tmp = tmp.merge(um[["gestor_user_id", "nome"]].rename(columns={"nome": "gestor_nome"}), on="gestor_user_id", how="left")
+            tmp["gestor_nome"] = tmp.get("gestor_nome", pd.Series(["(Sem gestor)"] * len(tmp))).fillna("(Sem gestor)")
+            tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
+
+            metrics = []
+            if "atrasado" in tmp.columns:
+                tmp["_atrasado"] = pd.to_numeric(tmp["atrasado"], errors="coerce").fillna(0).astype(float)
+                metrics.append("atraso")
+            if "entregue" in tmp.columns:
+                sb = tmp["entregue"].apply(lambda x: bool(x) if isinstance(x, bool) else (str(x).strip().lower() in ("true","t","1","sim","s","yes")))
+                tmp["_pendente"] = (~sb).astype(int)
+                metrics.append("pendente")
+
+            if not metrics:
+                st.caption("Sem colunas operacionais (atrasado/entregue) para calcular performance.")
+            else:
+                agg = {"_valor": "sum"}
+                if "atraso" in metrics:
+                    agg["_atrasado"] = "mean"
+                if "pendente" in metrics:
+                    agg["_pendente"] = "mean"
+
+                perf = tmp.groupby("gestor_nome", dropna=False).agg(agg).reset_index()
+                perf = perf.rename(columns={"_valor": "total"})
+                if "_atrasado" in perf.columns:
+                    perf["% atraso"] = perf["_atrasado"] * 100
+                if "_pendente" in perf.columns:
+                    perf["% pendente"] = perf["_pendente"] * 100
+                perf = perf.sort_values("total", ascending=False)
+
+                view_cols = ["gestor_nome", "total"]
+                if "% atraso" in perf.columns:
+                    view_cols.append("% atraso")
+                if "% pendente" in perf.columns:
+                    view_cols.append("% pendente")
+
+                perf_view = perf[view_cols].copy()
+                perf_view["total"] = perf_view["total"].map(lambda v: formatar_moeda_br(_as_float(v)))
+                if "% atraso" in perf_view.columns:
+                    perf_view["% atraso"] = perf_view["% atraso"].map(lambda v: f"{_as_float(v):.1f}%")
+                if "% pendente" in perf_view.columns:
+                    perf_view["% pendente"] = perf_view["% pendente"].map(lambda v: f"{_as_float(v):.1f}%")
+
+                st.dataframe(perf_view, use_container_width=True, hide_index=True)
+
+        # gráfico (premium)
         df_plot = df_g.head(topn) if topn else df_g
-        st.bar_chart(df_plot.set_index("gestor_nome")[["total"]], height=280)
+
+        try:
+            import plotly.express as px  # type: ignore
+
+            fig = px.bar(
+                df_plot,
+                x="total",
+                y="gestor_nome",
+                orientation="h",
+                title="Top gestores por gasto",
+            )
+            fig.update_layout(margin=dict(l=10, r=10, t=40, b=10), height=420)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception:
+            st.bar_chart(df_plot.set_index("gestor_nome")[["total"]], height=280)
 
         # tabela
         df_show = df_g.copy()
@@ -635,4 +879,3 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
         _render_common_actions(df_d, "gastos_por_departamento", dt_ini, dt_fim)
-
