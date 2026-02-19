@@ -32,7 +32,9 @@ OPTIONAL_COLS = [
     "Grupo",
     "Descrição Grupo do Material",
     "Tipo Material",
+    "Descrição Tipo Material",
     "Almoxarifado",
+    "Descrição Almoxarifado",
 ]
 
 
@@ -61,6 +63,18 @@ COL_ALIASES = {
     "tipo material": "Tipo Material",
     "almoxarifado": "Almoxarifado",
     "grupo": "Grupo",
+
+"cód. almox.": "Almoxarifado Codigo",
+"cód. almox": "Almoxarifado Codigo",
+"cod. almox.": "Almoxarifado Codigo",
+"cod almox": "Almoxarifado Codigo",
+"cód. tipo mat.": "Tipo Material Codigo",
+"cód. tipo mat": "Tipo Material Codigo",
+"cod. tipo mat.": "Tipo Material Codigo",
+"descrição tipo material": "Tipo Material",
+"descricao tipo material": "Tipo Material",
+"descrição almoxarifado": "Almoxarifado",
+"descricao almoxarifado": "Almoxarifado",
 }
 
 
@@ -147,7 +161,7 @@ def _build_payload(df: pd.DataFrame, tenant_id: str, origem: str) -> tuple[list[
 
     # Família / Grupo / Tipo / Almox
     def _col(name: str) -> pd.Series:
-        return dfw[name].astype(str).str.strip().replace({"nan": None, "None": None}) if name in dfw.columns else pd.Series([None] * len(dfw))
+        return dfw[name].astype(str).str.strip().replace({"nan": None, "None": None}) if name in dfw.columns else pd.Series([None] * len(dfw), index=dfw.index)
 
     dfw["familia_codigo"] = _col("Família")
     dfw["familia_descricao"] = _col("Descrição Família Material")
