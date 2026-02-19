@@ -82,6 +82,119 @@ def _apply_date_filter(df: pd.DataFrame, dt_ini: Optional[date], dt_fim: Optiona
     return df.loc[mask].copy()
 
 
+
+def _supabase_admin():
+    """Cria client SUPABASE com SERVICE_ROLE para leituras administrativas (bypass RLS).
+    Requer SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nos secrets/env.
+    """
+    # 1) tenta helper do projeto (se existir)
+    try:
+        from src.core.db import init_supabase_admin  # type: ignore
+        admin = init_supabase_admin()
+        if admin:
+            return admin
+    except Exception:
+        pass
+
+    # 2) tenta criar direto via secrets
+    try:
+        from supabase import create_client  # type: ignore
+        url = st.secrets.get("SUPABASE_URL") if hasattr(st, "secrets") else None
+        key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY") if hasattr(st, "secrets") else None
+        if url and key:
+            return create_client(url, key)
+    except Exception:
+        pass
+
+    # 3) tenta via env (Streamlit Cloud/GitHub)
+    try:
+        from supabase import create_client  # type: ignore
+        import os
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if url and key:
+            return create_client(url, key)
+    except Exception:
+        pass
+
+    return None
+
+
+def _fetch_user_profiles_admin(admin, user_ids: list[str]) -> dict[str, dict]:
+    """Busca perfis (nome/email) de user_ids com tolerância a schema."""
+    if not admin or not user_ids:
+        return {}
+
+    # user_profiles (PK user_id)
+    for cols in ["user_id, nome, email", "user_id, nome, email, whatsapp", "user_id, name, email"]:
+        try:
+            rows = (
+                admin.table("user_profiles")
+                .select(cols)
+                .in_("user_id", user_ids)
+                .limit(5000)
+                .execute()
+                .data
+                or []
+            )
+            by = {}
+            for r in rows:
+                uid = r.get("user_id")
+                if uid:
+                    by[str(uid)] = {
+                        "nome": r.get("nome") or r.get("name"),
+                        "email": r.get("email"),
+                        "whatsapp": r.get("whatsapp"),
+                    }
+            if by:
+                return by
+        except Exception:
+            pass
+
+    # usuarios (PK id)
+    for cols in ["id, nome, email", "id, nome, email, whatsapp", "id, name, email"]:
+        try:
+            rows = (
+                admin.table("usuarios")
+                .select(cols)
+                .in_("id", user_ids)
+                .limit(5000)
+                .execute()
+                .data
+                or []
+            )
+            by = {}
+            for r in rows:
+                uid = r.get("id")
+                if uid:
+                    by[str(uid)] = {
+                        "nome": r.get("nome") or r.get("name"),
+                        "email": r.get("email"),
+                        "whatsapp": r.get("whatsapp"),
+                    }
+            if by:
+                return by
+        except Exception:
+            pass
+
+    return {}
+
+
+def _load_tenant_users_admin(admin, tenant_id: str, roles: list[str] | None = None) -> list[dict]:
+    if not admin or not tenant_id:
+        return []
+    q = admin.table("tenant_users").select("user_id, role").eq("tenant_id", tenant_id).limit(5000)
+    if roles:
+        try:
+            q = q.in_("role", roles)
+        except Exception:
+            pass
+    try:
+        return q.execute().data or []
+    except Exception:
+        return []
+
+
 def _safe_table_select(supabase, table: str, select_cols: str, tenant_id: str, limit: int = 5000):
     """Best-effort: tenta ler uma tabela no Supabase; se não existir/sem permissão, retorna None."""
     try:
@@ -96,12 +209,49 @@ def _safe_table_select(supabase, table: str, select_cols: str, tenant_id: str, l
         return None
 
 
+
 def _try_load_links(supabase, tenant_id: str) -> Any:
     """
     Carrega vínculos dept -> gestor_user_id.
-    Retorna list[dict] / DataFrame / None.
+
+    Prioridade:
+      1) Tabela padrão do projeto: gestor_departamentos (admin se possível)
+      2) Fallbacks: outras tabelas comuns (admin se possível; senão, client do usuário)
+      3) Repositórios/funções antigas (se existirem)
     """
-    # (A) tentativa via repositórios/funções (se existirem no projeto)
+    admin = _supabase_admin()
+
+    # (1) gestor_departamentos (preferida)
+    for client in (admin, supabase):
+        if not client:
+            continue
+        try:
+            rows = (
+                client.table("gestor_departamentos")
+                .select("id, departamento, gestor_user_id")
+                .eq("tenant_id", tenant_id)
+                .order("departamento")
+                .limit(5000)
+                .execute()
+                .data
+                or []
+            )
+            if rows:
+                return rows
+        except Exception:
+            pass
+
+    # (2) tentativa via tabelas comuns
+    for table in ("departamentos_gestores", "dept_gestor_links", "departamento_gestor", "departamentos_usuarios"):
+        for client in (admin, supabase):
+            if not client:
+                continue
+            res = _safe_table_select(client, table, "*", tenant_id)
+            data = getattr(res, "data", None) if res else None
+            if isinstance(data, list) and len(data) > 0:
+                return data
+
+    # (3) tentativa via repositórios/funções (se existirem no projeto)
     candidates = [
         ("src.repositories.departamentos", "carregar_links_departamentos"),
         ("src.repositories.dept_gestor_links", "carregar_links"),
@@ -111,18 +261,23 @@ def _try_load_links(supabase, tenant_id: str) -> Any:
         try:
             mod = __import__(mod_name, fromlist=[fn_name])
             fn = getattr(mod, fn_name)
-            return fn(supabase, tenant_id)
+            out = fn(supabase, tenant_id)
+            # se veio algo útil, retorna
+            if out is not None:
+                if isinstance(out, (list, dict)) and len(out) > 0:
+                    return out
+                # DataFrame
+                try:
+                    import pandas as pd  # noqa
+                    if isinstance(out, pd.DataFrame) and not out.empty:
+                        return out
+                except Exception:
+                    pass
         except Exception:
             pass
 
-    # (B) tentativa via tabelas comuns
-    for table in ("departamentos_gestores", "dept_gestor_links", "departamento_gestor", "departamentos_usuarios"):
-        res = _safe_table_select(supabase, table, "*", tenant_id)
-        data = getattr(res, "data", None) if res else None
-        if isinstance(data, list) and len(data) > 0:
-            return data
-
     return None
+
 
 
 def _links_to_dept_map(links: Any) -> Dict[str, str]:
@@ -151,46 +306,80 @@ def _links_to_dept_map(links: Any) -> Dict[str, str]:
     return out
 
 
-def _try_load_user_map(supabase, tenant_id: str) -> Dict[str, str]:
-    """
-    Carrega mapa user_id -> nome, tentando várias tabelas/repositórios.
-    Retorna dict vazio se não conseguir (sem quebrar).
-    """
-    # (A) via repositórios (se existirem)
-    candidates = [
-        ("src.repositories.usuarios", "carregar_mapa_usuarios_tenant"),
-        ("src.repositories.users", "carregar_mapa_usuarios_tenant"),
-        ("src.services.usuarios", "carregar_mapa_usuarios_tenant"),
-    ]
-    for mod_name, fn_name in candidates:
-        try:
-            mod = __import__(mod_name, fromlist=[fn_name])
-            fn = getattr(mod, fn_name)
-            m = fn(supabase, tenant_id)
-            if isinstance(m, dict) and m:
-                return {str(k): str(v) for k, v in m.items()}
-        except Exception:
-            pass
 
-    # (B) via tabelas comuns
-    for table, cols in (
-        ("usuarios", "id,nome,tenant_id"),
-        ("profiles", "id,nome,tenant_id"),
-        ("user_profiles", "id,nome,tenant_id"),
-    ):
-        res = _safe_table_select(supabase, table, cols, tenant_id)
-        data = getattr(res, "data", None) if res else None
-        if isinstance(data, list) and len(data) > 0:
-            out: Dict[str, str] = {}
-            for row in data:
-                uid = row.get("id")
-                nome = (row.get("nome") or row.get("name") or "").strip()
-                if uid and nome:
-                    out[str(uid)] = nome
-            if out:
-                return out
+def _try_load_user_map(supabase, tenant_id: str) -> Dict[str, Dict[str, str]]:
+    """
+    Carrega mapa user_id -> {nome, email, role}.
+    Preferência: tenant_users + user_profiles (admin se possível).
+    """
+    admin = _supabase_admin()
+
+    # (1) via RPC (se existir) no client do usuário
+    try:
+        res = supabase.rpc("rpc_tenant_members", {"p_tenant_id": tenant_id}).execute()
+        rows = res.data or []
+        out: Dict[str, Dict[str, str]] = {}
+        for r in rows:
+            uid = r.get("user_id")
+            if uid:
+                out[str(uid)] = {
+                    "nome": r.get("nome") or r.get("name") or "",
+                    "email": r.get("email") or "",
+                    "role": r.get("role") or "",
+                }
+        if out:
+            return out
+    except Exception:
+        pass
+
+    # (2) via admin: tenant_users + user_profiles
+    tu_rows = _load_tenant_users_admin(admin, tenant_id) if admin else []
+    if tu_rows:
+        user_ids = [str(r.get("user_id")) for r in tu_rows if r.get("user_id")]
+        prof = _fetch_user_profiles_admin(admin, user_ids) if user_ids else {}
+        role_by = {str(r.get("user_id")): (r.get("role") or "") for r in tu_rows if r.get("user_id")}
+        out: Dict[str, Dict[str, str]] = {}
+        for uid in user_ids:
+            p = prof.get(uid) or {}
+            out[uid] = {
+                "nome": (p.get("nome") or "").strip(),
+                "email": (p.get("email") or "").strip(),
+                "role": (role_by.get(uid) or "").strip(),
+            }
+        # remove vazios
+        out = {k: v for k, v in out.items() if (v.get("nome") or v.get("email") or v.get("role"))}
+        if out:
+            return out
+
+    # (3) fallback simples: tentar ler user_profiles filtrando por tenant_id (se existir coluna)
+    for client in (admin, supabase):
+        if not client:
+            continue
+        # user_profiles com user_id + nome + email
+        for cols in ("user_id,nome,email,tenant_id", "user_id,nome,email", "user_id,name,email"):
+            try:
+                q = client.table("user_profiles").select(cols).limit(5000)
+                try:
+                    q = q.eq("tenant_id", tenant_id)  # se a coluna existir
+                except Exception:
+                    pass
+                rows = q.execute().data or []
+                out: Dict[str, Dict[str, str]] = {}
+                for r in rows:
+                    uid = r.get("user_id")
+                    if uid:
+                        out[str(uid)] = {
+                            "nome": (r.get("nome") or r.get("name") or "").strip(),
+                            "email": (r.get("email") or "").strip(),
+                            "role": "",
+                        }
+                if out:
+                    return out
+            except Exception:
+                pass
 
     return {}
+
 
 
 def _ensure_gestor_cols(df: pd.DataFrame, dept_map: Dict[str, str], user_map: Dict[str, str]) -> pd.DataFrame:
@@ -215,7 +404,7 @@ def _ensure_gestor_cols(df: pd.DataFrame, dept_map: Dict[str, str], user_map: Di
     if c_gid:
         df["gestor_user_id"] = df[c_gid].astype(str)
         if user_map:
-            df["gestor_nome"] = df["gestor_user_id"].map(lambda x: user_map.get(str(x), "")).replace("", "—")
+            df["gestor_nome"] = df["gestor_user_id"].map(lambda x: (user_map.get(str(x)) or {}).get('nome','')).replace("", "—")
         else:
             df["gestor_nome"] = "—"
         return df
@@ -225,7 +414,7 @@ def _ensure_gestor_cols(df: pd.DataFrame, dept_map: Dict[str, str], user_map: Di
     if c_dept and dept_map:
         df["gestor_user_id"] = df[c_dept].astype(str).map(lambda x: dept_map.get(str(x).strip(), "")).replace("", pd.NA)
         if user_map:
-            df["gestor_nome"] = df["gestor_user_id"].map(lambda x: user_map.get(str(x), "")).replace("", "—")
+            df["gestor_nome"] = df["gestor_user_id"].map(lambda x: (user_map.get(str(x)) or {}).get('nome','')).replace("", "—")
         else:
             df["gestor_nome"] = df["gestor_user_id"].fillna("—").astype(str).replace("nan", "—")
         return df
