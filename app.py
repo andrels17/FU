@@ -75,6 +75,8 @@ import base64
 import textwrap
 import streamlit.components.v1 as components
 
+
+from urllib.parse import urlencode
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import src.services.sistema_alertas as sa
@@ -193,8 +195,8 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         }
         .fu-sidebar-toggle .stButton > button:hover{
           transform: translateY(-1px);
-          border-color: rgba(239,68,68,0.30) !important;
-          background: rgba(239,68,68,0.10) !important;
+          border-color: rgba(245,158,11,0.30) !important;
+          background: rgba(245,158,11,0.10) !important;
         }
 /* ===== Compact sidebar nav (ícones only) ===== */
         .fu-compact-nav{
@@ -215,8 +217,8 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           width: 6px;
           height: 20px;
           border-radius: 999px;
-          background: rgba(239,68,68,0.95);
-          box-shadow: 0 0 0 1px rgba(239,68,68,0.22);
+          background: rgba(245,158,11,0.95);
+          box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
         }
         .fu-compact-dot--off{
           background: rgba(255,255,255,0.10);
@@ -238,25 +240,55 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           white-space: nowrap !important;
         }
         .fu-compact-nav .stButton > button:hover{
-          border-color: rgba(239,68,68,0.30) !important;
+          border-color: rgba(245,158,11,0.35) !important;
           background: rgba(255,255,255,0.05) !important;
           transform: translateY(-1px);
         }
 
 
-
-/* Wrapper do item ativo (compacto) — estilo Linear/Stripe */
-.fu-compact-active{
-  width: 100%;
+/* ===== Compact sidebar nav (SVG icons: branco sólido / hover vermelho / ativo vermelho) ===== */
+.fu-compact-nav a.fu-ico{
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   display:flex;
   align-items:center;
   justify-content:center;
-  padding: 4px;
-  border-radius: 16px;
-  border: 1px solid rgba(239,68,68,0.24);
-  background: rgba(239,68,68,0.10);
-  box-shadow: 0 12px 24px rgba(239,68,68,0.10);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+  cursor: pointer;
+  user-select: none;
+  text-decoration: none !important;
 }
+.fu-compact-nav a.fu-ico svg{
+  width: 22px;
+  height: 22px;
+  fill: rgba(255,255,255,0.92);
+  transition: fill 120ms ease;
+  display:block;
+}
+.fu-compact-nav a.fu-ico:hover{
+  transform: translateY(-1px);
+  border-color: rgba(239,68,68,0.35) !important;
+  background: rgba(239,68,68,0.10) !important;
+}
+.fu-compact-nav a.fu-ico:hover svg{
+  fill: rgba(239,68,68,0.95) !important;
+}
+.fu-compact-nav a.fu-ico.fu-ico--active{
+  border-color: rgba(239,68,68,0.55) !important;
+  background: rgba(239,68,68,0.95) !important;
+  box-shadow: 0 12px 24px rgba(239,68,68,0.18);
+}
+.fu-compact-nav a.fu-ico.fu-ico--active svg{
+  fill: #ffffff !important;
+}
+@media (prefers-reduced-motion: reduce){
+  .fu-compact-nav a.fu-ico{ transition:none !important; }
+  .fu-compact-nav a.fu-ico svg{ transition:none !important; }
+}
+
 
         /* Conteúdo fluido em qualquer zoom */
         .fu-wrap{
@@ -318,19 +350,6 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           transform: translateY(-1px);
         }
 
-
-
-/* Micro animação (Linear-like) ao trocar página/re-run */
-@keyframes fuFadeIn{
-  from { opacity: 0; transform: translateY(2px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-section.main{
-  animation: fuFadeIn 140ms ease;
-}
-@media (prefers-reduced-motion: reduce){
-  section.main{ animation: none !important; }
-}
 
         /* ====== COLLAPSED CSS INJECT ====== */
         __FU_COLLAPSED_CSS__
@@ -408,12 +427,15 @@ def _industrial_sidebar_css() -> None:
                 --fu-border: rgba(255,255,255,0.10);
                 --fu-text: rgba(255,255,255,0.92);
                 --fu-muted: rgba(255,255,255,0.72);
-                --fu-accent: #ef4444;      /* active red */
-                --fu-accent2: #fb7185;     /* soft red/pink */
+                --fu-accent: #f59e0b;      /* industrial amber */
+                --fu-accent2: #fb923c;     /* orange */
             }
 
             section[data-testid="stSidebar"] {
-                background: var(--fu-bg);
+                background:
+                    radial-gradient(1100px 420px at 15% 0%, rgba(245,158,11,0.12), transparent 55%),
+                    radial-gradient(900px 380px at 80% 18%, rgba(59,130,246,0.10), transparent 55%),
+                    var(--fu-bg);
             }
 
             section[data-testid="stSidebar"] > div { padding-top: 0.8rem; }
@@ -477,18 +499,17 @@ def _industrial_sidebar_css() -> None:
             div[role="radiogroup"] label:hover {
                 background-color: rgba(255,255,255,0.06);
                 transform: translateX(2px);
-                border: 1px solid rgba(239,68,68,0.22);
+                border: 1px solid rgba(245,158,11,0.22);
             }
 
             /* Item ativo: barra laranja + glow SaaS */
             div[role="radiogroup"] input:checked + div {
-                background: linear-gradient(135deg, rgba(239,68,68,0.22), rgba(255,255,255,0.04));
+                background: linear-gradient(135deg, rgba(245,158,11,0.22), rgba(255,255,255,0.04));
                 border-radius: 12px;
                 box-shadow:
-inset 4px 0 0 var(--fu-accent),
-0 0 0 1px rgba(239,68,68,0.16),
-0 8px 18px rgba(0,0,0,0.22);
-
+                  inset 4px 0 0 var(--fu-accent),
+                  0 0 0 1px rgba(245,158,11,0.18),
+                  0 10px 26px rgba(245,158,11,0.12);
             }
 
             /* Expanders */
@@ -503,8 +524,8 @@ inset 4px 0 0 var(--fu-accent),
 
             /* Destaque do grupo ativo (wrapper dentro do expander) */
             .fu-expander-active {
-                border: 1px solid rgba(239,68,68,0.30);
-                background: linear-gradient(135deg, rgba(239,68,68,0.06), rgba(255,255,255,0.02));
+                border: 1px solid rgba(245,158,11,0.35);
+                background: linear-gradient(135deg, rgba(245,158,11,0.07), rgba(255,255,255,0.02));
                 border-radius: 14px;
                 padding: 6px 6px 2px 6px;
                 margin-top: 6px;
@@ -558,8 +579,8 @@ inset 4px 0 0 var(--fu-accent),
             }
             .fu-nav .fu-nav-dot--active{
                 height: 22px;
-                background: rgba(239,68,68,0.95);
-                box-shadow: 0 0 0 1px rgba(239,68,68,0.22);
+                background: rgba(245,158,11,0.95);
+                box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
             }
 
             /* Botões do menu (somente dentro da fu-nav) */
@@ -576,8 +597,8 @@ inset 4px 0 0 var(--fu-accent),
             }
             .fu-nav .stButton > button:hover{
                 transform: translateY(-1px);
-                border-color: rgba(239,68,68,0.26) !important;
-                background: linear-gradient(180deg, rgba(239,68,68,0.10), rgba(255,255,255,0.03)) !important;
+                border-color: rgba(245,158,11,0.28) !important;
+                background: linear-gradient(180deg, rgba(245,158,11,0.10), rgba(255,255,255,0.03)) !important;
             }
 
             
@@ -592,9 +613,9 @@ inset 4px 0 0 var(--fu-accent),
             .fu-nav .fu-nav-item--active{
                 border-radius: 16px;
                 padding: 4px;
-                background: rgba(239,68,68,0.10);
-                border: 1px solid rgba(239,68,68,0.24);
-                box-shadow: 0 10px 22px rgba(239,68,68,0.10);
+                background: rgba(245,158,11,0.10);
+                border: 1px solid rgba(245,158,11,0.25);
+                box-shadow: 0 10px 22px rgba(245,158,11,0.10);
             }
             .fu-nav .fu-nav-item--active::before{
                 content: "";
@@ -604,17 +625,17 @@ inset 4px 0 0 var(--fu-accent),
                 width: 4px;
                 height: 22px;
                 border-radius: 999px;
-                background: rgba(239,68,68,0.95);
-                box-shadow: 0 0 0 1px rgba(239,68,68,0.22);
+                background: rgba(245,158,11,0.95);
+                box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
             }
 
 /* Wrapper do ativo */
             .fu-nav .fu-nav-active{
                 border-radius: 16px;
                 padding: 4px;
-                background: rgba(239,68,68,0.10);
-                border: 1px solid rgba(239,68,68,0.24);
-                box-shadow: 0 10px 22px rgba(239,68,68,0.10);
+                background: rgba(245,158,11,0.10);
+                border: 1px solid rgba(245,158,11,0.25);
+                box-shadow: 0 10px 22px rgba(245,158,11,0.10);
             }
 
 /* Nav: otimização mobile (mais espaço e menos travamento) */
@@ -671,8 +692,8 @@ inset 4px 0 0 var(--fu-accent),
     overflow: hidden;
 }
 .fu-group--active{
-    border-color: rgba(239,68,68,0.22);
-    box-shadow: 0 12px 24px rgba(239,68,68,0.10);
+    border-color: rgba(245,158,11,0.22);
+    box-shadow: 0 12px 24px rgba(245,158,11,0.10);
 }
 .fu-group-h{
     position: sticky;
@@ -764,50 +785,70 @@ def page_label(page_id: str, total_alertas: int = 0) -> str:
         return _label_alertas(total_alertas)
     return PAGE_LABELS.get(page_id, page_id)
 
+def _fu_svg(icon_key: str) -> str:
+    """SVG monocromático (controlado por CSS) para sidebar compacta."""
+    icons = {
+        "home": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 7v11a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10l9-7z"/></svg>',
+        "dashboard": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h7V4H4v9zm9 7h7V11h-7v9zM4 20h7v-5H4v5zm9-16v5h7V4h-7z"/></svg>',
+        "bell": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zM18 16v-5a6 6 0 1 0-12 0v5L4 18v1h16v-1l-2-2z"/></svg>',
+        "search": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18a8 8 0 1 1 5.29-14.02A8 8 0 0 1 10 18zm11 3-6-6 1.41-1.41 6 6L21 21z"/></svg>',
+        "user": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-5 0-9 2.5-9 5.5V22h18v-2.5C21 16.5 17 14 12 14z"/></svg>',
+        "receipt": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-2-1-2 1-2-1-2 1-2-1-2 1V2zm3 5h6v2H9V7zm0 4h6v2H9v-2zm0 4h6v2H9v-2z"/></svg>',
+        "cart": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM6.2 6h15.1l-1.4 7.2a2 2 0 0 1-2 1.6H8.1a2 2 0 0 1-2-1.6L4.3 2H2v2h1l2.2 11.2A4 4 0 0 0 9.1 18H19v-2H9.1a2 2 0 0 1-2-1.6L6.8 13h11.1a4 4 0 0 0 3.9-3.2L23.6 6H6.2z"/></svg>',
+        "map": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 3.5 15 5.7 9 3 3.5 4.8A1 1 0 0 0 3 5.7v14.6a1 1 0 0 0 1.3.95L9 19.3l6 2.7 5.5-1.8a1 1 0 0 0 .7-.95V4.5a1 1 0 0 0-1.2-1zM9 17.6l-4 1.3V6.4l4-1.3v12.5zm6 1.3-4-1.8V4.6l4 1.8v12.5zm4-1.3-4 1.3V6.4l4-1.3v12.5z"/></svg>',
+        "whatsapp": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2zm5.7 14.3c-.2.6-1.1 1.1-1.8 1.2-.5.1-1.2.2-3.9-.8-3.4-1.3-5.5-4.6-5.7-4.8-.2-.2-1.4-1.8-1.4-3.4 0-1.6.8-2.3 1.1-2.6.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5.2.5.8 1.9.9 2 .1.2.1.4 0 .6-.1.2-.2.4-.3.5l-.3.4c-.1.2-.3.4-.1.7.2.3.7 1.3 1.6 2.1 1.1 1 2 1.3 2.3 1.5.3.2.5.2.7 0l.9-1.1c.2-.3.5-.2.7-.1.2.1 1.6.8 1.9.9.3.1.5.2.6.4.1.2.1.7-.1 1.3z"/></svg>',
+        "chart": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16v2H2V3h2v16zm4-2H6V10h2v7zm5 0h-2V6h2v11zm5 0h-2v-5h2v5z"/></svg>',
+        "users": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zM8 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm8 2c-2.7 0-8 1.3-8 4v3h16v-3c0-2.7-5.3-4-8-4zM8 13c-2.7 0-8 1.3-8 4v3h6v-3c0-1.6.9-2.9 2.2-3.8-.1-.1-.2-.2-.2-.2z"/></svg>',
+        "database": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 3 3.8 3 6v12c0 2.2 4 4 9 4s9-1.8 9-4V6c0-2.2-4-4-9-4zm0 2c4.4 0 7 .1 7 2s-2.6 2-7 2-7-.1-7-2 2.6-2 7-2zm0 16c-4.4 0-7-.1-7-2v-2c1.6 1.1 4.7 1.7 7 1.7s5.4-.6 7-1.7v2c0 1.9-2.6 2-7 2zm0-6c-4.4 0-7-.1-7-2V10c1.6 1.1 4.7 1.7 7 1.7s5.4-.6 7-1.7v2c0 1.9-2.6 2-7 2z"/></svg>',
+        "puzzle": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v3h-2a2 2 0 1 0 0 4h2v3a2 2 0 0 1-2 2h-2v-2a2 2 0 1 0-4 0v2H7a2 2 0 0 1-2-2v-3h2a2 2 0 1 0 0-4H5V8a2 2 0 0 1 2-2h6V4a2 2 0 0 1 2-2z"/></svg>',
+    }
+    return icons.get(icon_key, icons["dashboard"])
+
 
 def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin: bool) -> None:
-    """Sidebar compacta (ícones only) usando IDs internos (labels sem emoji)."""
+    """Sidebar compacta (ícones monocromáticos): branco sólido / hover vermelho / ativo vermelho."""
+    # (icon_key, page_id, tooltip)
     items: list[tuple[str, str, str]] = [
-        ("🏠", "home", "Início"),
-        ("📊", "dashboard", "Dashboard"),
-        ("🔔", "alerts", "Alertas"),
-        ("🔎", "orders_search", "Consultar pedidos"),
-        ("👤", "profile", "Meu perfil"),
-        ("🧾", "material_sheet", "Ficha de material"),
-        ("🛒", "orders_manage", "Gestão de pedidos"),
-        ("🗺️", "map", "Mapa"),
-        ("📲", "reports_whatsapp", "Relatórios WhatsApp"),
-        ("📈", "reports_gerenciais", "Relatórios Gerenciais"),
+        ("home", "home", "Início"),
+        ("dashboard", "dashboard", "Dashboard"),
+        ("bell", "alerts", "Alertas"),
+        ("search", "orders_search", "Consultar pedidos"),
+        ("user", "profile", "Meu perfil"),
+        ("receipt", "material_sheet", "Ficha de material"),
+        ("cart", "orders_manage", "Gestão de pedidos"),
+        ("map", "map", "Mapa"),
+        ("whatsapp", "reports_whatsapp", "Relatórios WhatsApp"),
+        ("chart", "reports_gerenciais", "Relatórios Gerenciais"),
     ]
     if is_admin:
         items += [
-            ("👥", "users", "Gestão de usuários"),
-            ("💾", "backup", "Backup"),
+            ("users", "users", "Gestão de usuários"),
+            ("database", "backup", "Backup"),
         ]
         if is_superadmin:
-            items += [("🧩", "saas_admin", "Admin do SaaS")]
+            items += [("puzzle", "saas_admin", "Admin do SaaS")]
 
     current = st.session_state.get("current_page") or "home"
 
+    # Preserva query params existentes (fu_mobile, etc) ao navegar
+    try:
+        base_params = dict(st.query_params)
+    except Exception:
+        base_params = {}
+
     st.markdown('<div class="fu-compact-nav">', unsafe_allow_html=True)
 
-    for ico, page_id, tip in items:
-        active = (page_id == current)
+    for icon_key, page_id, tip in items:
+        active_cls = "fu-ico--active" if page_id == current else ""
+        params = dict(base_params)
+        params["nav"] = page_id
+        href = "?" + urlencode(params, doseq=True)
 
-        st.markdown('<div class="fu-compact-row">', unsafe_allow_html=True)
-        if active:
-            st.markdown('<div class="fu-compact-active">', unsafe_allow_html=True)
-
-        if st.button(ico, help=tip, key=f"fu_nav_btn_{page_id}"):
-            if page_id != st.session_state.get("current_page"):
-                st.session_state.current_page = page_id
-                st.session_state["_force_menu_sync"] = True
-                st.rerun()
-
-        if active:
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("</div>", unsafe_allow_html=True)
+        svg = _fu_svg(icon_key)
+        st.markdown(
+            f'<div class="fu-compact-row"><a class="fu-ico {active_cls}" title="{tip}" href="{href}">{svg}</a></div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -972,6 +1013,23 @@ def main():
         st.session_state.usuario = {}
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
+
+
+    # Navegação via query param (usado pelos ícones monocromáticos da sidebar compacta)
+    nav = st.query_params.get("nav")
+    if nav:
+        try:
+            nav = str(nav)
+        except Exception:
+            nav = None
+        if nav:
+            st.session_state.current_page = nav
+            try:
+                del st.query_params["nav"]
+            except Exception:
+                pass
+            st.rerun()
+
 
 
     qp_page = st.query_params.get("page")
@@ -1408,7 +1466,7 @@ def main():
 
   <!-- Avatar -->
   <div style="display:flex; align-items:center; gap:10px; margin: 6px 0 10px 0;">
-    {"<img src='" + (avatar_url or "") + "' style='width:52px;height:52px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.18);'/>" if avatar_url else "<div style='width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#ef4444,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:white;border:1px solid rgba(255,255,255,0.14);'>" + (nome[:1].upper() if nome else "U") + "</div>"}
+    {"<img src='" + (avatar_url or "") + "' style='width:52px;height:52px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.18);'/>" if avatar_url else "<div style='width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:white;border:1px solid rgba(255,255,255,0.14);'>" + (nome[:1].upper() if nome else "U") + "</div>"}
     <div>
       <p class="fu-user-name" style="margin:0;">{nome}</p>
       <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
@@ -1486,8 +1544,8 @@ def main():
             if total_alertas > 0:
                 st.markdown(
                     textwrap.dedent(f"""<div class="fu-card" style="
-  border: 1px solid rgba(239,68,68,0.30);
-  background: linear-gradient(135deg, rgba(239,68,68,0.16), rgba(255,255,255,0.04));
+  border: 1px solid rgba(245,158,11,0.35);
+  background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(255,255,255,0.04));
 ">
   <div style="display:flex; align-items:center; justify-content:space-between;">
     <div style="font-weight:900;">Alertas</div>
@@ -1689,4 +1747,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
