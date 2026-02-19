@@ -764,34 +764,35 @@ def _sync_empresa_nome(tenant_id: str | None, tenant_opts) -> None:
 
 
 @st.cache_data(ttl=60)
-def _fetch_almoxarifados_tenant(_supabase, tenant_id: str):
+def _fetch_almoxarifados_tenant(_supabase, tenant_id: str) -> list[str]:
     try:
         res = (
             _supabase
             .table("materiais")
             .select("almoxarifado")
             .eq("tenant_id", tenant_id)
+            .limit(20000)
             .execute()
         )
 
-        if not res.data:
-            return []
+        rows = getattr(res, "data", None) or []
+        valores = []
 
-        # Limpa nulos, vazios e normaliza
-        almox = (
-            pd.DataFrame(res.data)["almoxarifado"]
-            .dropna()
-            .astype(str)
-            .str.strip()
-        )
+        for r in rows:
+            v = (r or {}).get("almoxarifado")
+            if v is None:
+                continue
+            v = str(v).strip()
+            if v:
+                valores.append(v)
 
-        almox = almox[almox != ""]
-
-        return sorted(almox.unique().tolist())
+        # remove duplicados mantendo ordem
+        return sorted(list(dict.fromkeys(valores)))
 
     except Exception as e:
         st.sidebar.warning(f"Erro carregando almoxarifados: {e}")
         return []
+
 
 def selecionar_empresa_no_login() -> bool:
     """Após autenticar, força seleção do tenant quando houver mais de uma empresa."""
