@@ -763,33 +763,34 @@ def _sync_empresa_nome(tenant_id: str | None, tenant_opts) -> None:
         pass
 
 
-def _fetch_almoxarifados_tenant(supabase_client, tenant_id: str) -> list[str]:
-    """Busca lista de almoxarifados do catálogo (por tenant).
-
-    - Não quebra o app caso a tabela ainda não exista (retorna lista vazia).
-    - Normaliza e remove vazios.
-    """
-    if not tenant_id or supabase_client is None:
-        return []
+@st.cache_data(ttl=60)
+def _fetch_almoxarifados_tenant(_supabase, tenant_id: str):
     try:
         res = (
-            supabase_client
+            _supabase
             .table("materiais")
             .select("almoxarifado")
             .eq("tenant_id", tenant_id)
-            .limit(20000)
             .execute()
         )
-        rows = getattr(res, "data", None) or []
-        vals: list[str] = []
-        for r in rows:
-            v = (r or {}).get("almoxarifado")
-            if isinstance(v, str):
-                v = v.strip()
-            if v:
-                vals.append(str(v))
-        return sorted(list(dict.fromkeys(vals)))
-    except Exception:
+
+        if not res.data:
+            return []
+
+        # Limpa nulos, vazios e normaliza
+        almox = (
+            pd.DataFrame(res.data)["almoxarifado"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+        )
+
+        almox = almox[almox != ""]
+
+        return sorted(almox.unique().tolist())
+
+    except Exception as e:
+        st.sidebar.warning(f"Erro carregando almoxarifados: {e}")
         return []
 
 def selecionar_empresa_no_login() -> bool:
