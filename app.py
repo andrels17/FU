@@ -844,9 +844,9 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
         params["nav"] = page_id
         href = "?" + urlencode(params, doseq=True)
 
-        svg = _fu_svg(icon_key)
+        glyph = _fu_glyph(icon_key)
         st.markdown(
-            f'<div class="fu-compact-row"><a class="fu-ico {active_cls}" title="{tip}" href="{href}">{svg}</a></div>',
+            f'<div class="fu-compact-row"><a class="fu-ico {active_cls}" title="{tip}" href="{href}">{glyph}</a></div>',
             unsafe_allow_html=True,
         )
 
