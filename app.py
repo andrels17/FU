@@ -5,22 +5,38 @@ st.set_page_config(
     layout="wide",
     page_icon="📊",
 )
-
-st.set_page_config(layout="wide")
-
 st.markdown("""
 <style>
-/* reduz margens laterais */
-.block-container { padding-top: 1.2rem; padding-bottom: 1.2rem; padding-left: 1.2rem; padding-right: 1.2rem; }
+/* ===== Layout / spacing (global) ===== */
+.block-container{
+  padding-top: 1.0rem;
+  padding-bottom: 1.0rem;
+  padding-left: 1.0rem;
+  padding-right: 1.0rem;
+  /* evita que o conteúdo “estoure” em telas grandes mas mantém fluido */
+  max-width: 1600px;
+}
 
-/* deixa radios/labels mais compactos */
-div[role="radiogroup"] label { font-size: 0.85rem !important; }
+/* Tipografia um pouco mais confortável em 100% zoom */
+html, body, [class*="css"]  { font-size: 15px; }
 
-/* dataframes mais “tight” */
-[data-testid="stDataFrame"] { font-size: 0.85rem; }
+/* Radios/labels mais compactos */
+div[role="radiogroup"] label { font-size: 0.90rem !important; }
 
-/* reduz espaçamento vertical */
-[data-testid="stVerticalBlock"] { gap: 0.65rem; }
+/* Dataframes mais “tight” */
+[data-testid="stDataFrame"] { font-size: 0.90rem; }
+
+/* Reduz espaçamento vertical geral */
+[data-testid="stVerticalBlock"] { gap: 0.6rem; }
+
+/* Plotly: melhora leitura sem precisar reduzir zoom */
+.stPlotlyChart, .js-plotly-plot { width: 100% !important; }
+.stPlotlyChart svg text { font-size: 12px !important; }
+
+/* Em telas menores, reduz padding lateral para sobrar espaço pro gráfico */
+@media (max-width: 1100px){
+  .block-container{ padding-left: .75rem; padding-right: .75rem; max-width: 100%; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -235,7 +251,7 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
 
                 /* Sidebar responsiva (performance-first) */
         section[data-testid="stSidebar"]{
-          width: clamp(260px, 20vw, 320px) !important;
+          width: clamp(220px, 18vw, 300px) !important;
           overflow: hidden;
           transition: width 160ms ease;
           contain: layout paint style;
@@ -254,8 +270,6 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           section[data-testid="stSidebar"]{ transition: none !important; }
           *{ scroll-behavior: auto !important; }
         }
-
-}
 
         /* Tipografia fluida */
         .fu-title{ font-size: clamp(1.15rem, 1.6vw, 1.55rem) !important; }
