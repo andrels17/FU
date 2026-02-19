@@ -722,8 +722,25 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         df_g["participacao_pct"] = df_g["total"].apply(lambda v: _share_percent(total_geral, _as_float(v)))
         df_g = df_g.sort_values("total", ascending=False)
 
+        # ===== Gráfico principal =====
+        df_plot = df_g.head(topn) if topn else df_g
+        # garante uma coluna de rótulo para o eixo Y
+        if "gestor_nome" not in df_plot.columns:
+            if "gestor_email" in df_plot.columns:
+                df_plot = df_plot.assign(gestor_nome=df_plot["gestor_email"].fillna("(Sem email)").astype(str))
+            else:
+                df_plot = df_plot.assign(gestor_nome=df_plot.get("gestor_user_id", "(Sem gestor)").astype(str))
+
+        _plot_hbar_with_labels(
+            df_plot,
+            y_col="gestor_nome",
+            x_col="total",
+            title="Top gestores por gasto",
+            height=420,
+        )
 
         with st.expander("🧠 Insights avançados", expanded=False):
+
             # ===== Inteligência gerencial (ranking + destaques) =====
             with st.container(border=True):
                 st.markdown("### 🏆 Ranking executivo")
