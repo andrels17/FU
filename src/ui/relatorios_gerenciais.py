@@ -190,9 +190,10 @@ def _actions_bar(df_base: pd.DataFrame, dt_ini: date, dt_fim: date, prefix: str 
                 _download_name(f"{prefix}_base_filtrada", dt_ini, dt_fim),
                 "text/csv",
                 use_container_width=True,
+                key=f"{prefix}_export_base",
             )
         with c2:
-            if st.button("♻️ Reset filtros", use_container_width=True):
+            if st.button("♻️ Reset filtros", use_container_width=True, key=f"{prefix}_reset"):
                 _reset_rg_filters()
                 st.rerun()
         with c3:
@@ -302,8 +303,9 @@ def _render_common_actions(df_out: pd.DataFrame, filename_prefix: str, dt_ini: d
         csv,
         _download_name(filename_prefix, dt_ini, dt_fim),
         "text/csv",
-        use_container_width=True,
-    )
+                use_container_width=True,
+                key=f"{prefix}_export_base",
+            )
 
 
 def _links_to_dept_map_df(links: Any) -> pd.DataFrame:
@@ -561,7 +563,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
 
     with tab_resumo:
-            _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_resumo')
+        _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_resumo')
 
 
             # ===== Resumo =====
