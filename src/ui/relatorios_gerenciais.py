@@ -35,8 +35,10 @@ def _reset_rg_filters() -> None:
         "rg_drill_gestor_nome", "rg_top_dept_insights", "rg_top_dept_tab",
         "rg_gestor_top", "rg_frota_top", "rg_dept_top",
         "rg_cmp_gestor", "rg_cmp_frota", "rg_cmp_dept",
-        "rg_fg_familia", "rg_fg_grupo"
-    ]
+        "rg_fg_familia", "rg_fg_grupo",
+        "rg_rank_mat_criterio",
+        "rg_rank_mat_ordem",
+        "rg_rank_mat_top"]
     for k in keys:
         if k in st.session_state:
             del st.session_state[k]
@@ -79,6 +81,28 @@ from src.services.relatorios_gastos import (
     gastos_por_gestor,
 )
 
+
+def _rg_css_responsive() -> None:
+    """Ajustes leves de responsividade/legibilidade (sem depender do app.py)."""
+    st.markdown(
+        """
+        <style>
+        .block-container{
+          padding-top: 1.0rem;
+          padding-bottom: 1.0rem;
+          padding-left: 1.0rem;
+          padding-right: 1.0rem;
+        }
+        div[role="radiogroup"] label { font-size: 0.90rem !important; }
+        .stPlotlyChart svg text { font-size: 12px !important; }
+        [data-testid="stDataFrame"] { font-size: 0.90rem; }
+        @media (max-width: 1100px){
+          .block-container{ padding-left: .75rem; padding-right: .75rem; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ============================
 # Helpers (safe / formatting)
@@ -160,15 +184,17 @@ def _tabs_style() -> None:
 
 
 def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str, height: int = 420) -> None:
-    """Gráfico de barras horizontal com rótulos (Plotly) e fallback."""
+    """Gráfico de barras horizontal com rótulos (Plotly) e fallback.
+    - Se existir coluna 'tooltip_full', usa no hover (tooltip).
+    - Se x_col == 'total', formata em BRL no rótulo.
+    """
     if df is None or df.empty or y_col not in df.columns or x_col not in df.columns:
         st.caption("Sem dados para o gráfico.")
         return
 
     dfp = df.copy()
-    # garante rótulos categóricos (evita eixo numérico para IDs)
     dfp[y_col] = dfp[y_col].astype(str)
-    # rótulo BRL quando for total; senão, formata número simples
+
     if x_col == "total":
         dfp["_lbl"] = dfp[x_col].apply(lambda v: formatar_moeda_br(_as_float(v)))
     else:
@@ -185,6 +211,15 @@ def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str,
             title=title,
             text="_lbl",
         )
+
+        if "tooltip_full" in dfp.columns:
+            fig.update_traces(
+                hovertext=dfp["tooltip_full"].astype(str),
+                hovertemplate="%{hovertext}<br><b>Valor</b>: %{x}<extra></extra>",
+            )
+        else:
+            fig.update_traces(hovertemplate="%{y}<br><b>Valor</b>: %{x}<extra></extra>")
+
         fig.update_traces(textposition="outside", cliponaxis=False)
         fig.update_yaxes(type="category")
         fig.update_layout(
@@ -692,10 +727,12 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_resumo')
         st.divider()
 
+        
         with st.container(border=True):
             st.markdown("### Materiais (ranking)")
 
-            c1, c2, c3 = st.columns([2, 2, 2])
+            # Controles em 2 linhas (melhor em telas menores)
+            c1, c2 = st.columns([3, 2])
             with c1:
                 criterio = st.radio(
                     "Ordenar por",
@@ -712,8 +749,8 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                     horizontal=True,
                     key="rg_rank_mat_ordem",
                 )
-            with c3:
-                topn_rank = _top_selector("rg_rank_mat")
+
+            topn_rank = _top_selector("rg_rank_mat")
 
             # Base para ranking
             df_rank = _materiais_mais_caros(df_base, mode="unit" if criterio.startswith("Preço") else "total")
@@ -726,50 +763,58 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                 # coluna de ordenação e formatação
                 if criterio == "Quantidade de pedidos":
                     df_rank["_ord"] = pd.to_numeric(df_rank.get("qtd_pedidos", 0), errors="coerce").fillna(0).astype(int)
-                    x_col = "_ord"
-                    titulo = "Top materiais por quantidade de pedidos"
+                    titulo = "Materiais por quantidade de pedidos"
                     is_money = False
                 else:
                     df_rank["_ord"] = pd.to_numeric(df_rank.get("valor", 0), errors="coerce").fillna(0.0)
-                    x_col = "_ord"
-                    titulo = "Top materiais por preço unitário" if criterio.startswith("Preço") else "Top materiais por gasto total"
+                    titulo = "Materiais por preço unitário" if criterio.startswith("Preço") else "Materiais por gasto total"
                     is_money = True
 
+                # Labels: truncadas (para caber), com tooltip completo
+                def _short(s: str, n: int = 44) -> str:
+                    s = (s or "").strip()
+                    return s if len(s) <= n else s[: n - 1] + "…"
+
                 df_plot = df_rank.copy()
-                df_plot["label"] = df_plot["cod_material"].astype(str) + " · " + df_plot["descricao"].astype(str)
+                df_plot["tooltip_full"] = df_plot["cod_material"].astype(str) + " · " + df_plot["descricao"].astype(str)
+                df_plot["label"] = df_plot["cod_material"].astype(str) + " · " + df_plot["descricao"].astype(str).map(lambda x: _short(str(x), 44))
+
                 df_plot = df_plot.sort_values("_ord", ascending=asc)
 
                 # aplica Top N mantendo ordem
                 if topn_rank:
                     df_plot = df_plot.head(topn_rank)
 
-                # ========= Métricas =========
+                # ========= Métricas (2x2 para responsividade) =========
                 total_itens = int(len(df_plot))
                 total_pedidos = int(pd.to_numeric(df_plot.get("qtd_pedidos", 0), errors="coerce").fillna(0).sum())
                 soma_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).sum())
                 max_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).max()) if total_itens else 0.0
                 min_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).min()) if total_itens else 0.0
 
-                k1, k2, k3, k4 = st.columns(4)
-                k1.metric("Itens no gráfico", f"{total_itens:,}".replace(",", "."))
-                k2.metric("Pedidos (soma)", f"{total_pedidos:,}".replace(",", "."))
+                r1a, r1b = st.columns(2)
+                r2a, r2b = st.columns(2)
+
+                r1a.metric("Itens no gráfico", f"{total_itens:,}".replace(",", "."))
+                r1b.metric("Pedidos (soma)", f"{total_pedidos:,}".replace(",", "."))
 
                 if is_money:
-                    k3.metric("Soma (seleção)", formatar_moeda_br(soma_ord))
-                    k4.metric("Maior / Menor", f"{formatar_moeda_br(max_ord)} / {formatar_moeda_br(min_ord)}")
+                    r2a.metric("Soma (seleção)", formatar_moeda_br(soma_ord))
+                    r2b.metric("Maior / Menor", f"{formatar_moeda_br(max_ord)} / {formatar_moeda_br(min_ord)}")
                 else:
-                    k3.metric("Soma (seleção)", f"{soma_ord:,.0f}".replace(",", "."))
-                    k4.metric("Maior / Menor", f"{max_ord:,.0f}".replace(",", ".") + " / " + f"{min_ord:,.0f}".replace(",", "."))
+                    r2a.metric("Soma (seleção)", f"{soma_ord:,.0f}".replace(",", "."))
+                    r2b.metric("Maior / Menor", f"{max_ord:,.0f}".replace(",", ".") + " / " + f"{min_ord:,.0f}".replace(",", "."))
 
                 st.divider()
 
                 # ========= Gráfico =========
+                h = 420 + min(50, int(len(df_plot))) * 8
+
                 if is_money:
-                    # usa x_col="total" para aplicar rótulos em moeda BR no helper
                     df_plot["total"] = df_plot["_ord"].astype(float)
-                    _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title=titulo, height=520)
+                    _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title=titulo, height=h)
                 else:
-                    _plot_hbar_with_labels(df_plot, y_col="label", x_col="_ord", title=titulo, height=520)
+                    _plot_hbar_with_labels(df_plot, y_col="label", x_col="_ord", title=titulo, height=h)
 
                 # ========= Tabela =========
                 df_tbl = df_plot.copy()
@@ -787,9 +832,6 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                     use_container_width=True,
                     hide_index=True,
                 )
-
-
-                # ===== Aba Gestor =====
 
 
 
