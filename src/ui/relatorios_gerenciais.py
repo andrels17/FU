@@ -447,27 +447,66 @@ def _gastos_por_familia_grupo(df_base: pd.DataFrame) -> pd.DataFrame:
 
 def _materiais_mais_caros(df_base: pd.DataFrame, mode: str = "unit") -> pd.DataFrame:
     """Ranking de materiais.
+
     mode:
-      - 'unit': maior valor_ultima_compra (ou proxy por valor_total/qtde_solicitada)
-      - 'total': maior gasto total (soma valor_total)
+      - 'unit': maior preço unitário (usa valor_ultima_compra; se nulo, tenta proxies)
+      - 'total': maior gasto total (soma valor_total; se ausente, tenta coluna 'valor')
     """
     if df_base is None or df_base.empty:
         return pd.DataFrame(columns=["cod_material", "descricao", "valor", "qtd_pedidos"])
 
     tmp = df_base.copy()
 
+    # ids
     tmp["cod_material"] = tmp.get("cod_material")
     tmp["descricao"] = tmp.get("descricao")
 
+    # ===== preço unitário (robusto) =====
+    # 1) valor_ultima_compra
     v_unit = pd.to_numeric(tmp.get("valor_ultima_compra", None), errors="coerce")
+
+    # 2) outras colunas comuns (se existirem)
     if v_unit is None or v_unit.isna().all():
-        qt = pd.to_numeric(tmp.get("qtde_solicitada", 0), errors="coerce").replace(0, pd.NA)
-        vtot = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce")
+        for alt in ["valor_unitario", "preco_unitario", "valor_unit", "preco_unit"]:
+            if alt in tmp.columns:
+                v_unit = pd.to_numeric(tmp.get(alt), errors="coerce")
+                if not v_unit.isna().all():
+                    break
+
+    # 3) proxy: valor_total / quantidade (qtde_solicitada ou qtde_entregue)
+    if v_unit is None or v_unit.isna().all():
+        vtot = pd.to_numeric(tmp.get("valor_total", tmp.get("valor", 0)), errors="coerce").fillna(0.0)
+
+        qt_candidates = []
+        if "qtde_solicitada" in tmp.columns:
+            qt_candidates.append(pd.to_numeric(tmp.get("qtde_solicitada"), errors="coerce"))
+        if "qtde_entregue" in tmp.columns:
+            qt_candidates.append(pd.to_numeric(tmp.get("qtde_entregue"), errors="coerce"))
+
+        qt = None
+        for q in qt_candidates:
+            if q is None:
+                continue
+            q2 = q.copy()
+            # evitar divisão por zero
+            q2 = q2.where(q2 > 0)
+            if qt is None:
+                qt = q2
+            else:
+                # usa solicitada como prioridade; se nula usa entregue
+                qt = qt.fillna(q2)
+
+        if qt is None:
+            qt = pd.Series([pd.NA] * len(tmp))
+
         v_unit = (vtot / qt).astype(float)
 
-    tmp["_v_unit"] = v_unit.fillna(0.0)
-    tmp["_v_total"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
+    tmp["_v_unit"] = pd.to_numeric(v_unit, errors="coerce").fillna(0.0)
 
+    # ===== gasto total =====
+    tmp["_v_total"] = pd.to_numeric(tmp.get("valor_total", tmp.get("valor", 0)), errors="coerce").fillna(0.0)
+
+    # limpa textos
     tmp["descricao"] = tmp["descricao"].fillna("").astype(str).str.strip()
     tmp["cod_material"] = tmp["cod_material"].fillna("").astype(str).str.strip()
 
