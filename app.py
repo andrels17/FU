@@ -785,7 +785,7 @@ def page_label(page_id: str, total_alertas: int = 0) -> str:
         return _label_alertas(total_alertas)
     return PAGE_LABELS.get(page_id, page_id)
 
-def _fu_svg(icon_key: str) -> str:
+def _fu_glyph(icon_key: str) -> str:
     """SVG monocromático (controlado por CSS) para sidebar compacta."""
     icons = {
         "home": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 7v11a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10l9-7z"/></svg>',
@@ -1747,3 +1747,30 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+st.markdown('''
+<style>
+.fu-compact-nav .fu-ico .fu-glyph{
+  font-size: 20px;
+  line-height: 1;
+  color: rgba(255,255,255,0.92);
+  transition: color 120ms ease;
+}
+
+.fu-compact-nav .fu-ico:hover .fu-glyph{
+  color: rgba(239,68,68,0.95);
+}
+
+.fu-compact-nav .fu-ico.fu-ico--active{
+  border-color: rgba(239,68,68,0.55);
+  background: rgba(239,68,68,0.95);
+  box-shadow: 0 12px 24px rgba(239,68,68,0.18);
+}
+
+.fu-compact-nav .fu-ico.fu-ico--active .fu-glyph{
+  color: #ffffff;
+}
+</style>
+''', unsafe_allow_html=True)
+
