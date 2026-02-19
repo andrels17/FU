@@ -1,4 +1,7 @@
+from __future__ import annotations
 
+from datetime import date, timedelta
+from typing import Any, Dict, List, Tuple
 
 
 def _premium_tabs_style() -> None:
@@ -58,12 +61,6 @@ def _actions_bar(df_base: pd.DataFrame, dt_ini: date, dt_fim: date, prefix: str)
                 st.rerun()
         with c3:
             st.caption("Dica: use os filtros na lateral e exporte a base filtrada para análises externas.")
-
-
-from __future__ import annotations
-
-from datetime import date, timedelta
-from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 import streamlit as st
