@@ -559,29 +559,49 @@ def exibir_consulta_pedidos(_supabase):
     st.session_state.setdefault("go_key", "")
 
 
-    # -------------------- Presets/Atalhos (evita StreamlitAPIException)
-    # Quando o usuário escolhe um atalho, atualizamos os filtros via callback (executa antes da renderização dos widgets)
-    def _apply_preset_from_selectbox():
-        preset = st.session_state.get("consulta_preset") or "—"
-        if preset == "—":
-            return
-        if preset == "Atrasados":
-            st.session_state["c_atraso"] = True
-            st.session_state["c_status_list"] = []
-            st.session_state["c_pag"] = 1
-        elif preset == "Sem OC":
-            st.session_state["c_status_list"] = ["Sem OC"]
-            st.session_state["c_atraso"] = False
-            st.session_state["c_pag"] = 1
-        elif preset == "Em Transporte":
-            st.session_state["c_status_list"] = ["Em Transporte"]
-            st.session_state["c_atraso"] = False
-            st.session_state["c_pag"] = 1
-        elif preset == "Entregues":
-            st.session_state["c_status_list"] = ["Entregue"]
-            st.session_state["c_atraso"] = False
-            st.session_state["c_pag"] = 1
 
+# -------------------- Presets/Atalhos (robusto, evita StreamlitAPIException)
+# Regras:
+# - Callback (on_change/on_click) roda antes de renderizar widgets -> seguro para setar chaves
+# - Presets respeitam status disponíveis no dataset (quando aplicável)
+def _apply_preset(preset: str, status_opts: list[str] | None = None):
+    preset = (preset or "—").strip()
+
+    # Mapeia presets para status desejados (labels -> status)
+    desired_by_preset = {
+        "Sem OC": ["Sem OC"],
+        "Em Transporte": ["Em Transporte"],
+        "Entregues": ["Entregue"],
+    }
+
+    # Sempre zera paginação ao aplicar preset
+    st.session_state["c_pag"] = 1
+
+    if preset in ("—", ""):
+        return
+
+    if preset == "Limpar":
+        st.session_state["c_atraso"] = False
+        st.session_state["c_status_list"] = []
+        return
+
+    if preset == "Atrasados":
+        st.session_state["c_atraso"] = True
+        st.session_state["c_status_list"] = []
+        return
+
+    # Presets por status
+    wanted = desired_by_preset.get(preset, [])
+    if status_opts:
+        wanted = [s for s in wanted if s in status_opts]
+    st.session_state["c_status_list"] = wanted
+    st.session_state["c_atraso"] = False
+
+def _apply_preset_from_selectbox():
+    # status_opts_atual é preenchido mais abaixo (na hora de renderizar filtros)
+    preset = st.session_state.get("consulta_preset") or "—"
+    status_opts_atual = st.session_state.get("consulta_status_opts") or None
+    _apply_preset(preset, status_opts=status_opts_atual)
     # -------------------- Tabs para reduzir poluição
     st.session_state.setdefault("consulta_tab", "Lista")
     st.session_state.setdefault("consulta_tab_target", None)
@@ -623,8 +643,16 @@ def exibir_consulta_pedidos(_supabase):
                 # Status
                 if "status" in df.columns:
                     status_opts = sorted(df["status"].dropna().astype(str).unique().tolist())
+                    st.session_state["consulta_status_opts"] = status_opts
+                    # Normaliza valores atuais para evitar erro se preset tiver valor inválido
+                    current_status = st.session_state.get("c_status_list", []) or []
+                    st.session_state["c_status_list"] = [s for s in current_status if s in status_opts]
                     st.multiselect("Status", status_opts, key="c_status_list", placeholder="Todos")
                 else:
+                    # Normaliza valores atuais para evitar erro se preset tiver valor inválido
+                    current_status = st.session_state.get("c_status_list", []) or []
+                    st.session_state["c_status_list"] = [s for s in current_status if s in STATUS_VALIDOS]
+                    st.session_state["consulta_status_opts"] = STATUS_VALIDOS
                     st.multiselect("Status", STATUS_VALIDOS, key="c_status_list", placeholder="Todos")
 
                 st.divider()
@@ -659,10 +687,47 @@ def exibir_consulta_pedidos(_supabase):
                         st.session_state.pop(k, None)
                     st.rerun()
 
-        with c3:            # atalhos em um único menu (mais compacto)
+        with c3:
+            # Atalhos (chips) + select (dinâmico)
+            status_opts_atual = st.session_state.get("consulta_status_opts") or []
+            # Presets válidos conforme o que existe no dataset
+            presets = ["—", "Atrasados"]
+            if "Sem OC" in status_opts_atual:
+                presets.append("Sem OC")
+            if "Em Transporte" in status_opts_atual:
+                presets.append("Em Transporte")
+            if "Entregue" in status_opts_atual:
+                presets.append("Entregues")
+            presets.append("Limpar")
+
+            # Se o valor atual do select não existir mais, volta para neutro
+            cur_preset = st.session_state.get("consulta_preset") or "—"
+            if cur_preset not in presets:
+                st.session_state["consulta_preset"] = "—"
+
+            # Chips (aplicam via callback -> seguro)
+            chip_cols = st.columns(5)
+            chip_defs = [
+                ("Atrasados", "Atrasados"),
+                ("Sem OC", "Sem OC"),
+                ("Em Transporte", "Em Transporte"),
+                ("Entregues", "Entregues"),
+                ("Limpar", "Limpar"),
+            ]
+            for col, (lbl, pid) in zip(chip_cols, chip_defs):
+                with col:
+                    st.button(
+                        lbl,
+                        use_container_width=True,
+                        key=f"consulta_chip_{pid}",
+                        on_click=_apply_preset,
+                        args=(pid, status_opts_atual),
+                    )
+
+            # Select (mostra selecionado)
             st.selectbox(
                 "Atalhos",
-                ["—", "Atrasados", "Sem OC", "Em Transporte", "Entregues"],
+                presets,
                 key="consulta_preset",
                 label_visibility="collapsed",
                 on_change=_apply_preset_from_selectbox,
