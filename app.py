@@ -1,4 +1,22 @@
 import streamlit as st
+st.set_page_config(
+    page_title="Sistema de Follow-Up",
+    layout="wide",
+    page_icon="📊",
+)
+
+import importlib
+
+def _call_page(mod_name: str, func_name: str, *args, **kwargs):
+    """Importa a página sob demanda (evita import circular e mantém o app subindo)."""
+    try:
+        mod = importlib.import_module(mod_name)
+        fn = getattr(mod, func_name)
+    except Exception as e:
+        st.error(f"Erro ao importar {mod_name}.{func_name}: {e}")
+        st.stop()
+    return fn(*args, **kwargs)
+
 # 🔑 Auth callback (robusto para diferentes estruturas de projeto)
 try:
     # Se auth_flows.py estiver na raiz do projeto
@@ -34,14 +52,6 @@ from src.utils.formatting import formatar_moeda_br
 from src.ui.dashboard import exibir_dashboard
 from src.ui.mapa import exibir_mapa
 from src.ui.consulta import exibir_consulta_pedidos
-try:
-    from src.ui.gestao_pedidos import exibir_gestao_pedidos
-except Exception as e:
-    import streamlit as st
-    st.error(f"Erro importando gestao_pedidos: {e}")
-    def exibir_gestao_pedidos(*args, **kwargs):
-        st.stop()
-
 from src.ui.ficha_material_page import exibir_ficha_material
 from src.ui.gestao_usuarios import exibir_gestao_usuarios
 from src.ui.admin_saas import exibir_admin_saas
@@ -51,11 +61,6 @@ from src.core.superadmin import is_superadmin
 from src.ui.relatorios_whatsapp import render_relatorios_whatsapp
 from src.ui.relatorios_gerenciais import render_relatorios_gerenciais
 
-st.set_page_config(
-    page_title="Sistema de Follow-Up",
-    layout="wide",
-    page_icon="📊",
-)
 
 # --- Supabase clients (anon/admin) ---
 # Necessários para login (anon) e operações administrativas (admin).
@@ -1494,7 +1499,7 @@ def main():
     elif pagina == "material_sheet":
         exibir_ficha_material(supabase)
     elif pagina == "orders_manage":
-        exibir_gestao_pedidos(supabase)
+        _call_page('src.ui.gestao_pedidos','exibir_gestao_pedidos', supabase)
     elif pagina == "map":
         exibir_mapa(supabase)
     elif pagina == "users":
