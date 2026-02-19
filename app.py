@@ -1157,6 +1157,24 @@ def main():
     if tenant_opts and len(tenant_opts) > 1 and not st.session_state.get("fu_sidebar_hidden"):
         with st.sidebar:
 
+            # ===== DEBUG TEMPORÁRIO =====
+            st.caption("DEBUG versão app: 2026-02-19 v4")
+
+            try:
+                st.caption(f"DEBUG tenant_id: {tenant_id}")
+                dbg = (
+                    supabase.table("materiais")
+                    .select("almoxarifado", count="exact")
+                    .eq("tenant_id", tenant_id)
+                    .limit(1)
+                    .execute()
+                )
+                st.caption(f"DEBUG materiais (tenant): {dbg.count}")
+            except Exception as e:
+                st.warning(f"DEBUG erro lendo materiais: {e}")
+            # ===== FIM DEBUG =====
+
+
 
             nomes = {t["tenant_id"]: (t.get("nome") or t["tenant_id"]) for t in tenant_opts}
             current = st.session_state.get("tenant_id") or tenant_opts[0]["tenant_id"]
@@ -1192,22 +1210,7 @@ def main():
     # ===== Filtro global por Almoxarifado (contexto do app) =====
     # Mostra apenas quando a sidebar está expandida (evita “prensar” no modo compacto/mobile).
     if not st.session_state.get("fu_sidebar_hidden"):
-    with st.sidebar:
-            
-        st.caption(f"DEBUG tenant_id: {tenant_id}")
-        
-            try:
-                dbg = (
-                    supabase.table("materiais")
-                    .select("almoxarifado", count="exact")
-                    .eq("tenant_id", tenant_id)
-                    .limit(1)
-                    .execute()
-                )
-                st.caption(f"DEBUG materiais (tenant): {dbg.count}")
-            except Exception as e:
-                st.warning(f"DEBUG erro lendo materiais: {e}")
-
+        with st.sidebar:
             st.markdown("### Contexto")
             almox_list = _fetch_almoxarifados_tenant(supabase, tenant_id)
             options_almox = ["Todos"] + almox_list
