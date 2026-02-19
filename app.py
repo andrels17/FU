@@ -5,7 +5,6 @@ st.set_page_config(
     layout="wide",
     page_icon="📊",
 )
-st.info("DEBUG carregado: 2026-02-19 v5")
 
 import importlib
 
