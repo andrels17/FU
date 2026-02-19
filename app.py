@@ -6,6 +6,24 @@ st.set_page_config(
     page_icon="📊",
 )
 
+st.set_page_config(layout="wide")
+
+st.markdown("""
+<style>
+/* reduz margens laterais */
+.block-container { padding-top: 1.2rem; padding-bottom: 1.2rem; padding-left: 1.2rem; padding-right: 1.2rem; }
+
+/* deixa radios/labels mais compactos */
+div[role="radiogroup"] label { font-size: 0.85rem !important; }
+
+/* dataframes mais “tight” */
+[data-testid="stDataFrame"] { font-size: 0.85rem; }
+
+/* reduz espaçamento vertical */
+[data-testid="stVerticalBlock"] { gap: 0.65rem; }
+</style>
+""", unsafe_allow_html=True)
+
 import importlib
 
 def _call_page(mod_name: str, func_name: str, *args, **kwargs):
