@@ -162,6 +162,41 @@ def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str,
 
 
 
+
+def _reset_rg_filters() -> None:
+    """Reseta filtros dos Relatórios Gerenciais (session_state)."""
+    keys = [
+        "rg_dt_ini", "rg_dt_fim", "rg_date_field_label", "rg_entregue_label",
+        "rg_depts", "rg_frotas", "rg_roles_incluidos", "rg_busca_gestor",
+        "rg_cmp_gestor", "rg_cmp_frota", "rg_cmp_dept",
+        "rg_busca_frota", "rg_busca_dept",
+        "rg_drill_gestor_nome", "rg_drill_frota", "rg_drill_dept",
+        "rg_top_dept_insights",
+    ]
+    for k in keys:
+        if k in st.session_state:
+            del st.session_state[k]
+
+
+def _actions_bar(df_base: pd.DataFrame, dt_ini: date, dt_fim: date, prefix: str = "relatorio") -> None:
+    """Barra de ações rápidas (export / reset)."""
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([1, 1, 2])
+        with c1:
+            csv = df_base.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Exportar base filtrada",
+                csv,
+                _download_name(f"{prefix}_base_filtrada", dt_ini, dt_fim),
+                "text/csv",
+                use_container_width=True,
+            )
+        with c2:
+            if st.button("♻️ Reset filtros", use_container_width=True):
+                _reset_rg_filters()
+                st.rerun()
+        with c3:
+            st.caption("Dica: use os filtros na lateral e exporte a base filtrada para análises externas.")
 def _init_filter_state() -> None:
     dt_ini_def, dt_fim_def = _date_defaults()
     st.session_state.setdefault("rg_dt_ini", dt_ini_def)
@@ -526,6 +561,8 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
 
     with tab_resumo:
+            _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_resumo')
+
 
             # ===== Resumo =====
             with st.container(border=True):
@@ -624,6 +661,8 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     # (tabs moved to the beginning)
     # ===== Aba Gestor =====
     with tab_gestor:
+        _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_gestor')
+
         st.subheader("Gastos por Gestor")
         topn = _top_selector("rg_gestor")
         comparar = st.toggle("Comparar com período anterior", value=True, key="rg_cmp_gestor")
@@ -748,55 +787,13 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                 )
             except Exception:
                 pass
-
-            # ===== Top Departamentos (colapsado) =====
-            with st.container(border=True):
-                st.markdown("#### 🏢 Top Departamentos (gasto)")
-
-                if "departamento" not in df_base.columns:
-                    st.caption("Sem coluna 'departamento' na base.")
-                else:
-                    tmp = df_base.copy()
-                    tmp["departamento"] = tmp["departamento"].fillna("").astype(str).str.strip()
-                    tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
-
-                    dept_total = (
-                        tmp.groupby("departamento")["_valor"]
-                        .sum()
-                        .sort_values(ascending=False)
-                    )
-                    dept_total = dept_total[dept_total.index.astype(str).str.strip() != ""]
-
-                    if dept_total.empty:
-                        st.caption("Sem dados suficientes para listar departamentos.")
-                    else:
-                        top_n = st.slider("Top N departamentos", min_value=5, max_value=30, value=10, step=5, key="rg_top_dept_insights")
-                        dept_top = dept_total.head(top_n).reset_index()
-                        dept_top.columns = ["departamento", "total"]
-                        dept_top["% do total"] = dept_top["total"].apply(lambda v: f"{_share_percent(total_geral, _as_float(v)):.1f}%")
-                        dept_top["total_fmt"] = dept_top["total"].apply(lambda v: formatar_moeda_br(_as_float(v)))
-
-                        # gráfico (se houver helper plotly no arquivo; senão, usa bar_chart simples)
-                        try:
-                            _plot_hbar_with_labels(
-                                dept_top.rename(columns={"departamento": "label"}),
-                                y_col="label",
-                                x_col="total",
-                                title=f"Top {top_n} Departamentos — Gasto",
-                                value_fmt="brl",
-                            )
-                        except Exception:
-                            st.bar_chart(dept_top.set_index("departamento")[["total"]], height=260)
-
-                        st.dataframe(
-                            dept_top[["departamento", "total_fmt", "% do total"]].rename(columns={"total_fmt": "Total"}),
-                            use_container_width=True,
-                            hide_index=True,
-                        )
+            # (Top Departamentos movido para a aba Departamento)
         _render_common_actions(df_g, "gastos_por_gestor", dt_ini, dt_fim)
 
     # ===== Aba Frota =====
     with tab_frota:
+        _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_frota')
+
         st.subheader("Gastos por Frota (cód. equipamento)")
         topn = _top_selector("rg_frota")
         comparar = st.toggle("Comparar com período anterior", value=True, key="rg_cmp_frota")
@@ -846,7 +843,47 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     # ===== Aba Departamento =====
     with tab_dept:
+        _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_dept')
+
         st.subheader("Gastos por Departamento")
+
+        with st.expander("🧠 Insights (Departamento)", expanded=False):
+            with st.container(border=True):
+                st.markdown("#### 🏢 Top Departamentos (gasto)")
+                tmp = df_base.copy()
+                if "departamento" not in tmp.columns:
+                    st.caption("Sem coluna 'departamento' na base.")
+                else:
+                    tmp["departamento"] = tmp["departamento"].fillna("").astype(str).str.strip()
+                    tmp = tmp[tmp["departamento"].astype(str).str.strip() != ""]
+                    tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
+                    dept_total = tmp.groupby("departamento")["_valor"].sum().sort_values(ascending=False)
+                    if dept_total.empty:
+                        st.caption("Sem dados suficientes para listar departamentos.")
+                    else:
+                        top_n = st.slider("Top N departamentos", min_value=5, max_value=30, value=10, step=5, key="rg_top_dept_tab")
+                        dept_top = dept_total.head(top_n).reset_index()
+                        dept_top.columns = ["label", "total"]
+                        dept_top["% do total"] = dept_top["total"].apply(lambda v: f"{_share_percent(total_geral, _as_float(v)):.1f}%")
+                        dept_top["Total"] = dept_top["total"].apply(lambda v: formatar_moeda_br(_as_float(v)))
+
+                        try:
+                            _plot_hbar_with_labels(
+                                dept_top,
+                                y_col="label",
+                                x_col="total",
+                                title=f"Top {top_n} Departamentos — Gasto",
+                                value_fmt="brl",
+                            )
+                        except Exception:
+                            st.bar_chart(dept_top.set_index("label")[["total"]], height=260)
+
+                        st.dataframe(
+                            dept_top[["label", "Total", "% do total"]].rename(columns={"label": "Departamento"}),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
         topn = _top_selector("rg_dept")
         comparar = st.toggle("Comparar com período anterior", value=True, key="rg_cmp_dept")
 
