@@ -1,8 +1,3 @@
-"""
-Módulo de Exportação de Relatórios - VERSÃO PREMIUM
-PDFs profissionais com design avançado, gráficos e análises detalhadas
-"""
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -164,43 +159,6 @@ def ui_filtro_periodo(
     s_dt = pd.to_datetime(df[coluna_escolhida], errors='coerce').dropna()
     if s_dt.empty:
         return df, "", coluna_escolhida
-
-    min_d = s_dt.min().date()
-    max_d = s_dt.max().date()
-
-    with col3:
-        d_ini = st.date_input("Data inicial", value=min_d, min_value=min_d, max_value=max_d, disabled=not usar, key=f"ini_{label}")
-    with col4:
-        d_fim = st.date_input("Data final", value=max_d, min_value=min_d, max_value=max_d, disabled=not usar, key=f"fim_{label}")
-
-    if usar:
-        df_f = filtrar_por_periodo(df, d_ini, d_fim, coluna_data=coluna_escolhida)
-        subt = f"{nomes_colunas.get(coluna_escolhida, coluna_escolhida)}: {d_ini.strftime('%d/%m/%Y')} a {d_fim.strftime('%d/%m/%Y')}"
-        return df_f, f"Período: {subt}", coluna_escolhida
-
-    return df, "", coluna_escolhida
-
-    s = pd.to_datetime(df[coluna_data], errors='coerce').dropna()
-    if s.empty:
-        return df, ""
-
-    min_d = s.min().date()
-    max_d = s.max().date()
-
-    col1, col2, col3 = st.columns([2, 2, 2])
-    with col1:
-        usar = st.checkbox(f"Filtrar por {label}", value=False, key=f"filtro_{label}_{coluna_data}")
-    with col2:
-        d_ini = st.date_input("Data inicial", value=min_d, min_value=min_d, max_value=max_d, disabled=not usar, key=f"ini_{label}_{coluna_data}")
-    with col3:
-        d_fim = st.date_input("Data final", value=max_d, min_value=min_d, max_value=max_d, disabled=not usar, key=f"fim_{label}_{coluna_data}")
-
-    if usar:
-        df_f = filtrar_por_periodo(df, d_ini, d_fim, coluna_data=coluna_data)
-        subt = f"Período: {d_ini.strftime('%d/%m/%Y')} a {d_fim.strftime('%d/%m/%Y')}"
-        return df_f, subt
-
-    return df, ""
 
 
 def gerar_botoes_exportacao(df_pedidos, formatar_moeda_br):
@@ -467,7 +425,7 @@ def preparar_dados_exportacao(df):
         'departamento': 'Departamento',
         'descricao': 'Descrição',
         'cod_material': 'Código',
-        'cod_equipamento': 'Equipamento',
+        'cod_equipamento': 'Frota',
         'qtde_solicitada': 'Qtd Solicitada',
         'qtde_entregue': 'Qtd Entregue',
         'qtde_pendente': 'Qtd Pendente',
@@ -909,7 +867,7 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
 
         df_export = preparar_dados_exportacao(df_pedidos)
         # Colunas padrão
-        colunas_pdf = ['N° OC', 'Departamento', 'Fornecedor', 'Descrição', 'Valor (R$)', 'Status']
+        colunas_pdf = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Valor (R$)', 'Status']
         cols = [c for c in colunas_pdf if c in df_export.columns]
         df_pdf = df_export[cols].copy()
 
@@ -952,7 +910,7 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
 
         # Paginador (linhas por página)
         rows_per_page = 18
-        col_widths = [3.0*cm, 3.6*cm, 5.0*cm, 10.5*cm, 3.2*cm, 3.2*cm]
+        col_widths = [3.0*cm, 3.0*cm, 3.0*cm, 3.6*cm, 5.0*cm, 2.2*cm, 9.0*cm, 3.2*cm, 3.0*cm]
         atraso_mask = None
         if 'atrasado' in df_pedidos.columns:
             # tenta alinhar por índice; fallback sem destaque se não casar
@@ -1024,7 +982,7 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
         # Detalhamento (paginação inteligente)
 
         df_export = preparar_dados_exportacao(df_fornecedor)
-        colunas = ['N° OC', 'Departamento', 'Fornecedor', 'Descrição', 'Valor (R$)', 'Status']
+        colunas = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Valor (R$)', 'Status']
         cols = [c for c in colunas if c in df_export.columns]
         df_pdf = df_export[cols].copy()
 
@@ -1064,7 +1022,7 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
         df_flow = pd.DataFrame(rows_list, columns=header)
 
         rows_per_page = 18
-        col_widths = [3.0*cm, 3.6*cm, 5.0*cm, 10.5*cm, 3.2*cm, 3.2*cm]
+        col_widths = [3.0*cm, 3.0*cm, 3.0*cm, 3.6*cm, 5.0*cm, 2.2*cm, 9.0*cm, 3.2*cm, 3.0*cm]
 
         atraso_mask = None
         if 'atrasado' in df_fornecedor.columns:
@@ -1136,7 +1094,7 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
         # Detalhamento (paginação inteligente)
 
         df_export = preparar_dados_exportacao(df_dept)
-        colunas = ['N° OC', 'Fornecedor', 'Descrição', 'Valor (R$)', 'Status']
+        colunas = ['Data OC', 'N° OC', 'Frota', 'Fornecedor', 'UF', 'Descrição', 'Valor (R$)', 'Status']
         cols = [c for c in colunas if c in df_export.columns]
         df_pdf = df_export[cols].copy()
 
@@ -1176,7 +1134,7 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
         df_flow = pd.DataFrame(rows_list, columns=header)
 
         rows_per_page = 18
-        col_widths = [3.0*cm, 6.0*cm, 12.0*cm, 3.4*cm, 3.0*cm]
+        col_widths = [3.0*cm, 3.0*cm, 3.0*cm, 6.0*cm, 2.2*cm, 12.0*cm, 3.4*cm, 3.0*cm]
 
         atraso_mask = None
         if 'atrasado' in df_dept.columns:
