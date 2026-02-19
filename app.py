@@ -836,8 +836,8 @@ def selecionar_empresa_no_login() -> bool:
 
 
 @st.cache_data(ttl=120)
-def _cached_carregar_pedidos(_supabase, tenant_id):
-    return carregar_pedidos(_supabase, tenant_id)
+def _cached_carregar_pedidos(_supabase, tenant_id, almoxarifado):
+    return carregar_pedidos(_supabase, tenant_id, almoxarifado)
 
 @st.cache_data(ttl=120)
 def _cached_carregar_fornecedores(_supabase, tenant_id):
@@ -1213,7 +1213,7 @@ def main():
         pass
 
     with st.spinner("🔄 Carregando pedidos..."):
-        df_pedidos = _cached_carregar_pedidos(supabase, tenant_id)
+        df_pedidos = _cached_carregar_pedidos(supabase, tenant_id, st.session_state.get('almox_ctx'))
         st.session_state["last_update"] = datetime.now().strftime("%H:%M:%S")
 
         # Aplica contexto global de almoxarifado (se o dataframe já contiver a coluna).
