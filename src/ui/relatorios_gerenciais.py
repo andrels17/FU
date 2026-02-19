@@ -35,6 +35,7 @@ def _reset_rg_filters() -> None:
         "rg_drill_gestor_nome", "rg_top_dept_insights", "rg_top_dept_tab",
         "rg_gestor_top", "rg_frota_top", "rg_dept_top",
         "rg_cmp_gestor", "rg_cmp_frota", "rg_cmp_dept",
+        "rg_fg_familia", "rg_fg_grupo"
     ]
     for k in keys:
         if k in st.session_state:
@@ -280,7 +281,7 @@ def _cols_detail(df: pd.DataFrame, date_field: str) -> List[str]:
         "status",
         "entregue",
         "valor_total",
-        "fornecedor_nome",
+        "fornecedor_nome"
     ]
     return [c for c in prefer if c in df.columns]
 
@@ -981,71 +982,70 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
         _render_common_actions(df_d, "gastos_por_departamento", dt_ini, dt_fim)
+    # ===== Aba Família & Grupo =====
+    with tab_materiais:
+        _actions_bar(df_base, dt_ini, dt_fim, prefix="rg_familia_grupo")
 
-# ===== Aba Família & Grupo =====
-with tab_materiais:
-    _actions_bar(df_base, dt_ini, dt_fim, prefix="rg_familia_grupo")
+        st.subheader("Gastos por Família e Grupo de Material")
 
-    st.subheader("Gastos por Família e Grupo de Material")
-
-    if ("familia_descricao" not in df_base.columns) and ("grupo_descricao" not in df_base.columns):
-        st.info("Ainda não há colunas de Família/Grupo na base. Verifique se a view de pedidos já traz esses campos do catálogo de materiais.")
-    else:
-        df_fg = _gastos_por_familia_grupo(df_base)
-        if df_fg.empty:
-            st.info("Sem dados para Família/Grupo no filtro atual.")
+        if ("familia_descricao" not in df_base.columns) and ("grupo_descricao" not in df_base.columns):
+            st.info("Ainda não há colunas de Família/Grupo na base. Verifique se a view de pedidos já traz esses campos do catálogo de materiais.")
         else:
-            # filtros locais (opcionais)
-            c1, c2, c3 = st.columns([2, 2, 1])
-            with c1:
-                fam_opts = ["Todas"] + sorted([x for x in df_fg["familia_descricao"].dropna().unique().tolist()])
-                fam_sel = st.selectbox("Família", fam_opts, index=0, key="rg_fg_familia")
-            with c2:
-                grp_opts_all = df_fg.copy()
+            df_fg = _gastos_por_familia_grupo(df_base)
+            if df_fg.empty:
+                st.info("Sem dados para Família/Grupo no filtro atual.")
+            else:
+                # filtros locais (opcionais)
+                c1, c2, c3 = st.columns([2, 2, 1])
+                with c1:
+                    fam_opts = ["Todas"] + sorted([x for x in df_fg["familia_descricao"].dropna().unique().tolist()])
+                    fam_sel = st.selectbox("Família", fam_opts, index=0, key="rg_fg_familia")
+                with c2:
+                    grp_opts_all = df_fg.copy()
+                    if fam_sel != "Todas":
+                        grp_opts_all = grp_opts_all[grp_opts_all["familia_descricao"] == fam_sel]
+                    grp_opts = ["Todos"] + sorted([x for x in grp_opts_all["grupo_descricao"].dropna().unique().tolist()])
+                    grp_sel = st.selectbox("Grupo", grp_opts, index=0, key="rg_fg_grupo")
+                with c3:
+                    topn = _top_selector("rg_fg")
+
+                df_show = df_fg.copy()
                 if fam_sel != "Todas":
-                    grp_opts_all = grp_opts_all[grp_opts_all["familia_descricao"] == fam_sel]
-                grp_opts = ["Todos"] + sorted([x for x in grp_opts_all["grupo_descricao"].dropna().unique().tolist()])
-                grp_sel = st.selectbox("Grupo", grp_opts, index=0, key="rg_fg_grupo")
-            with c3:
-                topn = _top_selector("rg_fg")
+                    df_show = df_show[df_show["familia_descricao"] == fam_sel]
+                if grp_sel != "Todos":
+                    df_show = df_show[df_show["grupo_descricao"] == grp_sel]
 
-            df_show = df_fg.copy()
-            if fam_sel != "Todas":
-                df_show = df_show[df_show["familia_descricao"] == fam_sel]
-            if grp_sel != "Todos":
-                df_show = df_show[df_show["grupo_descricao"] == grp_sel]
+                total_local = float(pd.to_numeric(df_show["total"], errors="coerce").fillna(0).sum())
+                qtd_local = int(pd.to_numeric(df_show["qtd_pedidos"], errors="coerce").fillna(0).sum())
 
-            total_local = float(pd.to_numeric(df_show["total"], errors="coerce").fillna(0).sum())
-            qtd_local = int(pd.to_numeric(df_show["qtd_pedidos"], errors="coerce").fillna(0).sum())
+                k1, k2, k3 = st.columns(3)
+                k1.metric("Gasto (seleção)", formatar_moeda_br(total_local))
+                k2.metric("Pedidos (seleção)", f"{qtd_local:,}".replace(",", "."))
+                k3.metric("Participação", f"{_share_percent(total_geral, total_local):.1f}%")
 
-            k1, k2, k3 = st.columns(3)
-            k1.metric("Gasto (seleção)", formatar_moeda_br(total_local))
-            k2.metric("Pedidos (seleção)", f"{qtd_local:,}".replace(",", "."))
-            k3.metric("Participação", f"{_share_percent(total_geral, total_local):.1f}%")
+                st.divider()
 
-            st.divider()
+                # gráfico: top grupos dentro da família escolhida
+                df_plot = df_show.copy()
+                df_plot["label"] = df_plot["familia_descricao"].astype(str) + " · " + df_plot["grupo_descricao"].astype(str)
+                df_plot = df_plot.sort_values("total", ascending=False)
+                df_plot = df_plot.head(topn) if topn else df_plot
 
-            # gráfico: top grupos dentro da família escolhida
-            df_plot = df_show.copy()
-            df_plot["label"] = df_plot["familia_descricao"].astype(str) + " · " + df_plot["grupo_descricao"].astype(str)
-            df_plot = df_plot.sort_values("total", ascending=False)
-            df_plot = df_plot.head(topn) if topn else df_plot
+                _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title="Top Família · Grupo por gasto", height=520)
 
-            _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title="Top Família · Grupo por gasto", height=520)
+                # tabela
+                df_tbl = df_show.copy()
+                df_tbl["Total"] = df_tbl["total"].apply(lambda v: formatar_moeda_br(_as_float(v)))
+                df_tbl["% do total"] = df_tbl["total"].apply(lambda v: f"{_share_percent(total_geral, _as_float(v)):.1f}%")
+                df_tbl["Pedidos"] = pd.to_numeric(df_tbl["qtd_pedidos"], errors="coerce").fillna(0).astype(int)
 
-            # tabela
-            df_tbl = df_show.copy()
-            df_tbl["Total"] = df_tbl["total"].apply(lambda v: formatar_moeda_br(_as_float(v)))
-            df_tbl["% do total"] = df_tbl["total"].apply(lambda v: f"{_share_percent(total_geral, _as_float(v)):.1f}%")
-            df_tbl["Pedidos"] = pd.to_numeric(df_tbl["qtd_pedidos"], errors="coerce").fillna(0).astype(int)
+                st.dataframe(
+                    df_tbl[["familia_descricao", "grupo_descricao", "Pedidos", "Total", "% do total"]].rename(
+                        columns={"familia_descricao": "Família", "grupo_descricao": "Grupo"}
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
 
-            st.dataframe(
-                df_tbl[["familia_descricao", "grupo_descricao", "Pedidos", "Total", "% do total"]].rename(
-                    columns={"familia_descricao": "Família", "grupo_descricao": "Grupo"}
-                ),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            _render_common_actions(df_show, "gastos_familia_grupo", dt_ini, dt_fim)
+                _render_common_actions(df_show, "gastos_familia_grupo", dt_ini, dt_fim)
 
