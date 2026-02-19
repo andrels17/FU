@@ -1,3 +1,65 @@
+
+
+
+def _premium_tabs_style() -> None:
+    st.markdown(
+        """
+        <style>
+        div[data-baseweb="tab-list"] { gap: 8px; }
+        button[role="tab"] {
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(49,51,63,0.18);
+            background: rgba(255,255,255,0.04);
+        }
+        button[role="tab"][aria-selected="true"] {
+            border: 1px solid rgba(49,51,63,0.32);
+            background: rgba(255,255,255,0.10);
+            font-weight: 600;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _reset_rg_filters() -> None:
+    """Reseta filtros dos Relatórios Gerenciais (session_state)."""
+    keys = [
+        "rg_dt_ini", "rg_dt_fim", "rg_date_field_label", "rg_entregue_label",
+        "rg_depts", "rg_frotas", "rg_roles_incluidos", "rg_busca_gestor",
+        "rg_cmp_gestor", "rg_cmp_frota", "rg_cmp_dept",
+        "rg_drill_gestor_nome", "rg_top_dept_insights", "rg_top_dept_tab",
+        "rg_gestor_top", "rg_frota_top", "rg_dept_top",
+        "rg_cmp_gestor", "rg_cmp_frota", "rg_cmp_dept",
+    ]
+    for k in keys:
+        if k in st.session_state:
+            del st.session_state[k]
+
+
+def _actions_bar(df_base: pd.DataFrame, dt_ini: date, dt_fim: date, prefix: str) -> None:
+    """Barra de ações rápidas (export / reset)."""
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([1, 1, 2])
+        with c1:
+            csv = df_base.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Exportar base filtrada",
+                csv,
+                _download_name(f"{prefix}_base_filtrada", dt_ini, dt_fim),
+                "text/csv",
+                use_container_width=True,
+                key=f"{prefix}_export_base",
+            )
+        with c2:
+            if st.button("♻️ Reset filtros", use_container_width=True, key=f"{prefix}_reset"):
+                _reset_rg_filters()
+                st.rerun()
+        with c3:
+            st.caption("Dica: use os filtros na lateral e exporte a base filtrada para análises externas.")
+
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -62,29 +124,6 @@ def _pill_style() -> None:
         unsafe_allow_html=True,
     )
 
-
-def _premium_tabs_style() -> None:
-    # premium tabs
-    st.markdown(
-        """
-        <style>
-        /* premium tabs */
-        div[data-baseweb="tab-list"] { gap: 8px; }
-        button[role="tab"] {
-            padding: 10px 14px;
-            border-radius: 999px;
-            border: 1px solid rgba(49,51,63,0.18);
-            background: rgba(255,255,255,0.04);
-        }
-        button[role="tab"][aria-selected="true"] {
-            border: 1px solid rgba(49,51,63,0.32);
-            background: rgba(255,255,255,0.10);
-            font-weight: 600;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def _tabs_style() -> None:
@@ -162,42 +201,6 @@ def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str,
 
 
 
-
-def _reset_rg_filters() -> None:
-    """Reseta filtros dos Relatórios Gerenciais (session_state)."""
-    keys = [
-        "rg_dt_ini", "rg_dt_fim", "rg_date_field_label", "rg_entregue_label",
-        "rg_depts", "rg_frotas", "rg_roles_incluidos", "rg_busca_gestor",
-        "rg_cmp_gestor", "rg_cmp_frota", "rg_cmp_dept",
-        "rg_busca_frota", "rg_busca_dept",
-        "rg_drill_gestor_nome", "rg_drill_frota", "rg_drill_dept",
-        "rg_top_dept_insights",
-    ]
-    for k in keys:
-        if k in st.session_state:
-            del st.session_state[k]
-
-
-def _actions_bar(df_base: pd.DataFrame, dt_ini: date, dt_fim: date, prefix: str = "relatorio") -> None:
-    """Barra de ações rápidas (export / reset)."""
-    with st.container(border=True):
-        c1, c2, c3 = st.columns([1, 1, 2])
-        with c1:
-            csv = df_base.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "⬇️ Exportar base filtrada",
-                csv,
-                _download_name(f"{prefix}_base_filtrada", dt_ini, dt_fim),
-                "text/csv",
-                use_container_width=True,
-                key=f"{prefix}_export_base",
-            )
-        with c2:
-            if st.button("♻️ Reset filtros", use_container_width=True, key=f"{prefix}_reset"):
-                _reset_rg_filters()
-                st.rerun()
-        with c3:
-            st.caption("Dica: use os filtros na lateral e exporte a base filtrada para análises externas.")
 def _init_filter_state() -> None:
     dt_ini_def, dt_fim_def = _date_defaults()
     st.session_state.setdefault("rg_dt_ini", dt_ini_def)
@@ -303,9 +306,8 @@ def _render_common_actions(df_out: pd.DataFrame, filename_prefix: str, dt_ini: d
         csv,
         _download_name(filename_prefix, dt_ini, dt_fim),
         "text/csv",
-                use_container_width=True,
-                key=f"{prefix}_export_base",
-            )
+        use_container_width=True,
+    )
 
 
 def _links_to_dept_map_df(links: Any) -> pd.DataFrame:
@@ -418,6 +420,8 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     _init_filter_state()
     _pill_style()
+
+    _premium_tabs_style()
     _tabs_style()
 
     # Admin (service role) para leituras que podem sofrer RLS
@@ -559,35 +563,32 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     delta_pct = ((total_geral - total_prev) / total_prev * 100.0) if total_prev else 0.0
 
     # ===== Menu de abas (no início) =====
-    tab_resumo, tab_gestor, tab_frota, tab_dept = st.tabs(["📌 Resumo", "👤 Gestor", "🚜 Frota", "🏢 Departamento"]) 
-
+    tab_resumo, tab_gestor, tab_frota, tab_dept = st.tabs(["📌 Resumo", "👤 Gestor", "🚜 Frota", "🏢 Departamento"])
 
     with tab_resumo:
         _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_resumo')
 
+        with st.container(border=True):
+            st.markdown("### 📌 Resumo do período aplicado")
+            a1, a2, a3, a4 = st.columns(4)
+            a1.metric("Pedidos", qtd_geral)
+            a2.metric("Gasto total", formatar_moeda_br(total_geral), f"{delta_pct:.1f}% vs anterior" if total_prev else None)
+            a3.metric("Período anterior", formatar_moeda_br(total_prev))
+            a4.metric("Ticket médio", formatar_moeda_br(ticket))
+            st.caption(
+                f"Período: **{dt_ini.strftime('%d/%m/%Y')}** a **{dt_fim.strftime('%d/%m/%Y')}** · "
+                f"Data: **{filtros.date_field}** · Situação: **{st.session_state.get('rg_entregue_label','Todos')}**"
+            )
 
-            # ===== Resumo =====
-            with st.container(border=True):
-                st.markdown("### 📌 Resumo do período aplicado")
-                a1, a2, a3, a4 = st.columns(4)
-                a1.metric("Pedidos", qtd_geral)
-                a2.metric("Gasto total", formatar_moeda_br(total_geral), f"{delta_pct:.1f}% vs anterior" if total_prev else None)
-                a3.metric("Período anterior", formatar_moeda_br(total_prev))
-                a4.metric("Ticket médio", formatar_moeda_br(ticket))
-                st.caption(
-                    f"Período: **{dt_ini.strftime('%d/%m/%Y')}** a **{dt_fim.strftime('%d/%m/%Y')}** · "
-                    f"Data: **{filtros.date_field}** · Situação: **{st.session_state.get('rg_entregue_label','Todos')}**"
-                )
+        with st.container(border=True):
+            st.markdown("### 📈 Evolução do gasto (semanal)")
+            df_evol = _evolucao_semanal(df_base, filtros.date_field)
+            if df_evol.empty:
+                st.caption("Sem dados suficientes para a evolução semanal.")
+            else:
+                st.line_chart(df_evol.set_index("data")["total"])
 
-            with st.container(border=True):
-                st.markdown("### 📈 Evolução do gasto (semanal)")
-                df_evol = _evolucao_semanal(df_base, filtros.date_field)
-                if df_evol.empty:
-                    st.caption("Sem dados suficientes para a evolução semanal.")
-                else:
-                    st.line_chart(df_evol.set_index("data")["total"])
-
-            st.divider()
+        st.divider()
 
     
     # ===== Governança estrutural + Performance global =====
@@ -859,6 +860,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                     tmp["departamento"] = tmp["departamento"].fillna("").astype(str).str.strip()
                     tmp = tmp[tmp["departamento"].astype(str).str.strip() != ""]
                     tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
+
                     dept_total = tmp.groupby("departamento")["_valor"].sum().sort_values(ascending=False)
                     if dept_total.empty:
                         st.caption("Sem dados suficientes para listar departamentos.")
