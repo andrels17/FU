@@ -431,74 +431,66 @@ def gerar_relatorio_departamento(df_pedidos, departamento, formatar_moeda_br):
 
 
 def preparar_dados_exportacao(df):
-    """Prepara dados para exportação.
-
-    Aceita tanto o dataframe "cru" (colunas do banco) quanto um dataframe já pré-formatado
-    (com colunas renomeadas como 'Valor (R$)', 'Status', etc.).
-    """
+    """Prepara dados para exportação (tolerante a df cru ou pré-formatado)."""
     if df is None or getattr(df, "empty", True):
         return df
 
     base = df.copy()
 
-    # Se vier do banco (colunas cruas), aplica seleção e rename padrão
+    # Caso "cru" (colunas do banco)
     if ("nr_oc" in base.columns) or ("valor_total" in base.columns) or ("status" in base.columns):
         colunas = [
-            'nr_oc', 'nr_solicitacao', 'departamento', 'descricao',
-            'cod_material', 'cod_equipamento',
-            'qtde_solicitada', 'qtde_entregue', 'qtde_pendente',
-            'fornecedor_nome', 'fornecedor_cidade', 'fornecedor_uf',
-            'data_solicitacao', 'data_oc', 'previsao_entrega',
-            'status', 'valor_total'
+            'nr_oc', 'departamento', 'descricao',
+            'cod_equipamento', 'fornecedor_nome', 'fornecedor_uf',
+            'qtde_pendente', 'data_oc', 'valor_total'
         ]
-
         colunas_existentes = [c for c in colunas if c in base.columns]
         df_export = base[colunas_existentes].copy()
 
         rename = {
-            'nr_oc': 'N° OC',
-            'nr_solicitacao': 'N° Solicitação',
-            'departamento': 'Departamento',
-            'descricao': 'Descrição',
-            'cod_material': 'Código',
-            'cod_equipamento': 'Frota',
-            'qtde_solicitada': 'Qtd Solicitada',
-            'qtde_entregue': 'Qtd Entregue',
-            'qtde_pendente': 'Qtd Pendente',
-            'fornecedor_nome': 'Fornecedor',
-            'fornecedor_cidade': 'Cidade',
-            'fornecedor_uf': 'UF',
-            'data_solicitacao': 'Data Solicitação',
             'data_oc': 'Data OC',
-            'previsao_entrega': 'Previsão',
-            'status': 'Status',
-            'valor_total': 'Valor (R$)'
+            'nr_oc': 'N° OC',
+            'cod_equipamento': 'Frota',
+            'departamento': 'Departamento',
+            'fornecedor_nome': 'Fornecedor',
+            'fornecedor_uf': 'UF',
+            'descricao': 'Descrição',
+            'qtde_pendente': 'Qtde. Pendente',
+            'valor_total': 'Preço',
         }
         df_export = df_export.rename(columns=rename)
     else:
-        # Já veio pré-formatado (ex.: do dashboard/relatórios)
+        # Caso pré-formatado: tenta padronizar nomes comuns
         rename2 = {
+            'data_oc': 'Data OC',
+            'Data OC': 'Data OC',
+            'nr_oc': 'N° OC',
+            'N° OC': 'N° OC',
             'Equipamento': 'Frota',
             'cod_equipamento': 'Frota',
-            'nr_oc': 'N° OC',
-            'data_oc': 'Data OC',
-            'descricao': 'Descrição',
+            'Frota': 'Frota',
+            'departamento': 'Departamento',
+            'Departamento': 'Departamento',
             'fornecedor_nome': 'Fornecedor',
+            'Fornecedor': 'Fornecedor',
             'fornecedor_uf': 'UF',
-            'valor_total': 'Valor (R$)',
-            'status': 'Status',
+            'UF': 'UF',
+            'descricao': 'Descrição',
+            'Descrição': 'Descrição',
+            'qtde_pendente': 'Qtde. Pendente',
+            'Qtd Pendente': 'Qtde. Pendente',
+            'Qtde. Pendente': 'Qtde. Pendente',
+            'valor_total': 'Preço',
+            'Valor (R$)': 'Preço',
+            'Preço': 'Preço',
         }
         df_export = base.rename(columns=rename2)
 
-    # Ordena colunas finais (quando existirem)
-    ordem = [
-        'Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF',
-        'Descrição', 'Valor (R$)', 'Status'
-    ]
+    ordem = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Qtde. Pendente', 'Preço']
     cols = [c for c in ordem if c in df_export.columns]
-    # Mantém demais colunas no fim (caso existam)
     extras = [c for c in df_export.columns if c not in cols]
     return df_export[cols + extras].copy()
+
 
 
 # ============================================
@@ -1028,7 +1020,7 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
 
         df_export = preparar_dados_exportacao(df_pedidos)
         # Colunas padrão
-        colunas_pdf = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Valor (R$)', 'Status']
+        colunas_pdf = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Qtde. Pendente', 'Preço']
         cols = [c for c in colunas_pdf if c in df_export.columns]
         df_pdf = df_export[cols].copy()
 
@@ -1045,9 +1037,18 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
                     row.append(Paragraph(str(r[c]), desc_style))
                 elif c == 'Fornecedor':
                     row.append(Paragraph(str(r[c]), forn_style))
-                elif c in ('Data OC', 'Data Solicitação', 'Previsão'):
+                elif c == 'Data OC':
                     row.append(_safe_date(r[c]))
-                elif c == 'Valor (R$)':
+                elif c == 'Qtde. Pendente':
+                    try:
+                        q = r[c]
+                        if q is None or str(q).strip() == "" or str(q).lower() == "nan":
+                            row.append("-")
+                        else:
+                            row.append(str(int(float(str(q).replace(",", ".")))))
+                    except Exception:
+                        row.append(str(r[c]))
+                elif c == 'Preço':
                     row.append(_safe_money(r[c], formatar_moeda_br))
                 else:
                     row.append(str(r[c]))
@@ -1073,7 +1074,7 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
 
         # Paginador (linhas por página)
         rows_per_page = 18
-        col_widths = [3.0*cm, 3.0*cm, 3.0*cm, 3.6*cm, 5.0*cm, 2.2*cm, 9.0*cm, 3.2*cm, 3.0*cm]
+        col_widths = [2.6*cm, 2.6*cm, 2.6*cm, 3.4*cm, 5.2*cm, 1.6*cm, 9.2*cm, 2.8*cm, 3.2*cm]
         atraso_mask = None
         if 'atrasado' in df_pedidos.columns:
             # tenta alinhar por índice; fallback sem destaque se não casar
@@ -1145,7 +1146,7 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
         # Detalhamento (paginação inteligente)
 
         df_export = preparar_dados_exportacao(df_fornecedor)
-        colunas = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Valor (R$)', 'Status']
+        colunas = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Qtde. Pendente', 'Preço']
         cols = [c for c in colunas if c in df_export.columns]
         df_pdf = df_export[cols].copy()
 
@@ -1160,9 +1161,18 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
                     row.append(Paragraph(str(r[c]), desc_style))
                 elif c == 'Fornecedor':
                     row.append(Paragraph(str(r[c]), forn_style))
-                elif c in ('Data OC', 'Data Solicitação', 'Previsão'):
+                elif c == 'Data OC':
                     row.append(_safe_date(r[c]))
-                elif c == 'Valor (R$)':
+                elif c == 'Qtde. Pendente':
+                    try:
+                        q = r[c]
+                        if q is None or str(q).strip() == "" or str(q).lower() == "nan":
+                            row.append("-")
+                        else:
+                            row.append(str(int(float(str(q).replace(",", ".")))))
+                    except Exception:
+                        row.append(str(r[c]))
+                elif c == 'Preço':
                     row.append(_safe_money(r[c], formatar_moeda_br))
                 else:
                     row.append(str(r[c]))
@@ -1187,8 +1197,7 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
         df_flow = pd.DataFrame(rows_list, columns=header)
 
         rows_per_page = 18
-        col_widths = [3.0*cm, 3.0*cm, 3.0*cm, 3.6*cm, 5.0*cm, 2.2*cm, 9.0*cm, 3.2*cm, 3.0*cm]
-
+        col_widths = [2.6*cm, 2.6*cm, 2.6*cm, 3.4*cm, 5.2*cm, 1.6*cm, 9.2*cm, 2.8*cm, 3.2*cm]
         atraso_mask = None
         if 'atrasado' in df_fornecedor.columns:
             try:
@@ -1259,7 +1268,7 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
         # Detalhamento (paginação inteligente)
 
         df_export = preparar_dados_exportacao(df_dept)
-        colunas = ['Data OC', 'N° OC', 'Frota', 'Fornecedor', 'UF', 'Descrição', 'Valor (R$)', 'Status']
+        colunas = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Qtde. Pendente', 'Preço']
         cols = [c for c in colunas if c in df_export.columns]
         df_pdf = df_export[cols].copy()
 
@@ -1274,9 +1283,18 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
                     row.append(Paragraph(str(r[c]), desc_style))
                 elif c == 'Fornecedor':
                     row.append(Paragraph(str(r[c]), forn_style))
-                elif c in ('Data OC', 'Data Solicitação', 'Previsão'):
+                elif c == 'Data OC':
                     row.append(_safe_date(r[c]))
-                elif c == 'Valor (R$)':
+                elif c == 'Qtde. Pendente':
+                    try:
+                        q = r[c]
+                        if q is None or str(q).strip() == "" or str(q).lower() == "nan":
+                            row.append("-")
+                        else:
+                            row.append(str(int(float(str(q).replace(",", ".")))))
+                    except Exception:
+                        row.append(str(r[c]))
+                elif c == 'Preço':
                     row.append(_safe_money(r[c], formatar_moeda_br))
                 else:
                     row.append(str(r[c]))
@@ -1301,8 +1319,7 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
         df_flow = pd.DataFrame(rows_list, columns=header)
 
         rows_per_page = 18
-        col_widths = [3.0*cm, 3.0*cm, 3.0*cm, 6.0*cm, 2.2*cm, 12.0*cm, 3.4*cm, 3.0*cm]
-
+        col_widths = [2.6*cm, 2.6*cm, 2.6*cm, 3.4*cm, 5.2*cm, 1.6*cm, 9.2*cm, 2.8*cm, 3.2*cm]
         atraso_mask = None
         if 'atrasado' in df_dept.columns:
             try:
@@ -1325,4 +1342,5 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
     except Exception as e:
         st.error(f"Erro: {e}")
         return None
+
 
