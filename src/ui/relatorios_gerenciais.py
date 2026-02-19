@@ -684,7 +684,8 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                 queda = df_g[df_g["delta_pct"] < -20].copy()
 
                 if not alta.empty:
-                    with st.expander("📈 Crescimentos relevantes (> 20%)", expanded=False):
+                    with st.container(border=True):
+                        st.markdown("#### 📈 Crescimentos relevantes (> 20%)")
                         st.dataframe(
                             alta[["gestor_nome", "total", "prev_total", "delta_pct"]]
                             .assign(
@@ -697,7 +698,8 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                         )
 
                 if not queda.empty:
-                    with st.expander("📉 Quedas relevantes (< -20%)", expanded=False):
+                    with st.container(border=True):
+                        st.markdown("#### 📉 Quedas relevantes (< -20%)")
                         st.dataframe(
                             queda[["gestor_nome", "total", "prev_total", "delta_pct"]]
                             .assign(
