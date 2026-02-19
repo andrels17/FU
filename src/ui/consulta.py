@@ -557,55 +557,49 @@ def exibir_consulta_pedidos(_supabase):
     st.session_state.setdefault("consulta_auto_opened_pid", None)
     st.session_state.setdefault("consulta_selected_label", "")
     st.session_state.setdefault("go_key", "")
+    # -------------------- Presets/Atalhos (robusto, evita StreamlitAPIException)
+    # Regras:
+    # - Callback (on_change/on_click) roda antes de renderizar widgets -> seguro para setar chaves
+    # - Presets respeitam status disponíveis no dataset (quando aplicável)
+    def _apply_preset(preset: str, status_opts: list[str] | None = None):
+        preset = (preset or "—").strip()
 
+        desired_by_preset = {
+            "Sem OC": ["Sem OC"],
+            "Em Transporte": ["Em Transporte"],
+            "Entregues": ["Entregue"],
+        }
 
+        st.session_state["c_pag"] = 1
 
-# -------------------- Presets/Atalhos (robusto, evita StreamlitAPIException)
-# Regras:
-# - Callback (on_change/on_click) roda antes de renderizar widgets -> seguro para setar chaves
-# - Presets respeitam status disponíveis no dataset (quando aplicável)
-def _apply_preset(preset: str, status_opts: list[str] | None = None):
-    preset = (preset or "—").strip()
+        if preset in ("—", ""):
+            return
 
-    # Mapeia presets para status desejados (labels -> status)
-    desired_by_preset = {
-        "Sem OC": ["Sem OC"],
-        "Em Transporte": ["Em Transporte"],
-        "Entregues": ["Entregue"],
-    }
+        if preset == "Limpar":
+            st.session_state["c_atraso"] = False
+            st.session_state["c_status_list"] = []
+            return
 
-    # Sempre zera paginação ao aplicar preset
-    st.session_state["c_pag"] = 1
+        if preset == "Atrasados":
+            st.session_state["c_atraso"] = True
+            st.session_state["c_status_list"] = []
+            return
 
-    if preset in ("—", ""):
-        return
-
-    if preset == "Limpar":
+        wanted = desired_by_preset.get(preset, [])
+        if status_opts:
+            wanted = [s for s in wanted if s in status_opts]
+        st.session_state["c_status_list"] = wanted
         st.session_state["c_atraso"] = False
-        st.session_state["c_status_list"] = []
-        return
 
-    if preset == "Atrasados":
-        st.session_state["c_atraso"] = True
-        st.session_state["c_status_list"] = []
-        return
+    def _apply_preset_from_selectbox():
+        preset = st.session_state.get("consulta_preset") or "—"
+        status_opts_atual = st.session_state.get("consulta_status_opts") or None
+        _apply_preset(preset, status_opts=status_opts_atual)
 
-    # Presets por status
-    wanted = desired_by_preset.get(preset, [])
-    if status_opts:
-        wanted = [s for s in wanted if s in status_opts]
-    st.session_state["c_status_list"] = wanted
-    st.session_state["c_atraso"] = False
-
-def _apply_preset_from_selectbox():
-    # status_opts_atual é preenchido mais abaixo (na hora de renderizar filtros)
-    preset = st.session_state.get("consulta_preset") or "—"
-    status_opts_atual = st.session_state.get("consulta_status_opts") or None
-    _apply_preset(preset, status_opts=status_opts_atual)
     # -------------------- Tabs para reduzir poluição
     st.session_state.setdefault("consulta_tab", "Lista")
     st.session_state.setdefault("consulta_tab_target", None)
-    # Aplica troca de aba pendente (evita erro de setar estado após render do widget)
+
     if st.session_state.get("consulta_tab_target"):
         st.session_state["consulta_tab"] = st.session_state.get("consulta_tab_target")
         st.session_state["consulta_tab_target"] = None
