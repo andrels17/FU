@@ -685,7 +685,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
                 if not alta.empty:
                     with st.container(border=True):
-                        st.markdown("#### 📈 Crescimentos relevantes (> 20%)")
+            st.markdown("#### 📈 Crescimentos relevantes (> 20%)")
                         st.dataframe(
                             alta[["gestor_nome", "total", "prev_total", "delta_pct"]]
                             .assign(
@@ -699,7 +699,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
                 if not queda.empty:
                     with st.container(border=True):
-                        st.markdown("#### 📉 Quedas relevantes (< -20%)")
+            st.markdown("#### 📉 Quedas relevantes (< -20%)")
                         st.dataframe(
                             queda[["gestor_nome", "total", "prev_total", "delta_pct"]]
                             .assign(
@@ -722,7 +722,8 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                 pass
 
             # ===== Heatmap Gestor x Departamento (matriz) =====
-            with st.expander("🗺️ Matriz Gestor × Departamento (gasto)", expanded=False):
+            with st.container(border=True):
+            st.markdown("#### 🗺️ Matriz Gestor × Departamento (gasto)")
                 if "departamento" not in df_base.columns:
                     st.caption("Sem coluna 'departamento' na base.")
                 else:
