@@ -29,6 +29,14 @@ def _date_defaults() -> Tuple[date, date]:
     return hoje - timedelta(days=30), hoje
 
 
+
+
+def _cat_str(v: Any) -> str:
+    """Força rótulo categórico (evita eixo numérico em ids como 1024, 5001)."""
+    if v is None:
+        return "(Sem código)"
+    s = str(v).strip()
+    return s if s else "(Sem código)"
 def _as_float(x: Any) -> float:
     try:
         return float(x)
@@ -879,6 +887,11 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         df_f = df_f.sort_values("total", ascending=False)
 
         df_plot = df_f.head(topn) if topn else df_f
+        df_plot = df_plot.copy()
+        if 'cod_equipamento' in df_plot.columns:
+            df_plot['frota_label'] = df_plot['cod_equipamento'].map(_cat_str)
+        else:
+            df_plot['frota_label'] = '(Sem código)'
         _plot_hbar_with_labels(df_plot, y_col="cod_equipamento", x_col="total", title="Top frotas por gasto", height=420)
 
         df_show = df_f.copy()
@@ -939,3 +952,4 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
         _render_common_actions(df_d, "gastos_por_departamento", dt_ini, dt_fim)
+
