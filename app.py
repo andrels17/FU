@@ -767,26 +767,24 @@ def _fetch_almoxarifados_tenant(_supabase, tenant_id: str) -> list[str]:
     try:
         res = (
             _supabase
-            .table("materiais")
+            .table("vw_almoxarifados")
             .select("almoxarifado")
             .eq("tenant_id", tenant_id)
-            .limit(20000)
+            .limit(500)  # aqui pode ser baixo, pq já é distinct
             .execute()
         )
 
         rows = getattr(res, "data", None) or []
-        valores = []
-
+        vals = []
         for r in rows:
             v = (r or {}).get("almoxarifado")
             if v is None:
                 continue
             v = str(v).strip()
             if v:
-                valores.append(v)
+                vals.append(v)
 
-        # remove duplicados mantendo ordem
-        return sorted(list(dict.fromkeys(valores)))
+        return vals  # já vem ordenado pela view
 
     except Exception as e:
         st.sidebar.warning(f"Erro carregando almoxarifados: {e}")
