@@ -13,6 +13,7 @@ try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.platypus import (
+    KeepInFrame,
         SimpleDocTemplate, Table, TableStyle, Paragraph, 
         Spacer, PageBreak, KeepTogether
     )
@@ -622,6 +623,15 @@ def _safe_money(v, formatar_moeda_br):
     except Exception:
         return "-"
 
+def _truncate_text(s: str, max_chars: int = 110) -> str:
+    try:
+        s = (s or "").strip()
+        if len(s) <= max_chars:
+            return s
+        return s[: max_chars - 1].rstrip() + "…"
+    except Exception:
+        return str(s)[:max_chars]
+
 def _safe_date(v):
     """Formata datas (aceita datetime/date/str) em dd/mm/aaaa."""
     try:
@@ -746,8 +756,8 @@ def _tabela_detalhamento(df_pdf, col_widths, atraso_mask=None):
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#764ba2')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('FONTSIZE', (0, 0), (-1, 0), 8.5),
+        ('FONTSIZE', (0, 1), (-1, -1), 7.5),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),
@@ -1034,9 +1044,9 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
             row = []
             for c in df_pdf.columns:
                 if c == 'Descrição':
-                    row.append(Paragraph(str(r[c]), desc_style))
+                    row.append(Paragraph(_truncate_text(str(r[c]), 135), desc_style))
                 elif c == 'Fornecedor':
-                    row.append(Paragraph(str(r[c]), forn_style))
+                    row.append(Paragraph(_truncate_text(str(r[c]), 60), forn_style))
                 elif c == 'Data OC':
                     row.append(_safe_date(r[c]))
                 elif c == 'Qtde. Pendente':
@@ -1074,7 +1084,16 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
 
         # Paginador (linhas por página)
         rows_per_page = 18
-        col_widths = [2.6*cm, 2.6*cm, 2.6*cm, 3.4*cm, 5.2*cm, 1.6*cm, 9.2*cm, 2.8*cm, 3.2*cm]
+        col_widths = [2.1*cm, 2.1*cm, 2.0*cm, 3.0*cm, 4.0*cm, 1.2*cm, 7.2*cm, 2.2*cm, 1.9*cm]
+        # Larguras para limitar altura de células longas
+        try:
+            idx_desc = colunas_pdf.index('Descrição') if 'colunas_pdf' in locals() else colunas.index('Descrição')
+            idx_forn = colunas_pdf.index('Fornecedor') if 'colunas_pdf' in locals() else colunas.index('Fornecedor')
+            desc_w = col_widths[idx_desc]
+            forn_w = col_widths[idx_forn]
+        except Exception:
+            desc_w = None
+            forn_w = None
         atraso_mask = None
         if 'atrasado' in df_pedidos.columns:
             # tenta alinhar por índice; fallback sem destaque se não casar
@@ -1158,9 +1177,9 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
             row = []
             for c in df_pdf.columns:
                 if c == 'Descrição':
-                    row.append(Paragraph(str(r[c]), desc_style))
+                    row.append(Paragraph(_truncate_text(str(r[c]), 135), desc_style))
                 elif c == 'Fornecedor':
-                    row.append(Paragraph(str(r[c]), forn_style))
+                    row.append(Paragraph(_truncate_text(str(r[c]), 60), forn_style))
                 elif c == 'Data OC':
                     row.append(_safe_date(r[c]))
                 elif c == 'Qtde. Pendente':
@@ -1197,7 +1216,16 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
         df_flow = pd.DataFrame(rows_list, columns=header)
 
         rows_per_page = 18
-        col_widths = [2.6*cm, 2.6*cm, 2.6*cm, 3.4*cm, 5.2*cm, 1.6*cm, 9.2*cm, 2.8*cm, 3.2*cm]
+        col_widths = [2.1*cm, 2.1*cm, 2.0*cm, 3.0*cm, 4.0*cm, 1.2*cm, 7.2*cm, 2.2*cm, 1.9*cm]
+        # Larguras para limitar altura de células longas
+        try:
+            idx_desc = colunas_pdf.index('Descrição') if 'colunas_pdf' in locals() else colunas.index('Descrição')
+            idx_forn = colunas_pdf.index('Fornecedor') if 'colunas_pdf' in locals() else colunas.index('Fornecedor')
+            desc_w = col_widths[idx_desc]
+            forn_w = col_widths[idx_forn]
+        except Exception:
+            desc_w = None
+            forn_w = None
         atraso_mask = None
         if 'atrasado' in df_fornecedor.columns:
             try:
@@ -1280,9 +1308,9 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
             row = []
             for c in df_pdf.columns:
                 if c == 'Descrição':
-                    row.append(Paragraph(str(r[c]), desc_style))
+                    row.append(Paragraph(_truncate_text(str(r[c]), 135), desc_style))
                 elif c == 'Fornecedor':
-                    row.append(Paragraph(str(r[c]), forn_style))
+                    row.append(Paragraph(_truncate_text(str(r[c]), 60), forn_style))
                 elif c == 'Data OC':
                     row.append(_safe_date(r[c]))
                 elif c == 'Qtde. Pendente':
@@ -1319,7 +1347,16 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
         df_flow = pd.DataFrame(rows_list, columns=header)
 
         rows_per_page = 18
-        col_widths = [2.6*cm, 2.6*cm, 2.6*cm, 3.4*cm, 5.2*cm, 1.6*cm, 9.2*cm, 2.8*cm, 3.2*cm]
+        col_widths = [2.1*cm, 2.1*cm, 2.0*cm, 3.0*cm, 4.0*cm, 1.2*cm, 7.2*cm, 2.2*cm, 1.9*cm]
+        # Larguras para limitar altura de células longas
+        try:
+            idx_desc = colunas_pdf.index('Descrição') if 'colunas_pdf' in locals() else colunas.index('Descrição')
+            idx_forn = colunas_pdf.index('Fornecedor') if 'colunas_pdf' in locals() else colunas.index('Fornecedor')
+            desc_w = col_widths[idx_desc]
+            forn_w = col_widths[idx_forn]
+        except Exception:
+            desc_w = None
+            forn_w = None
         atraso_mask = None
         if 'atrasado' in df_dept.columns:
             try:
@@ -1342,5 +1379,4 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
     except Exception as e:
         st.error(f"Erro: {e}")
         return None
-
 
