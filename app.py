@@ -34,7 +34,14 @@ from src.utils.formatting import formatar_moeda_br
 from src.ui.dashboard import exibir_dashboard
 from src.ui.mapa import exibir_mapa
 from src.ui.consulta import exibir_consulta_pedidos
-from src.ui.gestao_pedidos import exibir_gestao_pedidos
+try:
+    from src.ui.gestao_pedidos import exibir_gestao_pedidos
+except Exception as e:
+    import streamlit as st
+    st.error(f"Erro importando gestao_pedidos: {e}")
+    def exibir_gestao_pedidos(*args, **kwargs):
+        st.stop()
+
 from src.ui.ficha_material_page import exibir_ficha_material
 from src.ui.gestao_usuarios import exibir_gestao_usuarios
 from src.ui.admin_saas import exibir_admin_saas
