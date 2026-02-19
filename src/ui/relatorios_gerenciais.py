@@ -106,6 +106,8 @@ def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str,
         return
 
     dfp = df.copy()
+    # garante rótulos categóricos (evita eixo numérico para IDs)
+    dfp[y_col] = dfp[y_col].astype(str)
     # rótulo BRL quando for total; senão, formata número simples
     if x_col == "total":
         dfp["_lbl"] = dfp[x_col].apply(lambda v: formatar_moeda_br(_as_float(v)))
@@ -124,6 +126,7 @@ def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str,
             text="_lbl",
         )
         fig.update_traces(textposition="outside", cliponaxis=False)
+        fig.update_yaxes(type="category")
         fig.update_layout(
             margin=dict(l=10, r=10, t=46, b=10),
             height=height,
@@ -892,7 +895,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             df_plot['frota_label'] = df_plot['cod_equipamento'].map(_cat_str)
         else:
             df_plot['frota_label'] = '(Sem código)'
-        _plot_hbar_with_labels(df_plot, y_col="cod_equipamento", x_col="total", title="Top frotas por gasto", height=420)
+        _plot_hbar_with_labels(df_plot, y_col="frota_label", x_col="total", title="Top frotas por gasto", height=420)
 
         df_show = df_f.copy()
         df_show["Frota"] = df_show["cod_equipamento"].fillna("(Sem código)").astype(str)
@@ -952,4 +955,3 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
         _render_common_actions(df_d, "gastos_por_departamento", dt_ini, dt_fim)
-
