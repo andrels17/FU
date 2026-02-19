@@ -431,41 +431,74 @@ def gerar_relatorio_departamento(df_pedidos, departamento, formatar_moeda_br):
 
 
 def preparar_dados_exportacao(df):
-    """Prepara dados para exportação"""
-    
-    colunas = [
-        'nr_oc', 'nr_solicitacao', 'departamento', 'descricao',
-        'cod_material', 'cod_equipamento',
-        'qtde_solicitada', 'qtde_entregue', 'qtde_pendente',
-        'fornecedor_nome', 'fornecedor_cidade', 'fornecedor_uf',
-        'data_solicitacao', 'data_oc', 'previsao_entrega',
-        'status', 'valor_total'
+    """Prepara dados para exportação.
+
+    Aceita tanto o dataframe "cru" (colunas do banco) quanto um dataframe já pré-formatado
+    (com colunas renomeadas como 'Valor (R$)', 'Status', etc.).
+    """
+    if df is None or getattr(df, "empty", True):
+        return df
+
+    base = df.copy()
+
+    # Se vier do banco (colunas cruas), aplica seleção e rename padrão
+    if ("nr_oc" in base.columns) or ("valor_total" in base.columns) or ("status" in base.columns):
+        colunas = [
+            'nr_oc', 'nr_solicitacao', 'departamento', 'descricao',
+            'cod_material', 'cod_equipamento',
+            'qtde_solicitada', 'qtde_entregue', 'qtde_pendente',
+            'fornecedor_nome', 'fornecedor_cidade', 'fornecedor_uf',
+            'data_solicitacao', 'data_oc', 'previsao_entrega',
+            'status', 'valor_total'
+        ]
+
+        colunas_existentes = [c for c in colunas if c in base.columns]
+        df_export = base[colunas_existentes].copy()
+
+        rename = {
+            'nr_oc': 'N° OC',
+            'nr_solicitacao': 'N° Solicitação',
+            'departamento': 'Departamento',
+            'descricao': 'Descrição',
+            'cod_material': 'Código',
+            'cod_equipamento': 'Frota',
+            'qtde_solicitada': 'Qtd Solicitada',
+            'qtde_entregue': 'Qtd Entregue',
+            'qtde_pendente': 'Qtd Pendente',
+            'fornecedor_nome': 'Fornecedor',
+            'fornecedor_cidade': 'Cidade',
+            'fornecedor_uf': 'UF',
+            'data_solicitacao': 'Data Solicitação',
+            'data_oc': 'Data OC',
+            'previsao_entrega': 'Previsão',
+            'status': 'Status',
+            'valor_total': 'Valor (R$)'
+        }
+        df_export = df_export.rename(columns=rename)
+    else:
+        # Já veio pré-formatado (ex.: do dashboard/relatórios)
+        rename2 = {
+            'Equipamento': 'Frota',
+            'cod_equipamento': 'Frota',
+            'nr_oc': 'N° OC',
+            'data_oc': 'Data OC',
+            'descricao': 'Descrição',
+            'fornecedor_nome': 'Fornecedor',
+            'fornecedor_uf': 'UF',
+            'valor_total': 'Valor (R$)',
+            'status': 'Status',
+        }
+        df_export = base.rename(columns=rename2)
+
+    # Ordena colunas finais (quando existirem)
+    ordem = [
+        'Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF',
+        'Descrição', 'Valor (R$)', 'Status'
     ]
-    
-    colunas_existentes = [c for c in colunas if c in df.columns]
-    df_export = df[colunas_existentes].copy()
-    
-    rename = {
-        'nr_oc': 'N° OC',
-        'nr_solicitacao': 'N° Solicitação',
-        'departamento': 'Departamento',
-        'descricao': 'Descrição',
-        'cod_material': 'Código',
-        'cod_equipamento': 'Frota',
-        'qtde_solicitada': 'Qtd Solicitada',
-        'qtde_entregue': 'Qtd Entregue',
-        'qtde_pendente': 'Qtd Pendente',
-        'fornecedor_nome': 'Fornecedor',
-        'fornecedor_cidade': 'Cidade',
-        'fornecedor_uf': 'UF',
-        'data_solicitacao': 'Data Solicitação',
-        'data_oc': 'Data OC',
-        'previsao_entrega': 'Previsão',
-        'status': 'Status',
-        'valor_total': 'Valor (R$)'
-    }
-    
-    return df_export.rename(columns=rename)
+    cols = [c for c in ordem if c in df_export.columns]
+    # Mantém demais colunas no fim (caso existam)
+    extras = [c for c in df_export.columns if c not in cols]
+    return df_export[cols + extras].copy()
 
 
 # ============================================
@@ -594,6 +627,24 @@ def _safe_money(v, formatar_moeda_br):
         if fv <= 0:
             return "-"
         return formatar_moeda_br(fv)
+    except Exception:
+        return "-"
+
+def _safe_date(v):
+    """Formata datas (aceita datetime/date/str) em dd/mm/aaaa."""
+    try:
+        if v is None:
+            return "-"
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return "-"
+            dt = pd.to_datetime(s, errors='coerce')
+        else:
+            dt = pd.to_datetime(v, errors='coerce')
+        if pd.isna(dt):
+            return "-"
+        return dt.strftime('%d/%m/%Y')
     except Exception:
         return "-"
 
@@ -994,6 +1045,8 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
                     row.append(Paragraph(str(r[c]), desc_style))
                 elif c == 'Fornecedor':
                     row.append(Paragraph(str(r[c]), forn_style))
+                elif c in ('Data OC', 'Data Solicitação', 'Previsão'):
+                    row.append(_safe_date(r[c]))
                 elif c == 'Valor (R$)':
                     row.append(_safe_money(r[c], formatar_moeda_br))
                 else:
@@ -1107,6 +1160,8 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
                     row.append(Paragraph(str(r[c]), desc_style))
                 elif c == 'Fornecedor':
                     row.append(Paragraph(str(r[c]), forn_style))
+                elif c in ('Data OC', 'Data Solicitação', 'Previsão'):
+                    row.append(_safe_date(r[c]))
                 elif c == 'Valor (R$)':
                     row.append(_safe_money(r[c], formatar_moeda_br))
                 else:
@@ -1219,6 +1274,8 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
                     row.append(Paragraph(str(r[c]), desc_style))
                 elif c == 'Fornecedor':
                     row.append(Paragraph(str(r[c]), forn_style))
+                elif c in ('Data OC', 'Data Solicitação', 'Previsão'):
+                    row.append(_safe_date(r[c]))
                 elif c == 'Valor (R$)':
                     row.append(_safe_money(r[c], formatar_moeda_br))
                 else:
