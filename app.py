@@ -31,7 +31,7 @@ div[role="radiogroup"] label { font-size: 0.90rem !important; }
 
 /* Plotly: melhora leitura sem precisar reduzir zoom */
 .stPlotlyChart, .js-plotly-plot { width: 100% !important; }
-.stPlotlyChart svg text { font-size: 12px !important; }
+.stPlotlyChart glyph text { font-size: 12px !important; }
 
 /* Em telas menores, reduz padding lateral para sobrar espaço pro gráfico */
 @media (max-width: 1100px){
@@ -261,7 +261,7 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
   user-select: none;
   text-decoration: none !important;
 }
-.fu-compact-nav a.fu-ico svg{
+.fu-compact-nav a.fu-ico glyph{
   width: 22px;
   height: 22px;
   fill: rgba(255,255,255,0.92);
@@ -273,7 +273,7 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
   border-color: rgba(239,68,68,0.35) !important;
   background: rgba(239,68,68,0.10) !important;
 }
-.fu-compact-nav a.fu-ico:hover svg{
+.fu-compact-nav a.fu-ico:hover glyph{
   fill: rgba(239,68,68,0.95) !important;
 }
 .fu-compact-nav a.fu-ico.fu-ico--active{
@@ -281,12 +281,12 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
   background: rgba(239,68,68,0.95) !important;
   box-shadow: 0 12px 24px rgba(239,68,68,0.18);
 }
-.fu-compact-nav a.fu-ico.fu-ico--active svg{
+.fu-compact-nav a.fu-ico.fu-ico--active glyph{
   fill: #ffffff !important;
 }
 @media (prefers-reduced-motion: reduce){
   .fu-compact-nav a.fu-ico{ transition:none !important; }
-  .fu-compact-nav a.fu-ico svg{ transition:none !important; }
+  .fu-compact-nav a.fu-ico glyph{ transition:none !important; }
 }
 
 
@@ -788,19 +788,19 @@ def page_label(page_id: str, total_alertas: int = 0) -> str:
 def _fu_glyph(icon_key: str) -> str:
     """SVG monocromático (controlado por CSS) para sidebar compacta."""
     icons = {
-        "home": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 7v11a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10l9-7z"/></svg>',
-        "dashboard": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h7V4H4v9zm9 7h7V11h-7v9zM4 20h7v-5H4v5zm9-16v5h7V4h-7z"/></svg>',
-        "bell": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zM18 16v-5a6 6 0 1 0-12 0v5L4 18v1h16v-1l-2-2z"/></svg>',
-        "search": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18a8 8 0 1 1 5.29-14.02A8 8 0 0 1 10 18zm11 3-6-6 1.41-1.41 6 6L21 21z"/></svg>',
-        "user": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-5 0-9 2.5-9 5.5V22h18v-2.5C21 16.5 17 14 12 14z"/></svg>',
-        "receipt": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-2-1-2 1-2-1-2 1-2-1-2 1V2zm3 5h6v2H9V7zm0 4h6v2H9v-2zm0 4h6v2H9v-2z"/></svg>',
-        "cart": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM6.2 6h15.1l-1.4 7.2a2 2 0 0 1-2 1.6H8.1a2 2 0 0 1-2-1.6L4.3 2H2v2h1l2.2 11.2A4 4 0 0 0 9.1 18H19v-2H9.1a2 2 0 0 1-2-1.6L6.8 13h11.1a4 4 0 0 0 3.9-3.2L23.6 6H6.2z"/></svg>',
-        "map": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 3.5 15 5.7 9 3 3.5 4.8A1 1 0 0 0 3 5.7v14.6a1 1 0 0 0 1.3.95L9 19.3l6 2.7 5.5-1.8a1 1 0 0 0 .7-.95V4.5a1 1 0 0 0-1.2-1zM9 17.6l-4 1.3V6.4l4-1.3v12.5zm6 1.3-4-1.8V4.6l4 1.8v12.5zm4-1.3-4 1.3V6.4l4-1.3v12.5z"/></svg>',
-        "whatsapp": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2zm5.7 14.3c-.2.6-1.1 1.1-1.8 1.2-.5.1-1.2.2-3.9-.8-3.4-1.3-5.5-4.6-5.7-4.8-.2-.2-1.4-1.8-1.4-3.4 0-1.6.8-2.3 1.1-2.6.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5.2.5.8 1.9.9 2 .1.2.1.4 0 .6-.1.2-.2.4-.3.5l-.3.4c-.1.2-.3.4-.1.7.2.3.7 1.3 1.6 2.1 1.1 1 2 1.3 2.3 1.5.3.2.5.2.7 0l.9-1.1c.2-.3.5-.2.7-.1.2.1 1.6.8 1.9.9.3.1.5.2.6.4.1.2.1.7-.1 1.3z"/></svg>',
-        "chart": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16v2H2V3h2v16zm4-2H6V10h2v7zm5 0h-2V6h2v11zm5 0h-2v-5h2v5z"/></svg>',
-        "users": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zM8 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm8 2c-2.7 0-8 1.3-8 4v3h16v-3c0-2.7-5.3-4-8-4zM8 13c-2.7 0-8 1.3-8 4v3h6v-3c0-1.6.9-2.9 2.2-3.8-.1-.1-.2-.2-.2-.2z"/></svg>',
-        "database": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 3 3.8 3 6v12c0 2.2 4 4 9 4s9-1.8 9-4V6c0-2.2-4-4-9-4zm0 2c4.4 0 7 .1 7 2s-2.6 2-7 2-7-.1-7-2 2.6-2 7-2zm0 16c-4.4 0-7-.1-7-2v-2c1.6 1.1 4.7 1.7 7 1.7s5.4-.6 7-1.7v2c0 1.9-2.6 2-7 2zm0-6c-4.4 0-7-.1-7-2V10c1.6 1.1 4.7 1.7 7 1.7s5.4-.6 7-1.7v2c0 1.9-2.6 2-7 2z"/></svg>',
-        "puzzle": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v3h-2a2 2 0 1 0 0 4h2v3a2 2 0 0 1-2 2h-2v-2a2 2 0 1 0-4 0v2H7a2 2 0 0 1-2-2v-3h2a2 2 0 1 0 0-4H5V8a2 2 0 0 1 2-2h6V4a2 2 0 0 1 2-2z"/></svg>',
+        "home": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 7v11a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10l9-7z"/></glyph>',
+        "dashboard": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h7V4H4v9zm9 7h7V11h-7v9zM4 20h7v-5H4v5zm9-16v5h7V4h-7z"/></glyph>',
+        "bell": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zM18 16v-5a6 6 0 1 0-12 0v5L4 18v1h16v-1l-2-2z"/></glyph>',
+        "search": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18a8 8 0 1 1 5.29-14.02A8 8 0 0 1 10 18zm11 3-6-6 1.41-1.41 6 6L21 21z"/></glyph>',
+        "user": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-5 0-9 2.5-9 5.5V22h18v-2.5C21 16.5 17 14 12 14z"/></glyph>',
+        "receipt": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-2-1-2 1-2-1-2 1-2-1-2 1V2zm3 5h6v2H9V7zm0 4h6v2H9v-2zm0 4h6v2H9v-2z"/></glyph>',
+        "cart": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM6.2 6h15.1l-1.4 7.2a2 2 0 0 1-2 1.6H8.1a2 2 0 0 1-2-1.6L4.3 2H2v2h1l2.2 11.2A4 4 0 0 0 9.1 18H19v-2H9.1a2 2 0 0 1-2-1.6L6.8 13h11.1a4 4 0 0 0 3.9-3.2L23.6 6H6.2z"/></glyph>',
+        "map": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 3.5 15 5.7 9 3 3.5 4.8A1 1 0 0 0 3 5.7v14.6a1 1 0 0 0 1.3.95L9 19.3l6 2.7 5.5-1.8a1 1 0 0 0 .7-.95V4.5a1 1 0 0 0-1.2-1zM9 17.6l-4 1.3V6.4l4-1.3v12.5zm6 1.3-4-1.8V4.6l4 1.8v12.5zm4-1.3-4 1.3V6.4l4-1.3v12.5z"/></glyph>',
+        "whatsapp": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2zm5.7 14.3c-.2.6-1.1 1.1-1.8 1.2-.5.1-1.2.2-3.9-.8-3.4-1.3-5.5-4.6-5.7-4.8-.2-.2-1.4-1.8-1.4-3.4 0-1.6.8-2.3 1.1-2.6.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5.2.5.8 1.9.9 2 .1.2.1.4 0 .6-.1.2-.2.4-.3.5l-.3.4c-.1.2-.3.4-.1.7.2.3.7 1.3 1.6 2.1 1.1 1 2 1.3 2.3 1.5.3.2.5.2.7 0l.9-1.1c.2-.3.5-.2.7-.1.2.1 1.6.8 1.9.9.3.1.5.2.6.4.1.2.1.7-.1 1.3z"/></glyph>',
+        "chart": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16v2H2V3h2v16zm4-2H6V10h2v7zm5 0h-2V6h2v11zm5 0h-2v-5h2v5z"/></glyph>',
+        "users": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zM8 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm8 2c-2.7 0-8 1.3-8 4v3h16v-3c0-2.7-5.3-4-8-4zM8 13c-2.7 0-8 1.3-8 4v3h6v-3c0-1.6.9-2.9 2.2-3.8-.1-.1-.2-.2-.2-.2z"/></glyph>',
+        "database": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 3 3.8 3 6v12c0 2.2 4 4 9 4s9-1.8 9-4V6c0-2.2-4-4-9-4zm0 2c4.4 0 7 .1 7 2s-2.6 2-7 2-7-.1-7-2 2.6-2 7-2zm0 16c-4.4 0-7-.1-7-2v-2c1.6 1.1 4.7 1.7 7 1.7s5.4-.6 7-1.7v2c0 1.9-2.6 2-7 2zm0-6c-4.4 0-7-.1-7-2V10c1.6 1.1 4.7 1.7 7 1.7s5.4-.6 7-1.7v2c0 1.9-2.6 2-7 2z"/></glyph>',
+        "puzzle": '<glyph viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v3h-2a2 2 0 1 0 0 4h2v3a2 2 0 0 1-2 2h-2v-2a2 2 0 1 0-4 0v2H7a2 2 0 0 1-2-2v-3h2a2 2 0 1 0 0-4H5V8a2 2 0 0 1 2-2h6V4a2 2 0 0 1 2-2z"/></glyph>',
     }
     return icons.get(icon_key, icons["dashboard"])
 
@@ -1773,4 +1773,3 @@ st.markdown('''
 }
 </style>
 ''', unsafe_allow_html=True)
-
