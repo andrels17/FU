@@ -582,9 +582,6 @@ def exibir_consulta_pedidos(_supabase):
             st.session_state["c_atraso"] = False
             st.session_state["c_pag"] = 1
 
-        # volta o select para neutro (evita re-aplicar no próximo rerun)
-        st.session_state["consulta_preset"] = "—"
-
     # -------------------- Tabs para reduzir poluição
     st.session_state.setdefault("consulta_tab", "Lista")
     st.session_state.setdefault("consulta_tab_target", None)
