@@ -690,134 +690,137 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     with tab_resumo:
         _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_resumo')
-        
-st.divider()
-
-with st.container(border=True):
-    st.markdown("### Materiais (ranking)")
-
-    c1, c2, c3 = st.columns([2, 2, 2])
-    with c1:
-        criterio = st.radio(
-            "Ordenar por",
-            ["Preço unitário (estimado)", "Gasto total (soma)", "Quantidade de pedidos"],
-            index=0,
-            horizontal=True,
-            key="rg_rank_mat_criterio",
-        )
-    with c2:
-        ordem = st.radio(
-            "Ordem",
-            ["Decrescente", "Crescente"],
-            index=0,
-            horizontal=True,
-            key="rg_rank_mat_ordem",
-        )
-    with c3:
-        topn_rank = _top_selector("rg_rank_mat")
-
-    # Base para ranking
-    df_rank = _materiais_mais_caros(df_base, mode="unit" if criterio.startswith("Preço") else "total")
-
-    if df_rank.empty:
-        st.caption("Sem dados suficientes para montar o ranking.")
-    else:
-        asc = (ordem == "Crescente")
-
-        # coluna de ordenação e formatação
-        if criterio == "Quantidade de pedidos":
-            df_rank["_ord"] = pd.to_numeric(df_rank.get("qtd_pedidos", 0), errors="coerce").fillna(0).astype(int)
-            x_col = "_ord"
-            titulo = "Top materiais por quantidade de pedidos"
-            is_money = False
-        else:
-            df_rank["_ord"] = pd.to_numeric(df_rank.get("valor", 0), errors="coerce").fillna(0.0)
-            x_col = "_ord"
-            titulo = "Top materiais por preço unitário" if criterio.startswith("Preço") else "Top materiais por gasto total"
-            is_money = True
-
-        df_plot = df_rank.copy()
-        df_plot["label"] = df_plot["cod_material"].astype(str) + " · " + df_plot["descricao"].astype(str)
-        df_plot = df_plot.sort_values("_ord", ascending=asc)
-
-        # aplica Top N mantendo ordem
-        if topn_rank:
-            df_plot = df_plot.head(topn_rank)
-
-        # ========= Métricas =========
-        total_itens = int(len(df_plot))
-        total_pedidos = int(pd.to_numeric(df_plot.get("qtd_pedidos", 0), errors="coerce").fillna(0).sum())
-        soma_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).sum())
-        max_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).max()) if total_itens else 0.0
-        min_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).min()) if total_itens else 0.0
-
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Itens no gráfico", f"{total_itens:,}".replace(",", "."))
-        k2.metric("Pedidos (soma)", f"{total_pedidos:,}".replace(",", "."))
-
-        if is_money:
-            k3.metric("Soma (seleção)", formatar_moeda_br(soma_ord))
-            k4.metric("Maior / Menor", f"{formatar_moeda_br(max_ord)} / {formatar_moeda_br(min_ord)}")
-        else:
-            k3.metric("Soma (seleção)", f"{soma_ord:,.0f}".replace(",", "."))
-            k4.metric("Maior / Menor", f"{max_ord:,.0f}".replace(",", ".") + " / " + f"{min_ord:,.0f}".replace(",", "."))
-
         st.divider()
 
-        # ========= Gráfico =========
-        if is_money:
-            # usa x_col="total" para aplicar rótulos em moeda BR no helper
-            df_plot["total"] = df_plot["_ord"].astype(float)
-            _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title=titulo, height=520)
-        else:
-            _plot_hbar_with_labels(df_plot, y_col="label", x_col="_ord", title=titulo, height=520)
-
-        # ========= Tabela =========
-        df_tbl = df_plot.copy()
-        df_tbl["Pedidos"] = pd.to_numeric(df_tbl.get("qtd_pedidos", 0), errors="coerce").fillna(0).astype(int)
-
-        if is_money:
-            df_tbl["Valor"] = df_tbl["_ord"].apply(lambda v: formatar_moeda_br(_as_float(v)))
-        else:
-            df_tbl["Valor"] = df_tbl["_ord"].apply(lambda v: f"{_as_float(v):,.0f}".replace(",", "."))
-
-        st.dataframe(
-            df_tbl[["cod_material", "descricao", "Pedidos", "Valor"]].rename(
-                columns={"cod_material": "Cód. Material", "descricao": "Descrição"}
-            ),
-            use_container_width=True,
-            hide_index=True,
-        )
-
-
-        # ===== Aba Gestor =====
-
-
-
         with st.container(border=True):
-            st.markdown("### Resumo do período aplicado")
-            a1, a2, a3, a4 = st.columns(4)
-            a1.metric("Pedidos", qtd_geral)
-            a2.metric("Gasto total", formatar_moeda_br(total_geral), f"{delta_pct:.1f}% vs anterior" if total_prev else None)
-            a3.metric("Período anterior", formatar_moeda_br(total_prev))
-            a4.metric("Ticket médio", formatar_moeda_br(ticket))
-            st.caption(
-                f"Período: **{dt_ini.strftime('%d/%m/%Y')}** a **{dt_fim.strftime('%d/%m/%Y')}** · "
-                f"Data: **{filtros.date_field}** · Situação: **{st.session_state.get('rg_entregue_label','Todos')}**"
-            )
+            st.markdown("### Materiais (ranking)")
 
-        with st.container(border=True):
-            st.markdown("### Evolução do gasto (semanal)")
-            df_evol = _evolucao_semanal(df_base, filtros.date_field)
-            if df_evol.empty:
-                st.caption("Sem dados suficientes para a evolução semanal.")
+            c1, c2, c3 = st.columns([2, 2, 2])
+            with c1:
+                criterio = st.radio(
+                    "Ordenar por",
+                    ["Preço unitário (estimado)", "Gasto total (soma)", "Quantidade de pedidos"],
+                    index=0,
+                    horizontal=True,
+                    key="rg_rank_mat_criterio",
+                )
+            with c2:
+                ordem = st.radio(
+                    "Ordem",
+                    ["Decrescente", "Crescente"],
+                    index=0,
+                    horizontal=True,
+                    key="rg_rank_mat_ordem",
+                )
+            with c3:
+                topn_rank = _top_selector("rg_rank_mat")
+
+            # Base para ranking
+            df_rank = _materiais_mais_caros(df_base, mode="unit" if criterio.startswith("Preço") else "total")
+
+            if df_rank.empty:
+                st.caption("Sem dados suficientes para montar o ranking.")
             else:
-                st.line_chart(df_evol.set_index("data")["total"])
+                asc = (ordem == "Crescente")
 
-        st.divider()
+                # coluna de ordenação e formatação
+                if criterio == "Quantidade de pedidos":
+                    df_rank["_ord"] = pd.to_numeric(df_rank.get("qtd_pedidos", 0), errors="coerce").fillna(0).astype(int)
+                    x_col = "_ord"
+                    titulo = "Top materiais por quantidade de pedidos"
+                    is_money = False
+                else:
+                    df_rank["_ord"] = pd.to_numeric(df_rank.get("valor", 0), errors="coerce").fillna(0.0)
+                    x_col = "_ord"
+                    titulo = "Top materiais por preço unitário" if criterio.startswith("Preço") else "Top materiais por gasto total"
+                    is_money = True
 
-    
-    
+                df_plot = df_rank.copy()
+                df_plot["label"] = df_plot["cod_material"].astype(str) + " · " + df_plot["descricao"].astype(str)
+                df_plot = df_plot.sort_values("_ord", ascending=asc)
+
+                # aplica Top N mantendo ordem
+                if topn_rank:
+                    df_plot = df_plot.head(topn_rank)
+
+                # ========= Métricas =========
+                total_itens = int(len(df_plot))
+                total_pedidos = int(pd.to_numeric(df_plot.get("qtd_pedidos", 0), errors="coerce").fillna(0).sum())
+                soma_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).sum())
+                max_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).max()) if total_itens else 0.0
+                min_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).min()) if total_itens else 0.0
+
+                k1, k2, k3, k4 = st.columns(4)
+                k1.metric("Itens no gráfico", f"{total_itens:,}".replace(",", "."))
+                k2.metric("Pedidos (soma)", f"{total_pedidos:,}".replace(",", "."))
+
+                if is_money:
+                    k3.metric("Soma (seleção)", formatar_moeda_br(soma_ord))
+                    k4.metric("Maior / Menor", f"{formatar_moeda_br(max_ord)} / {formatar_moeda_br(min_ord)}")
+                else:
+                    k3.metric("Soma (seleção)", f"{soma_ord:,.0f}".replace(",", "."))
+                    k4.metric("Maior / Menor", f"{max_ord:,.0f}".replace(",", ".") + " / " + f"{min_ord:,.0f}".replace(",", "."))
+
+                st.divider()
+
+                # ========= Gráfico =========
+                if is_money:
+                    # usa x_col="total" para aplicar rótulos em moeda BR no helper
+                    df_plot["total"] = df_plot["_ord"].astype(float)
+                    _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title=titulo, height=520)
+                else:
+                    _plot_hbar_with_labels(df_plot, y_col="label", x_col="_ord", title=titulo, height=520)
+
+                # ========= Tabela =========
+                df_tbl = df_plot.copy()
+                df_tbl["Pedidos"] = pd.to_numeric(df_tbl.get("qtd_pedidos", 0), errors="coerce").fillna(0).astype(int)
+
+                if is_money:
+                    df_tbl["Valor"] = df_tbl["_ord"].apply(lambda v: formatar_moeda_br(_as_float(v)))
+                else:
+                    df_tbl["Valor"] = df_tbl["_ord"].apply(lambda v: f"{_as_float(v):,.0f}".replace(",", "."))
+
+                st.dataframe(
+                    df_tbl[["cod_material", "descricao", "Pedidos", "Valor"]].rename(
+                        columns={"cod_material": "Cód. Material", "descricao": "Descrição"}
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+
+                # ===== Aba Gestor =====
+
+
+
+                with st.container(border=True):
+                    st.markdown("### Resumo do período aplicado")
+                    a1, a2, a3, a4 = st.columns(4)
+                    a1.metric("Pedidos", qtd_geral)
+                    a2.metric("Gasto total", formatar_moeda_br(total_geral), f"{delta_pct:.1f}% vs anterior" if total_prev else None)
+                    a3.metric("Período anterior", formatar_moeda_br(total_prev))
+                    a4.metric("Ticket médio", formatar_moeda_br(ticket))
+                    st.caption(
+                        f"Período: **{dt_ini.strftime('%d/%m/%Y')}** a **{dt_fim.strftime('%d/%m/%Y')}** · "
+                        f"Data: **{filtros.date_field}** · Situação: **{st.session_state.get('rg_entregue_label','Todos')}**"
+                    )
+
+                with st.container(border=True):
+                    st.markdown("### Evolução do gasto (semanal)")
+                    df_evol = _evolucao_semanal(df_base, filtros.date_field)
+                    if df_evol.empty:
+                        st.caption("Sem dados suficientes para a evolução semanal.")
+                    else:
+                        st.line_chart(df_evol.set_index("data")["total"])
+
+                st.divider()
+
+
+
+
+
+
+        
 
 
 
