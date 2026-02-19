@@ -664,31 +664,34 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                 st.markdown("### 🏆 Ranking executivo")
                 top3 = df_g.head(3).copy()
                 cols = st.columns(3)
+
                 for i in range(3):
                     if i >= len(top3):
                         cols[i].metric(f"#{i+1}", "—")
                         continue
+
                     r = top3.iloc[i]
                     delta_txt = None
                     if "delta_pct" in df_g.columns:
                         delta_txt = f"{_as_float(r.get('delta_pct')):.1f}%"
+
                     cols[i].metric(
                         f"#{i+1} {r.get('gestor_nome','(Sem nome)')}",
-                        formatar_moeda_br(_as_float(r.get('total'))),
-                        f"{_as_float(r.get('participacao_pct')):.1f}% do total" + (f" · Δ {delta_txt}" if delta_txt else ""),
+                        formatar_moeda_br(_as_float(r.get("total"))),
+                        f"{_as_float(r.get('participacao_pct')):.1f}% do total"
+                        + (f" · Δ {delta_txt}" if delta_txt else ""),
                     )
 
-            # Destaques (cresceu / caiu)
+            # ===== Destaques (cresceu / caiu) =====
             if "delta_pct" in df_g.columns:
                 alta = df_g[df_g["delta_pct"] > 20].copy()
                 queda = df_g[df_g["delta_pct"] < -20].copy()
 
                 if not alta.empty:
                     with st.container(border=True):
-            st.markdown("#### 📈 Crescimentos relevantes (> 20%)")
+                        st.markdown("#### 📈 Crescimentos relevantes (> 20%)")
                         st.dataframe(
-                            alta[["gestor_nome", "total", "prev_total", "delta_pct"]]
-                            .assign(
+                            alta[["gestor_nome", "total", "prev_total", "delta_pct"]].assign(
                                 total=lambda x: x["total"].map(lambda v: formatar_moeda_br(_as_float(v))),
                                 prev_total=lambda x: x["prev_total"].map(lambda v: formatar_moeda_br(_as_float(v))),
                                 delta_pct=lambda x: x["delta_pct"].map(lambda v: f"{_as_float(v):.1f}%"),
@@ -699,10 +702,9 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
                 if not queda.empty:
                     with st.container(border=True):
-            st.markdown("#### 📉 Quedas relevantes (< -20%)")
+                        st.markdown("#### 📉 Quedas relevantes (< -20%)")
                         st.dataframe(
-                            queda[["gestor_nome", "total", "prev_total", "delta_pct"]]
-                            .assign(
+                            queda[["gestor_nome", "total", "prev_total", "delta_pct"]].assign(
                                 total=lambda x: x["total"].map(lambda v: formatar_moeda_br(_as_float(v))),
                                 prev_total=lambda x: x["prev_total"].map(lambda v: formatar_moeda_br(_as_float(v))),
                                 delta_pct=lambda x: x["delta_pct"].map(lambda v: f"{_as_float(v):.1f}%"),
@@ -711,7 +713,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                             hide_index=True,
                         )
 
-            # Insight automático
+            # ===== Insight automático =====
             try:
                 top = df_g.iloc[0]
                 st.info(
@@ -721,150 +723,50 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             except Exception:
                 pass
 
-            # ===== Heatmap Gestor x Departamento (matriz) =====
+            # ===== Top Departamentos (colapsado) =====
             with st.container(border=True):
-            st.markdown("#### 🗺️ Matriz Gestor × Departamento (gasto)")
+                st.markdown("#### 🏢 Top Departamentos (gasto)")
+
                 if "departamento" not in df_base.columns:
                     st.caption("Sem coluna 'departamento' na base.")
                 else:
-                    # atribui gestor por departamento usando links_df
                     tmp = df_base.copy()
                     tmp["departamento"] = tmp["departamento"].fillna("").astype(str).str.strip()
-
-                    # garante colunas no links_df
-                    ldf = links_df.copy()
-                    if not ldf.empty:
-                        ldf["departamento"] = ldf["departamento"].fillna("").astype(str).str.strip()
-                        ldf["gestor_user_id"] = ldf["gestor_user_id"].astype(str)
-
-                    tmp = tmp.merge(ldf[["departamento", "gestor_user_id"]], on="departamento", how="left")
-                    # nome do gestor
-                    um = user_df.copy()
-                    if "user_id" in um.columns:
-                        um = um.rename(columns={"user_id": "gestor_user_id"})
-                    tmp = tmp.merge(um[["gestor_user_id", "nome"]].rename(columns={"nome": "gestor_nome"}), on="gestor_user_id", how="left")
-
-                    tmp["gestor_nome"] = tmp["gestor_nome"].fillna("(Sem gestor)")
                     tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
 
-                    piv = tmp.pivot_table(index="gestor_nome", columns="departamento", values="_valor", aggfunc="sum", fill_value=0.0)
-                    if piv.empty:
-                        st.caption("Sem dados para montar a matriz.")
-                    else:
-                        st.dataframe(piv, use_container_width=True)
-                        try:
-                            import plotly.express as px  # type: ignore
-                            fig = px.imshow(piv, aspect="auto", title="Heatmap de gastos (Gestor × Departamento)")
-                            fig.update_layout(height=520, margin=dict(l=10, r=10, t=40, b=10))
-                            st.plotly_chart(fig, use_container_width=True)
-                        except Exception:
-                            st.caption("Plotly não disponível para heatmap; exibindo tabela acima.")
-
-            # ===== Performance operacional por gestor =====
-            with st.expander("⚠️ Performance por gestor", expanded=False):
-                tmp = df_base.copy()
-                tmp["departamento"] = tmp.get("departamento", "").fillna("").astype(str).str.strip()
-                ldf = links_df.copy()
-                if not ldf.empty:
-                    ldf["departamento"] = ldf["departamento"].fillna("").astype(str).str.strip()
-                    ldf["gestor_user_id"] = ldf["gestor_user_id"].astype(str)
-                    tmp = tmp.merge(ldf[["departamento", "gestor_user_id"]], on="departamento", how="left")
-                um = user_df.copy()
-                if "user_id" in um.columns:
-                    um = um.rename(columns={"user_id": "gestor_user_id"})
-                if "nome" in um.columns:
-                    tmp = tmp.merge(um[["gestor_user_id", "nome"]].rename(columns={"nome": "gestor_nome"}), on="gestor_user_id", how="left")
-                tmp["gestor_nome"] = tmp.get("gestor_nome", pd.Series(["(Sem gestor)"] * len(tmp))).fillna("(Sem gestor)")
-                tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
-
-                metrics = []
-                if "atrasado" in tmp.columns:
-                    tmp["_atrasado"] = pd.to_numeric(tmp["atrasado"], errors="coerce").fillna(0).astype(float)
-                    metrics.append("atraso")
-                if "entregue" in tmp.columns:
-                    sb = tmp["entregue"].apply(lambda x: bool(x) if isinstance(x, bool) else (str(x).strip().lower() in ("true","t","1","sim","s","yes")))
-                    tmp["_pendente"] = (~sb).astype(int)
-                    metrics.append("pendente")
-
-                if not metrics:
-                    st.caption("Sem colunas operacionais (atrasado/entregue) para calcular performance.")
-                else:
-                    agg = {"_valor": "sum"}
-                    if "atraso" in metrics:
-                        agg["_atrasado"] = "mean"
-                    if "pendente" in metrics:
-                        agg["_pendente"] = "mean"
-
-                    perf = tmp.groupby("gestor_nome", dropna=False).agg(agg).reset_index()
-                    perf = perf.rename(columns={"_valor": "total"})
-                    if "_atrasado" in perf.columns:
-                        perf["% atraso"] = perf["_atrasado"] * 100
-                    if "_pendente" in perf.columns:
-                        perf["% pendente"] = perf["_pendente"] * 100
-                    perf = perf.sort_values("total", ascending=False)
-
-                    view_cols = ["gestor_nome", "total"]
-                    if "% atraso" in perf.columns:
-                        view_cols.append("% atraso")
-                    if "% pendente" in perf.columns:
-                        view_cols.append("% pendente")
-
-                    perf_view = perf[view_cols].copy()
-                    perf_view["total"] = perf_view["total"].map(lambda v: formatar_moeda_br(_as_float(v)))
-                    if "% atraso" in perf_view.columns:
-                        perf_view["% atraso"] = perf_view["% atraso"].map(lambda v: f"{_as_float(v):.1f}%")
-                    if "% pendente" in perf_view.columns:
-                        perf_view["% pendente"] = perf_view["% pendente"].map(lambda v: f"{_as_float(v):.1f}%")
-
-                    st.dataframe(perf_view, use_container_width=True, hide_index=True)
-
-        # gráfico (premium + rótulos)
-        df_plot = df_g.head(topn) if topn else df_g
-        _plot_hbar_with_labels(df_plot, y_col="gestor_nome", x_col="total", title="Top gestores por gasto", height=420)
-
-        # tabela
-        df_show = df_g.copy()
-        df_show["Gestor"] = df_show["gestor_nome"].fillna("(Sem nome)")
-        df_show["Role"] = df_show["gestor_role"].fillna("")
-        df_show["E-mail"] = df_show["gestor_email"].fillna("")
-        df_show["Pedidos"] = df_show.get("qtd_pedidos", 0).fillna(0).astype(int)
-        df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
-        df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
-
-        cols = ["Gestor", "Role", "E-mail", "Pedidos", "Total", "% do total"]
-        if comparar:
-            df_show["Anterior"] = df_show["prev_total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
-            df_show["Δ%"] = df_show["delta_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
-            cols = ["Gestor", "Role", "E-mail", "Pedidos", "Total", "Anterior", "Δ%", "% do total"]
-
-        st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
-
-        with st.expander("🔎 Ver pedidos de um gestor", expanded=False):
-            opt_names = sorted(list(set(df_show["Gestor"].tolist())))
-            sel_nome = st.selectbox("Gestor", options=opt_names, key="rg_drill_gestor_nome")
-            row = df_g[df_g["gestor_nome"].fillna("(Sem nome)") == sel_nome].head(1)
-            if row.empty:
-                st.info("Selecione um gestor válido.")
-            else:
-                sel_gid = row["gestor_user_id"].iloc[0]
-                deptos = [d for d, gid in dept_map.items() if str(gid) == str(sel_gid)]
-                st.caption(f"Departamentos vinculados: {', '.join(deptos) if deptos else '(nenhum)'}")
-                df_det = df_base[df_base.get("departamento", "").astype(str).isin(deptos)].copy() if deptos else df_base.iloc[0:0].copy()
-
-                if df_det.empty:
-                    st.warning("Sem pedidos para este gestor no período aplicado.")
-                else:
-                    cols_det = _cols_detail(df_det, filtros.date_field)
-                    st.dataframe(df_det[cols_det], use_container_width=True, hide_index=True)
-                    csv_det = df_det[cols_det].to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        "⬇️ Baixar pedidos (gestor)",
-                        csv_det,
-                        _download_name("pedidos_gestor", dt_ini, dt_fim),
-                        "text/csv",
-                        use_container_width=True,
+                    dept_total = (
+                        tmp.groupby("departamento")["_valor"]
+                        .sum()
+                        .sort_values(ascending=False)
                     )
+                    dept_total = dept_total[dept_total.index.astype(str).str.strip() != ""]
 
+                    if dept_total.empty:
+                        st.caption("Sem dados suficientes para listar departamentos.")
+                    else:
+                        top_n = st.slider("Top N departamentos", min_value=5, max_value=30, value=10, step=5, key="rg_top_dept_insights")
+                        dept_top = dept_total.head(top_n).reset_index()
+                        dept_top.columns = ["departamento", "total"]
+                        dept_top["% do total"] = dept_top["total"].apply(lambda v: f"{_share_percent(total_geral, _as_float(v)):.1f}%")
+                        dept_top["total_fmt"] = dept_top["total"].apply(lambda v: formatar_moeda_br(_as_float(v)))
+
+                        # gráfico (se houver helper plotly no arquivo; senão, usa bar_chart simples)
+                        try:
+                            _plot_hbar_with_labels(
+                                dept_top.rename(columns={"departamento": "label"}),
+                                y_col="label",
+                                x_col="total",
+                                title=f"Top {top_n} Departamentos — Gasto",
+                                value_fmt="brl",
+                            )
+                        except Exception:
+                            st.bar_chart(dept_top.set_index("departamento")[["total"]], height=260)
+
+                        st.dataframe(
+                            dept_top[["departamento", "total_fmt", "% do total"]].rename(columns={"total_fmt": "Total"}),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
         _render_common_actions(df_g, "gastos_por_gestor", dt_ini, dt_fim)
 
     # ===== Aba Frota =====
