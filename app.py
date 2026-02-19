@@ -193,8 +193,8 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         }
         .fu-sidebar-toggle .stButton > button:hover{
           transform: translateY(-1px);
-          border-color: rgba(245,158,11,0.30) !important;
-          background: rgba(245,158,11,0.10) !important;
+          border-color: rgba(239,68,68,0.30) !important;
+          background: rgba(239,68,68,0.10) !important;
         }
 /* ===== Compact sidebar nav (ícones only) ===== */
         .fu-compact-nav{
@@ -215,8 +215,8 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           width: 6px;
           height: 20px;
           border-radius: 999px;
-          background: rgba(245,158,11,0.95);
-          box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
+          background: rgba(239,68,68,0.95);
+          box-shadow: 0 0 0 1px rgba(239,68,68,0.22);
         }
         .fu-compact-dot--off{
           background: rgba(255,255,255,0.10);
@@ -238,10 +238,25 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           white-space: nowrap !important;
         }
         .fu-compact-nav .stButton > button:hover{
-          border-color: rgba(245,158,11,0.35) !important;
+          border-color: rgba(239,68,68,0.30) !important;
           background: rgba(255,255,255,0.05) !important;
           transform: translateY(-1px);
         }
+
+
+
+/* Wrapper do item ativo (compacto) — estilo Linear/Stripe */
+.fu-compact-active{
+  width: 100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 4px;
+  border-radius: 16px;
+  border: 1px solid rgba(239,68,68,0.24);
+  background: rgba(239,68,68,0.10);
+  box-shadow: 0 12px 24px rgba(239,68,68,0.10);
+}
 
         /* Conteúdo fluido em qualquer zoom */
         .fu-wrap{
@@ -303,6 +318,19 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           transform: translateY(-1px);
         }
 
+
+
+/* Micro animação (Linear-like) ao trocar página/re-run */
+@keyframes fuFadeIn{
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+section.main{
+  animation: fuFadeIn 140ms ease;
+}
+@media (prefers-reduced-motion: reduce){
+  section.main{ animation: none !important; }
+}
 
         /* ====== COLLAPSED CSS INJECT ====== */
         __FU_COLLAPSED_CSS__
@@ -380,15 +408,12 @@ def _industrial_sidebar_css() -> None:
                 --fu-border: rgba(255,255,255,0.10);
                 --fu-text: rgba(255,255,255,0.92);
                 --fu-muted: rgba(255,255,255,0.72);
-                --fu-accent: #f59e0b;      /* industrial amber */
-                --fu-accent2: #fb923c;     /* orange */
+                --fu-accent: #ef4444;      /* active red */
+                --fu-accent2: #fb7185;     /* soft red/pink */
             }
 
             section[data-testid="stSidebar"] {
-                background:
-                    radial-gradient(1100px 420px at 15% 0%, rgba(245,158,11,0.12), transparent 55%),
-                    radial-gradient(900px 380px at 80% 18%, rgba(59,130,246,0.10), transparent 55%),
-                    var(--fu-bg);
+                background: var(--fu-bg);
             }
 
             section[data-testid="stSidebar"] > div { padding-top: 0.8rem; }
@@ -452,17 +477,18 @@ def _industrial_sidebar_css() -> None:
             div[role="radiogroup"] label:hover {
                 background-color: rgba(255,255,255,0.06);
                 transform: translateX(2px);
-                border: 1px solid rgba(245,158,11,0.22);
+                border: 1px solid rgba(239,68,68,0.22);
             }
 
             /* Item ativo: barra laranja + glow SaaS */
             div[role="radiogroup"] input:checked + div {
-                background: linear-gradient(135deg, rgba(245,158,11,0.22), rgba(255,255,255,0.04));
+                background: linear-gradient(135deg, rgba(239,68,68,0.22), rgba(255,255,255,0.04));
                 border-radius: 12px;
                 box-shadow:
-                  inset 4px 0 0 var(--fu-accent),
-                  0 0 0 1px rgba(245,158,11,0.18),
-                  0 10px 26px rgba(245,158,11,0.12);
+inset 4px 0 0 var(--fu-accent),
+0 0 0 1px rgba(239,68,68,0.16),
+0 8px 18px rgba(0,0,0,0.22);
+
             }
 
             /* Expanders */
@@ -477,8 +503,8 @@ def _industrial_sidebar_css() -> None:
 
             /* Destaque do grupo ativo (wrapper dentro do expander) */
             .fu-expander-active {
-                border: 1px solid rgba(245,158,11,0.35);
-                background: linear-gradient(135deg, rgba(245,158,11,0.07), rgba(255,255,255,0.02));
+                border: 1px solid rgba(239,68,68,0.30);
+                background: linear-gradient(135deg, rgba(239,68,68,0.06), rgba(255,255,255,0.02));
                 border-radius: 14px;
                 padding: 6px 6px 2px 6px;
                 margin-top: 6px;
@@ -532,8 +558,8 @@ def _industrial_sidebar_css() -> None:
             }
             .fu-nav .fu-nav-dot--active{
                 height: 22px;
-                background: rgba(245,158,11,0.95);
-                box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
+                background: rgba(239,68,68,0.95);
+                box-shadow: 0 0 0 1px rgba(239,68,68,0.22);
             }
 
             /* Botões do menu (somente dentro da fu-nav) */
@@ -550,8 +576,8 @@ def _industrial_sidebar_css() -> None:
             }
             .fu-nav .stButton > button:hover{
                 transform: translateY(-1px);
-                border-color: rgba(245,158,11,0.28) !important;
-                background: linear-gradient(180deg, rgba(245,158,11,0.10), rgba(255,255,255,0.03)) !important;
+                border-color: rgba(239,68,68,0.26) !important;
+                background: linear-gradient(180deg, rgba(239,68,68,0.10), rgba(255,255,255,0.03)) !important;
             }
 
             
@@ -566,9 +592,9 @@ def _industrial_sidebar_css() -> None:
             .fu-nav .fu-nav-item--active{
                 border-radius: 16px;
                 padding: 4px;
-                background: rgba(245,158,11,0.10);
-                border: 1px solid rgba(245,158,11,0.25);
-                box-shadow: 0 10px 22px rgba(245,158,11,0.10);
+                background: rgba(239,68,68,0.10);
+                border: 1px solid rgba(239,68,68,0.24);
+                box-shadow: 0 10px 22px rgba(239,68,68,0.10);
             }
             .fu-nav .fu-nav-item--active::before{
                 content: "";
@@ -578,17 +604,17 @@ def _industrial_sidebar_css() -> None:
                 width: 4px;
                 height: 22px;
                 border-radius: 999px;
-                background: rgba(245,158,11,0.95);
-                box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
+                background: rgba(239,68,68,0.95);
+                box-shadow: 0 0 0 1px rgba(239,68,68,0.22);
             }
 
 /* Wrapper do ativo */
             .fu-nav .fu-nav-active{
                 border-radius: 16px;
                 padding: 4px;
-                background: rgba(245,158,11,0.10);
-                border: 1px solid rgba(245,158,11,0.25);
-                box-shadow: 0 10px 22px rgba(245,158,11,0.10);
+                background: rgba(239,68,68,0.10);
+                border: 1px solid rgba(239,68,68,0.24);
+                box-shadow: 0 10px 22px rgba(239,68,68,0.10);
             }
 
 /* Nav: otimização mobile (mais espaço e menos travamento) */
@@ -645,8 +671,8 @@ def _industrial_sidebar_css() -> None:
     overflow: hidden;
 }
 .fu-group--active{
-    border-color: rgba(245,158,11,0.22);
-    box-shadow: 0 12px 24px rgba(245,158,11,0.10);
+    border-color: rgba(239,68,68,0.22);
+    box-shadow: 0 12px 24px rgba(239,68,68,0.10);
 }
 .fu-group-h{
     position: sticky;
@@ -1382,7 +1408,7 @@ def main():
 
   <!-- Avatar -->
   <div style="display:flex; align-items:center; gap:10px; margin: 6px 0 10px 0;">
-    {"<img src='" + (avatar_url or "") + "' style='width:52px;height:52px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.18);'/>" if avatar_url else "<div style='width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:white;border:1px solid rgba(255,255,255,0.14);'>" + (nome[:1].upper() if nome else "U") + "</div>"}
+    {"<img src='" + (avatar_url or "") + "' style='width:52px;height:52px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.18);'/>" if avatar_url else "<div style='width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#ef4444,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:white;border:1px solid rgba(255,255,255,0.14);'>" + (nome[:1].upper() if nome else "U") + "</div>"}
     <div>
       <p class="fu-user-name" style="margin:0;">{nome}</p>
       <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
@@ -1460,8 +1486,8 @@ def main():
             if total_alertas > 0:
                 st.markdown(
                     textwrap.dedent(f"""<div class="fu-card" style="
-  border: 1px solid rgba(245,158,11,0.35);
-  background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(255,255,255,0.04));
+  border: 1px solid rgba(239,68,68,0.30);
+  background: linear-gradient(135deg, rgba(239,68,68,0.16), rgba(255,255,255,0.04));
 ">
   <div style="display:flex; align-items:center; justify-content:space-between;">
     <div style="font-weight:900;">Alertas</div>
@@ -1663,3 +1689,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
