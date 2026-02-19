@@ -611,6 +611,7 @@ PAGE_LABELS = {
     "orders_search": "Consultar pedidos",
     "profile": "Meu perfil",
     "material_sheet": "Ficha de material",
+    "catalog_materials": "Catálogo de Materiais",
     "orders_manage": "Gestão de pedidos",
     "map": "Mapa",
     "users": "Gestão de usuários",
@@ -1426,7 +1427,7 @@ def main():
 
             # ---------- Gestão ----------
             if is_admin:
-                opcoes_gestao = ["material_sheet", "orders_manage", "map", "reports_whatsapp", "reports_gerenciais", "users", "backup"] + (
+                opcoes_gestao = ["material_sheet", "catalog_materials", "orders_manage", "map", "reports_whatsapp", "reports_gerenciais", "users", "backup"] + (
                     ["saas_admin"] if st.session_state.get("is_superadmin") else []
                 )
             else:
@@ -1574,6 +1575,10 @@ def main():
     elif pagina == "backup":
         ba.realizar_backup_manual(supabase)
     
+    elif pagina == "catalog_materials":
+        from src.ui.catalogo_materiais import exibir_catalogo_materiais
+        exibir_catalogo_materiais(supabase, tenant_id=tenant_id)
+
     elif pagina == "reports_whatsapp":
         usuario = st.session_state.get("usuario") or {}
         render_relatorios_whatsapp(
