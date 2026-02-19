@@ -621,6 +621,52 @@ def _industrial_sidebar_css() -> None:
     background: rgba(255,255,255,0.06) !important;
 }
 
+
+/* ===== Menu scroll interno + headers fixos ===== */
+.fu-menu-scroll{
+    max-height: calc(100vh - 430px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+}
+@media (max-width: 900px){
+    .fu-menu-scroll{ max-height: calc(100vh - 380px); }
+}
+.fu-menu-scroll::-webkit-scrollbar{ width: 8px; }
+.fu-menu-scroll::-webkit-scrollbar-thumb{
+    background: rgba(255,255,255,0.10);
+    border-radius: 999px;
+}
+.fu-group{
+    margin: 10px 0 12px 0;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.02);
+    border-radius: 16px;
+    overflow: hidden;
+}
+.fu-group--active{
+    border-color: rgba(245,158,11,0.22);
+    box-shadow: 0 12px 24px rgba(245,158,11,0.10);
+}
+.fu-group-h{
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 10px 12px;
+    font-weight: 900;
+    font-size: 0.92rem;
+    letter-spacing: .2px;
+    background: rgba(11,18,32,0.88);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.fu-group-b{
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 </style>
         """),
         unsafe_allow_html=True,
@@ -705,8 +751,8 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
         ("🛒", "orders_manage", "Gestão de pedidos"),
         ("🗺️", "map", "Mapa"),
         ("📲", "reports_whatsapp", "Relatórios WhatsApp"),
+        ("📈", "reports_gerenciais", "Relatórios Gerenciais"),
     ]
-
     if is_admin:
         items += [
             ("👥", "users", "Gestão de usuários"),
@@ -1369,23 +1415,6 @@ def main():
                 unsafe_allow_html=True,
             )
 
-            with st.expander("Conta"):
-                st.markdown('<div class="fu-account">', unsafe_allow_html=True)
-                if st.button("👤 Meu Perfil", use_container_width=True):
-                    st.session_state.current_page = "profile"
-                    st.session_state["menu_ops"] = "profile"
-                    st.session_state.exp_ops_open = True
-                    st.session_state.exp_gestao_open = False
-                    st.rerun()
-
-                if st.button("🚪 Sair", use_container_width=True):
-                    try:
-                        fazer_logout(supabase_anon)
-                    except Exception:
-                        pass
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-
             # 🔎 Busca rápida (navegação)
             busca = st.text_input(
                 "🔎 Busca rápida",
@@ -1456,52 +1485,6 @@ def main():
             usuario = st.session_state.get("usuario") or {}
             perfil = (usuario.get("perfil") or "").lower()
             is_admin = perfil == "admin"
-            # ✅ Controle de navegação (seleção única) — visual separado por grupos
-            if "current_page" not in st.session_state:
-                st.session_state.current_page = "home"
-
-            # Memoriza qual box ficou aberto por último
-            if "exp_ops_open" not in st.session_state:
-                st.session_state.exp_ops_open = False
-            if "exp_gestao_open" not in st.session_state:
-                st.session_state.exp_gestao_open = True
-
-            # ---------- Operações ----------
-            opcoes_ops = ["home", "dashboard", "alerts", "orders_search", "profile"]
-
-            # ---------- Gestão ----------
-            if is_admin:
-                opcoes_gestao = ["material_sheet", "catalog_materials", "orders_manage", "map", "reports_whatsapp", "reports_gerenciais", "users", "backup"] + (
-                    ["saas_admin"] if st.session_state.get("is_superadmin") else []
-                )
-            else:
-                opcoes_gestao = ["material_sheet", "map", "reports_whatsapp", "reports_gerenciais"]
-
-            # Fonte de verdade: página atual deve existir em algum grupo
-            if st.session_state.current_page not in (opcoes_ops + opcoes_gestao):
-                st.session_state.current_page = "home"
-
-            is_ops_page = st.session_state.current_page in opcoes_ops
-            is_gestao_page = st.session_state.current_page in opcoes_gestao
-
-            # Auto-abrir o box do grupo ativo
-            if is_ops_page:
-                expanded_ops = True
-                expanded_gestao = False
-                st.session_state.exp_ops_open = True
-                st.session_state.exp_gestao_open = False
-            elif is_gestao_page:
-                expanded_ops = False
-                expanded_gestao = True
-                st.session_state.exp_ops_open = False
-                st.session_state.exp_gestao_open = True
-            else:
-                expanded_ops = bool(st.session_state.exp_ops_open)
-                expanded_gestao = bool(st.session_state.exp_gestao_open)
-                # Segurança: nunca deixar os dois ativos no servidor
-                if expanded_ops and expanded_gestao:
-                    expanded_gestao = False
-
             def _nav_button_row(page_id: str, group: str) -> None:
                 """Linha de navegação (alinhada). Usa apenas current_page como fonte de verdade."""
                 active = (page_id == st.session_state.current_page)
@@ -1520,33 +1503,60 @@ def main():
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
-# Renderiza expanders + menus (separados), mas com seleção única (current_page)
-            with st.expander("Operações", expanded=expanded_ops):
-                if is_ops_page:
-                    st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
+            # ✅ Navegação (seleção única) — com grupos e header fixo (sem expanders)
+            if "current_page" not in st.session_state:
+                st.session_state.current_page = "home"
 
-                st.markdown('<div class="fu-nav-group">', unsafe_allow_html=True)
-                for pid in opcoes_ops:
-                    _nav_button_row(pid, "ops")
-                st.markdown('</div>', unsafe_allow_html=True)
+            # Helper: render de grupo com header sticky dentro do scroll
+            pagina_atual = st.session_state.get("current_page") or "home"
 
-                if is_ops_page:
-                    st.markdown("</div>", unsafe_allow_html=True)
+            def _render_group(title: str, items: list[str], group_key: str) -> None:
+                active_group = pagina_atual in items
+                cls = "fu-group fu-group--active" if active_group else "fu-group"
 
-            with st.expander("Gestão", expanded=expanded_gestao):
-                if is_gestao_page:
-                    st.markdown('<div class="fu-expander-active">', unsafe_allow_html=True)
+                st.markdown(f'<div class="{cls}">', unsafe_allow_html=True)
+                st.markdown(f'<div class="fu-group-h">{title}</div>', unsafe_allow_html=True)
+                st.markdown('<div class="fu-group-b">', unsafe_allow_html=True)
 
-                st.markdown('<div class="fu-nav-group">', unsafe_allow_html=True)
-                for pid in opcoes_gestao:
-                    _nav_button_row(pid, "gestao")
-                st.markdown('</div>', unsafe_allow_html=True)
+                for pid in items:
+                    _nav_button_row(pid, group_key)
 
-                if is_gestao_page:
-                    st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div></div>", unsafe_allow_html=True)
+
+            # Fonte de verdade: página atual precisa existir no menu (ou volta para home)
+            all_pages = {"home","dashboard","map","reports_whatsapp","reports_gerenciais","alerts",
+                         "orders_search","material_sheet","catalog_materials","orders_manage",
+                         "users","profile","backup","saas_admin"}
+            if st.session_state.current_page not in all_pages:
+                st.session_state.current_page = "home"
+                pagina_atual = "home"
+
+            # Definições de grupos (conforme solicitado)
+            dashboards = ["dashboard", "map", "reports_whatsapp", "reports_gerenciais", "alerts"]
+
+            operacoes = ["orders_search", "material_sheet", "orders_manage"]
+            # Mantém o Catálogo acessível para admin (se existir no app)
+            if is_admin:
+                operacoes = ["orders_search", "material_sheet", "catalog_materials", "orders_manage"]
+
+            conta = ["profile"]
+            if is_admin:
+                conta = ["users", "profile", "backup"]
+            if bool(st.session_state.get("is_superadmin")):
+                # Mantém Admin do SaaS acessível para superadmin
+                conta = conta + ["saas_admin"] if "saas_admin" not in conta else conta
+
+            # ===== Menu rolável com headers fixos =====
+            st.markdown('<div class="fu-menu-scroll">', unsafe_allow_html=True)
+
+            # Início fora dos boxes
+            _nav_button_row("home", "root")
+
+            _render_group("Dashboards", dashboards, "dash")
+            _render_group("Operações", operacoes, "ops")
+            _render_group("Configuração de Conta", conta, "conta")
 
             st.markdown("</div>", unsafe_allow_html=True)
-
 # Página atual (fonte de verdade)
         pagina = st.session_state.current_page
         # Normaliza (caso ainda exista valor antigo por label/emoji)
