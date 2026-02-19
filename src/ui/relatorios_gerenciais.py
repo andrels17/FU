@@ -55,6 +55,79 @@ def _pill_style() -> None:
     )
 
 
+
+def _tabs_style() -> None:
+    # Deixa as abas com visual mais premium (pills, borda, espaçamento)
+    st.markdown(
+        '''
+        <style>
+        /* Tabs container */
+        div[data-baseweb="tab-list"]{
+            gap: 10px;
+            background: rgba(255,255,255,0.03);
+            padding: 10px 10px 6px 10px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        /* Tab */
+        button[data-baseweb="tab"]{
+            background: rgba(255,255,255,0.04);
+            border-radius: 999px;
+            padding: 10px 14px;
+            border: 1px solid rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.85);
+            font-weight: 600;
+        }
+        /* Active tab */
+        button[data-baseweb="tab"][aria-selected="true"]{
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.14);
+        }
+        /* Remove default underline indicator */
+        div[data-baseweb="tab-highlight"]{ display:none; }
+        </style>
+        ''',
+        unsafe_allow_html=True,
+    )
+
+
+def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str, height: int = 420) -> None:
+    """Gráfico de barras horizontal com rótulos (Plotly) e fallback."""
+    if df is None or df.empty or y_col not in df.columns or x_col not in df.columns:
+        st.caption("Sem dados para o gráfico.")
+        return
+
+    dfp = df.copy()
+    # rótulo BRL quando for total; senão, formata número simples
+    if x_col == "total":
+        dfp["_lbl"] = dfp[x_col].apply(lambda v: formatar_moeda_br(_as_float(v)))
+    else:
+        dfp["_lbl"] = dfp[x_col].apply(lambda v: f"{_as_float(v):,.0f}".replace(",", "."))
+
+    try:
+        import plotly.express as px  # type: ignore
+
+        fig = px.bar(
+            dfp,
+            x=x_col,
+            y=y_col,
+            orientation="h",
+            title=title,
+            text="_lbl",
+        )
+        fig.update_traces(textposition="outside", cliponaxis=False)
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=46, b=10),
+            height=height,
+            yaxis_title="",
+            xaxis_title="",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception:
+        st.bar_chart(dfp.set_index(y_col)[[x_col]], height=min(300, height))
+
+
+
 def _init_filter_state() -> None:
     dt_ini_def, dt_fim_def = _date_defaults()
     st.session_state.setdefault("rg_dt_ini", dt_ini_def)
@@ -274,6 +347,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     _init_filter_state()
     _pill_style()
+    _tabs_style()
 
     # Admin (service role) para leituras que podem sofrer RLS
     try:
@@ -729,23 +803,9 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
                 st.dataframe(perf_view, use_container_width=True, hide_index=True)
 
-        # gráfico (premium)
+        # gráfico (premium + rótulos)
         df_plot = df_g.head(topn) if topn else df_g
-
-        try:
-            import plotly.express as px  # type: ignore
-
-            fig = px.bar(
-                df_plot,
-                x="total",
-                y="gestor_nome",
-                orientation="h",
-                title="Top gestores por gasto",
-            )
-            fig.update_layout(margin=dict(l=10, r=10, t=40, b=10), height=420)
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception:
-            st.bar_chart(df_plot.set_index("gestor_nome")[["total"]], height=280)
+        _plot_hbar_with_labels(df_plot, y_col="gestor_nome", x_col="total", title="Top gestores por gasto", height=420)
 
         # tabela
         df_show = df_g.copy()
@@ -819,7 +879,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         df_f = df_f.sort_values("total", ascending=False)
 
         df_plot = df_f.head(topn) if topn else df_f
-        st.bar_chart(df_plot.set_index("cod_equipamento")[["total"]], height=280)
+        _plot_hbar_with_labels(df_plot, y_col="cod_equipamento", x_col="total", title="Top frotas por gasto", height=420)
 
         df_show = df_f.copy()
         df_show["Frota"] = df_show["cod_equipamento"].fillna("(Sem código)").astype(str)
@@ -863,7 +923,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         df_d = df_d.sort_values("total", ascending=False)
 
         df_plot = df_d.head(topn) if topn else df_d
-        st.bar_chart(df_plot.set_index("departamento")[["total"]], height=280)
+        _plot_hbar_with_labels(df_plot, y_col="departamento", x_col="total", title="Top departamentos por gasto", height=420)
 
         df_show = df_d.copy()
         df_show["Departamento"] = df_show["departamento"].fillna("(Sem dept)").astype(str)
