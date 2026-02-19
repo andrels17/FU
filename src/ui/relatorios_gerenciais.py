@@ -35,11 +35,8 @@ def _reset_rg_filters() -> None:
         "rg_drill_gestor_nome", "rg_top_dept_insights", "rg_top_dept_tab",
         "rg_gestor_top", "rg_frota_top", "rg_dept_top",
         "rg_cmp_gestor", "rg_cmp_frota", "rg_cmp_dept",
-        "rg_fg_familia", "rg_fg_grupo",
-        "rg_fg_gestor",
-        "rg_fg_dept",
-        "rg_fg_frota",
-        "rg_fg_vis"]
+        "rg_fg_familia", "rg_fg_grupo"
+    ]
     for k in keys:
         if k in st.session_state:
             del st.session_state[k]
@@ -446,6 +443,53 @@ def _gastos_por_familia_grupo(df_base: pd.DataFrame) -> pd.DataFrame:
     )
     return out
 
+
+
+def _materiais_mais_caros(df_base: pd.DataFrame, mode: str = "unit") -> pd.DataFrame:
+    """Ranking de materiais.
+    mode:
+      - 'unit': maior valor_ultima_compra (ou proxy por valor_total/qtde_solicitada)
+      - 'total': maior gasto total (soma valor_total)
+    """
+    if df_base is None or df_base.empty:
+        return pd.DataFrame(columns=["cod_material", "descricao", "valor", "qtd_pedidos"])
+
+    tmp = df_base.copy()
+
+    tmp["cod_material"] = tmp.get("cod_material")
+    tmp["descricao"] = tmp.get("descricao")
+
+    v_unit = pd.to_numeric(tmp.get("valor_ultima_compra", None), errors="coerce")
+    if v_unit is None or v_unit.isna().all():
+        qt = pd.to_numeric(tmp.get("qtde_solicitada", 0), errors="coerce").replace(0, pd.NA)
+        vtot = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce")
+        v_unit = (vtot / qt).astype(float)
+
+    tmp["_v_unit"] = v_unit.fillna(0.0)
+    tmp["_v_total"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
+
+    tmp["descricao"] = tmp["descricao"].fillna("").astype(str).str.strip()
+    tmp["cod_material"] = tmp["cod_material"].fillna("").astype(str).str.strip()
+
+    key_cols = ["cod_material", "descricao"]
+
+    if mode == "total":
+        out = (
+            tmp.groupby(key_cols)["_v_total"]
+            .agg(valor="sum", qtd_pedidos="count")
+            .reset_index()
+            .sort_values("valor", ascending=False)
+        )
+    else:
+        out = (
+            tmp.groupby(key_cols)["_v_unit"]
+            .agg(valor="max", qtd_pedidos="count")
+            .reset_index()
+            .sort_values("valor", ascending=False)
+        )
+
+    return out
+
 # ============================
 # Main entry
 # ============================
@@ -631,78 +675,123 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         st.divider()
 
     
-    # ===== Governança estrutural + Performance global =====
-    with st.container(border=True):
-        st.markdown("### Governança estrutural")
-        # Departamentos presentes nos pedidos do período aplicado
-        depts_base = set(df_base.get("departamento", pd.Series(dtype=str)).dropna().astype(str).str.strip().unique())
-        depts_base = {d for d in depts_base if d}
-        depts_vinculados = set(dept_map.keys())
-        depts_sem_gestor = sorted(list(depts_base - depts_vinculados))
+    
+st.divider()
 
-        # Gestores (no mapa) sem departamento vinculado
-        gestores_ids = set(user_df.get("user_id", pd.Series(dtype=str)).dropna().astype(str).unique()) if "user_id" in user_df.columns else set()
-        gestores_vinculados = set(str(v) for v in dept_map.values())
-        gestores_sem_dept = sorted(list(gestores_ids - gestores_vinculados))
+with st.container(border=True):
+    st.markdown("### Materiais mais caros")
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        modo = st.radio(
+            "Ranking por",
+            ["Preço unitário (última compra)", "Gasto total (soma)"],
+            index=0,
+            horizontal=True,
+            key="rg_caros_modo",
+        )
+    with c2:
+        topn_caros = _top_selector("rg_caros")
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Departamentos no período", len(depts_base))
-        c2.metric("Deptos com gestor", len(depts_base & depts_vinculados))
-        c3.metric("Deptos sem gestor", len(depts_sem_gestor))
-        c4.metric("Gestores sem depto", len(gestores_sem_dept))
+    mode_key = "unit" if modo.startswith("Preço") else "total"
+    df_caros = _materiais_mais_caros(df_base, mode=mode_key)
 
-        colA, colB = st.columns(2)
-        with colA:
-            if depts_sem_gestor:
-                st.warning("Departamentos sem gestor vinculado")
-                st.dataframe(pd.DataFrame({"departamento": depts_sem_gestor}), use_container_width=True, hide_index=True)
-            else:
-                st.success("Todos os departamentos do período têm gestor vinculado ")
-        with colB:
-            if gestores_sem_dept:
-                st.warning("Gestores no tenant sem departamento vinculado")
-                if "user_id" in user_df.columns:
-                    df_gs = user_df[user_df["user_id"].astype(str).isin(gestores_sem_dept)].copy()
-                    cols = [c for c in ["nome", "email", "role", "user_id"] if c in df_gs.columns]
-                    st.dataframe(df_gs[cols], use_container_width=True, hide_index=True)
+    if df_caros.empty:
+        st.caption("Sem dados suficientes para ranquear materiais.")
+    else:
+        df_plot = df_caros.copy()
+        df_plot["label"] = df_plot["cod_material"].astype(str) + " · " + df_plot["descricao"].astype(str)
+        df_plot = df_plot.sort_values("valor", ascending=False)
+        df_plot = df_plot.head(topn_caros) if topn_caros else df_plot
+
+        titulo = "Top materiais por preço unitário" if mode_key == "unit" else "Top materiais por gasto total"
+        _plot_hbar_with_labels(df_plot, y_col="label", x_col="valor", title=titulo, height=520)
+
+        df_tbl = df_plot.copy()
+        df_tbl["Valor"] = df_tbl["valor"].apply(lambda v: formatar_moeda_br(_as_float(v)))
+        df_tbl["Pedidos"] = pd.to_numeric(df_tbl["qtd_pedidos"], errors="coerce").fillna(0).astype(int)
+
+        st.dataframe(
+            df_tbl[["cod_material", "descricao", "Pedidos", "Valor"]].rename(
+                columns={"cod_material": "Cód. Material", "descricao": "Descrição"}
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # ===== Governança estrutural + Performance global =====
+        with st.container(border=True):
+            st.markdown("### Governança estrutural")
+            # Departamentos presentes nos pedidos do período aplicado
+            depts_base = set(df_base.get("departamento", pd.Series(dtype=str)).dropna().astype(str).str.strip().unique())
+            depts_base = {d for d in depts_base if d}
+            depts_vinculados = set(dept_map.keys())
+            depts_sem_gestor = sorted(list(depts_base - depts_vinculados))
+
+            # Gestores (no mapa) sem departamento vinculado
+            gestores_ids = set(user_df.get("user_id", pd.Series(dtype=str)).dropna().astype(str).unique()) if "user_id" in user_df.columns else set()
+            gestores_vinculados = set(str(v) for v in dept_map.values())
+            gestores_sem_dept = sorted(list(gestores_ids - gestores_vinculados))
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Departamentos no período", len(depts_base))
+            c2.metric("Deptos com gestor", len(depts_base & depts_vinculados))
+            c3.metric("Deptos sem gestor", len(depts_sem_gestor))
+            c4.metric("Gestores sem depto", len(gestores_sem_dept))
+
+            colA, colB = st.columns(2)
+            with colA:
+                if depts_sem_gestor:
+                    st.warning("Departamentos sem gestor vinculado")
+                    st.dataframe(pd.DataFrame({"departamento": depts_sem_gestor}), use_container_width=True, hide_index=True)
                 else:
-                    st.write(gestores_sem_dept)
-            else:
-                st.success("Sem gestores “órfãos” de departamento ")
+                    st.success("Todos os departamentos do período têm gestor vinculado ")
+            with colB:
+                if gestores_sem_dept:
+                    st.warning("Gestores no tenant sem departamento vinculado")
+                    if "user_id" in user_df.columns:
+                        df_gs = user_df[user_df["user_id"].astype(str).isin(gestores_sem_dept)].copy()
+                        cols = [c for c in ["nome", "email", "role", "user_id"] if c in df_gs.columns]
+                        st.dataframe(df_gs[cols], use_container_width=True, hide_index=True)
+                    else:
+                        st.write(gestores_sem_dept)
+                else:
+                    st.success("Sem gestores “órfãos” de departamento ")
 
-    # Performance operacional (global)
-    with st.container(border=True):
-        st.markdown("### Performance operacional (visão geral)")
-        col1, col2, col3 = st.columns(3)
+        # Performance operacional (global)
+        with st.container(border=True):
+            st.markdown("### Performance operacional (visão geral)")
+            col1, col2, col3 = st.columns(3)
 
-        pct_atraso = None
-        if "atrasado" in df_base.columns:
-            s = pd.to_numeric(df_base["atrasado"], errors="coerce")
-            if s.notna().any():
-                pct_atraso = float(s.fillna(0).mean() * 100)
+            pct_atraso = None
+            if "atrasado" in df_base.columns:
+                s = pd.to_numeric(df_base["atrasado"], errors="coerce")
+                if s.notna().any():
+                    pct_atraso = float(s.fillna(0).mean() * 100)
 
-        pct_pendente = None
-        if "entregue" in df_base.columns:
-            s = df_base["entregue"]
-            # entregue pode vir bool, 't/f', 0/1…
-            sb = s.apply(lambda x: bool(x) if isinstance(x, bool) else (str(x).strip().lower() in ("true","t","1","sim","s","yes")))
-            pct_pendente = float((~sb).mean() * 100) if len(sb) else None
+            pct_pendente = None
+            if "entregue" in df_base.columns:
+                s = df_base["entregue"]
+                # entregue pode vir bool, 't/f', 0/1…
+                sb = s.apply(lambda x: bool(x) if isinstance(x, bool) else (str(x).strip().lower() in ("true","t","1","sim","s","yes")))
+                pct_pendente = float((~sb).mean() * 100) if len(sb) else None
 
-        # lead time (dias) se houver datas
-        lt_med = None
-        if "data_solicitacao" in df_base.columns and "data_entrega_real" in df_base.columns:
-            ds = pd.to_datetime(df_base["data_solicitacao"], errors="coerce")
-            de = pd.to_datetime(df_base["data_entrega_real"], errors="coerce")
-            lt = (de - ds).dt.days
-            lt = lt[lt.notna() & (lt >= 0)]
-            if len(lt) > 0:
-                lt_med = float(lt.median())
+            # lead time (dias) se houver datas
+            lt_med = None
+            if "data_solicitacao" in df_base.columns and "data_entrega_real" in df_base.columns:
+                ds = pd.to_datetime(df_base["data_solicitacao"], errors="coerce")
+                de = pd.to_datetime(df_base["data_entrega_real"], errors="coerce")
+                lt = (de - ds).dt.days
+                lt = lt[lt.notna() & (lt >= 0)]
+                if len(lt) > 0:
+                    lt_med = float(lt.median())
 
-        col1.metric("% Atraso", f"{pct_atraso:.1f}%" if pct_atraso is not None else "—")
-        col2.metric("% Pendentes", f"{pct_pendente:.1f}%" if pct_pendente is not None else "—")
-        col3.metric("Lead time mediano", f"{lt_med:.0f} dias" if lt_med is not None else "—")
-    # (tabs moved to the beginning)
-    # ===== Aba Gestor =====
+            col1.metric("% Atraso", f"{pct_atraso:.1f}%" if pct_atraso is not None else "—")
+            col2.metric("% Pendentes", f"{pct_pendente:.1f}%" if pct_pendente is not None else "—")
+            col3.metric("Lead time mediano", f"{lt_med:.0f} dias" if lt_med is not None else "—")
+        # (tabs moved to the beginning)
+    
+
+# ===== Aba Gestor =====
     with tab_gestor:
         _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_gestor')
 
@@ -986,190 +1075,170 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
         _render_common_actions(df_d, "gastos_por_departamento", dt_ini, dt_fim)
     # ===== Aba Família & Grupo =====
-    
-    with tab_materiais:
-            _actions_bar(df_base, dt_ini, dt_fim, prefix="rg_familia_grupo")
 
-            st.subheader("Gastos por Família e Grupo de Material")
+# ===== Aba Família & Grupo =====
+with tab_materiais:
+    _actions_bar(df_base, dt_ini, dt_fim, prefix="rg_familia_grupo")
 
-            if ("familia_descricao" not in df_base.columns) and ("grupo_descricao" not in df_base.columns):
-                st.info("Ainda não há colunas de Família/Grupo na base. Verifique se a view de pedidos já traz esses campos do catálogo de materiais.")
-            else:
-                # =========================
-                # Filtros adicionais (local)
-                # =========================
-                df_scope = df_base.copy()
+    st.subheader("Gastos por Família e Grupo de Material")
 
-                with st.expander("Filtros adicionais (opcional)", expanded=False):
-                    c1, c2, c3 = st.columns([2, 2, 2])
+    if ("familia_descricao" not in df_base.columns) and ("grupo_descricao" not in df_base.columns):
+        st.info("Ainda não há colunas de Família/Grupo na base. Verifique se a view de pedidos já traz esses campos do catálogo de materiais.")
+    else:
+        df_scope = df_base.copy()
 
-                    # Gestor (via vínculo dept->gestor)
-                    with c1:
-                        gestor_opts = [("Todos", "Todos")]
-                        if "gestor_user_id" in links_df.columns and "departamento" in links_df.columns:
-                            gdf = links_df[["gestor_user_id"]].dropna().drop_duplicates()
-                            if not gdf.empty and "user_id" in user_df.columns:
-                                um = user_df.copy()
-                                um = um.rename(columns={"user_id": "gestor_user_id"})
-                                um["nome"] = um.get("nome")
-                                um["email"] = um.get("email")
-                                gdf = gdf.merge(um[["gestor_user_id", "nome", "email"]], on="gestor_user_id", how="left")
-                            for _, r in gdf.iterrows():
-                                gid = r.get("gestor_user_id")
-                                if gid is None:
-                                    continue
-                                gid = str(gid)
-                                nome = str(r.get("nome") or "").strip()
-                                email = str(r.get("email") or "").strip()
-                                label = nome or email or gid
-                                gestor_opts.append((gid, label))
+        with st.expander("Filtros adicionais (opcional)", expanded=False):
+            c1, c2, c3 = st.columns([2, 2, 2])
 
-                        gestor_sel = st.selectbox(
-                            "Gestor",
-                            options=gestor_opts,
-                            index=0,
-                            format_func=lambda x: x[1],
-                            key="rg_fg_gestor",
-                        )
+            # Gestor (via vínculo dept->gestor)
+            with c1:
+                gestor_opts = [("Todos", "Todos")]
+                if "gestor_user_id" in links_df.columns and "departamento" in links_df.columns:
+                    gdf = links_df[["gestor_user_id"]].dropna().drop_duplicates()
+                    if not gdf.empty and "user_id" in user_df.columns:
+                        um = user_df.copy().rename(columns={"user_id": "gestor_user_id"})
+                        gdf = gdf.merge(um[["gestor_user_id", "nome", "email"]], on="gestor_user_id", how="left")
+                    for _, r in gdf.iterrows():
+                        gid = r.get("gestor_user_id")
+                        if gid is None:
+                            continue
+                        gid = str(gid)
+                        nome = str(r.get("nome") or "").strip()
+                        email = str(r.get("email") or "").strip()
+                        label = nome or email or gid
+                        gestor_opts.append((gid, label))
 
-                    # Departamento
-                    with c2:
-                        dept_col = "departamento" if "departamento" in df_scope.columns else None
-                        dept_opts = []
-                        if dept_col:
-                            dept_opts = sorted([x for x in df_scope[dept_col].dropna().astype(str).str.strip().unique().tolist() if x])
-                        dept_sel = st.multiselect("Departamento", dept_opts, default=[], key="rg_fg_dept")
-
-                    # Frota (cód. equipamento)
-                    with c3:
-                        frota_col = "cod_equipamento" if "cod_equipamento" in df_scope.columns else None
-                        frota_opts = []
-                        if frota_col:
-                            frota_opts = sorted([x for x in df_scope[frota_col].dropna().astype(str).str.strip().unique().tolist() if x])
-                        frota_sel = st.multiselect("Frota (cód. equipamento)", frota_opts, default=[], key="rg_fg_frota")
-
-                    # aplica gestor -> filtra por departamentos vinculados
-                    if gestor_sel and gestor_sel[0] != "Todos" and "departamento" in df_scope.columns and "gestor_user_id" in links_df.columns:
-                        depts_gestor = (
-                            links_df[links_df["gestor_user_id"].astype(str) == str(gestor_sel[0])]
-                            ["departamento"]
-                            .dropna()
-                            .astype(str)
-                            .str.strip()
-                            .tolist()
-                        )
-                        depts_gestor = [d for d in depts_gestor if d]
-                        if depts_gestor:
-                            df_scope = df_scope[df_scope["departamento"].astype(str).isin(depts_gestor)]
-                        else:
-                            df_scope = df_scope.iloc[0:0]
-
-                    if dept_sel and "departamento" in df_scope.columns:
-                        df_scope = df_scope[df_scope["departamento"].astype(str).isin([str(x) for x in dept_sel])]
-
-                    if frota_sel and "cod_equipamento" in df_scope.columns:
-                        df_scope = df_scope[df_scope["cod_equipamento"].astype(str).isin([str(x) for x in frota_sel])]
-
-                # =========================
-                # Modo do gráfico
-                # =========================
-                vis = st.radio(
-                    "Visualização do gráfico",
-                    ["Junto (Família · Grupo)", "Separado (Famílias e Grupos)"],
+                gestor_sel = st.selectbox(
+                    "Gestor",
+                    options=gestor_opts,
                     index=0,
-                    horizontal=True,
-                    key="rg_fg_vis",
+                    format_func=lambda x: x[1],
+                    key="rg_fg_gestor",
                 )
 
-                # agrega base filtrada
-                df_fg = _gastos_por_familia_grupo(df_scope)
-                if df_fg.empty:
-                    st.info("Sem dados para Família/Grupo no filtro atual.")
+            # Departamento
+            with c2:
+                dept_opts = sorted([x for x in df_scope.get("departamento", pd.Series(dtype=str)).dropna().astype(str).str.strip().unique().tolist() if x])
+                dept_sel = st.multiselect("Departamento", dept_opts, default=[], key="rg_fg_dept")
+
+            # Frota (cód. equipamento)
+            with c3:
+                frota_opts = sorted([x for x in df_scope.get("cod_equipamento", pd.Series(dtype=str)).dropna().astype(str).str.strip().unique().tolist() if x])
+                frota_sel = st.multiselect("Frota (cód. equipamento)", frota_opts, default=[], key="rg_fg_frota")
+
+            # aplica gestor -> filtra por departamentos vinculados
+            if gestor_sel and gestor_sel[0] != "Todos" and "departamento" in df_scope.columns and "gestor_user_id" in links_df.columns:
+                depts_gestor = (
+                    links_df[links_df["gestor_user_id"].astype(str) == str(gestor_sel[0])]
+                    ["departamento"]
+                    .dropna()
+                    .astype(str)
+                    .str.strip()
+                    .tolist()
+                )
+                depts_gestor = [d for d in depts_gestor if d]
+                if depts_gestor:
+                    df_scope = df_scope[df_scope["departamento"].astype(str).isin(depts_gestor)]
                 else:
-                    # filtros locais de família/grupo
-                    c1, c2, c3 = st.columns([2, 2, 1])
-                    with c1:
-                        fam_opts = ["Todas"] + sorted([x for x in df_fg["familia_descricao"].dropna().unique().tolist()])
-                        fam_sel = st.selectbox("Família", fam_opts, index=0, key="rg_fg_familia")
-                    with c2:
-                        grp_base = df_fg.copy()
-                        if fam_sel != "Todas":
-                            grp_base = grp_base[grp_base["familia_descricao"] == fam_sel]
-                        grp_opts = ["Todos"] + sorted([x for x in grp_base["grupo_descricao"].dropna().unique().tolist()])
-                        grp_sel = st.selectbox("Grupo", grp_opts, index=0, key="rg_fg_grupo")
-                    with c3:
-                        topn = _top_selector("rg_fg")
+                    df_scope = df_scope.iloc[0:0]
 
-                    df_show = df_fg.copy()
-                    if fam_sel != "Todas":
-                        df_show = df_show[df_show["familia_descricao"] == fam_sel]
-                    if grp_sel != "Todos":
-                        df_show = df_show[df_show["grupo_descricao"] == grp_sel]
+            if dept_sel and "departamento" in df_scope.columns:
+                df_scope = df_scope[df_scope["departamento"].astype(str).isin([str(x) for x in dept_sel])]
 
-                    total_local = float(pd.to_numeric(df_show["total"], errors="coerce").fillna(0).sum())
-                    qtd_local = int(pd.to_numeric(df_show["qtd_pedidos"], errors="coerce").fillna(0).sum())
+            if frota_sel and "cod_equipamento" in df_scope.columns:
+                df_scope = df_scope[df_scope["cod_equipamento"].astype(str).isin([str(x) for x in frota_sel])]
 
-                    k1, k2, k3 = st.columns(3)
-                    k1.metric("Gasto (seleção)", formatar_moeda_br(total_local))
-                    k2.metric("Pedidos (seleção)", f"{qtd_local:,}".replace(",", "."))
-                    k3.metric("Participação", f"{_share_percent(total_geral, total_local):.1f}%")
+        vis = st.radio(
+            "Visualização do gráfico",
+            ["Junto (Família · Grupo)", "Separado (Famílias e Grupos)"],
+            index=0,
+            horizontal=True,
+            key="rg_fg_vis",
+        )
 
-                    st.divider()
+        df_fg = _gastos_por_familia_grupo(df_scope)
+        if df_fg.empty:
+            st.info("Sem dados para Família/Grupo no filtro atual.")
+        else:
+            c1, c2, c3 = st.columns([2, 2, 1])
+            with c1:
+                fam_opts = ["Todas"] + sorted([x for x in df_fg["familia_descricao"].dropna().unique().tolist()])
+                fam_sel = st.selectbox("Família", fam_opts, index=0, key="rg_fg_familia")
+            with c2:
+                grp_base = df_fg.copy()
+                if fam_sel != "Todas":
+                    grp_base = grp_base[grp_base["familia_descricao"] == fam_sel]
+                grp_opts = ["Todos"] + sorted([x for x in grp_base["grupo_descricao"].dropna().unique().tolist()])
+                grp_sel = st.selectbox("Grupo", grp_opts, index=0, key="rg_fg_grupo")
+            with c3:
+                topn = _top_selector("rg_fg")
 
-                    if vis.startswith("Junto"):
-                        df_plot = df_show.copy()
-                        df_plot["label"] = df_plot["familia_descricao"].astype(str) + " · " + df_plot["grupo_descricao"].astype(str)
-                        df_plot = df_plot.sort_values("total", ascending=False)
-                        df_plot = df_plot.head(topn) if topn else df_plot
-                        _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title="Top Família · Grupo por gasto", height=520)
+            df_show = df_fg.copy()
+            if fam_sel != "Todas":
+                df_show = df_show[df_show["familia_descricao"] == fam_sel]
+            if grp_sel != "Todos":
+                df_show = df_show[df_show["grupo_descricao"] == grp_sel]
 
-                    else:
-                        # separado: Famílias (esquerda) e Grupos (direita)
-                        left, right = st.columns(2)
+            total_local = float(pd.to_numeric(df_show["total"], errors="coerce").fillna(0).sum())
+            qtd_local = int(pd.to_numeric(df_show["qtd_pedidos"], errors="coerce").fillna(0).sum())
 
-                        with left:
-                            df_fam = df_scope.copy()
-                            if "familia_descricao" in df_fam.columns:
-                                df_fam["familia_descricao"] = df_fam["familia_descricao"].fillna("Sem família").astype(str).str.strip()
-                            df_fam["_valor"] = pd.to_numeric(df_fam.get("valor_total", 0), errors="coerce").fillna(0.0)
-                            fam_agg = (
-                                df_fam.groupby("familia_descricao")["_valor"]
-                                .agg(total="sum", qtd_pedidos="count")
-                                .reset_index()
-                                .sort_values("total", ascending=False)
-                            )
-                            fam_agg = fam_agg.head(topn) if topn else fam_agg
-                            _plot_hbar_with_labels(fam_agg, y_col="familia_descricao", x_col="total", title="Top Famílias por gasto", height=520)
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Gasto (seleção)", formatar_moeda_br(total_local))
+            k2.metric("Pedidos (seleção)", f"{qtd_local:,}".replace(",", "."))
+            k3.metric("Participação", f"{_share_percent(total_geral, total_local):.1f}%")
 
-                        with right:
-                            df_grp = df_scope.copy()
-                            if "grupo_descricao" in df_grp.columns:
-                                df_grp["grupo_descricao"] = df_grp["grupo_descricao"].fillna("Sem grupo").astype(str).str.strip()
-                            if fam_sel != "Todas" and "familia_descricao" in df_grp.columns:
-                                df_grp["familia_descricao"] = df_grp["familia_descricao"].fillna("Sem família").astype(str).str.strip()
-                                df_grp = df_grp[df_grp["familia_descricao"] == fam_sel]
-                            df_grp["_valor"] = pd.to_numeric(df_grp.get("valor_total", 0), errors="coerce").fillna(0.0)
-                            grp_agg = (
-                                df_grp.groupby("grupo_descricao")["_valor"]
-                                .agg(total="sum", qtd_pedidos="count")
-                                .reset_index()
-                                .sort_values("total", ascending=False)
-                            )
-                            grp_agg = grp_agg.head(topn) if topn else grp_agg
-                            _plot_hbar_with_labels(grp_agg, y_col="grupo_descricao", x_col="total", title="Top Grupos por gasto", height=520)
+            st.divider()
 
-                    # tabela
-                    df_tbl = df_show.copy()
-                    df_tbl["Total"] = df_tbl["total"].apply(lambda v: formatar_moeda_br(_as_float(v)))
-                    df_tbl["% do total"] = df_tbl["total"].apply(lambda v: f"{_share_percent(total_geral, _as_float(v)):.1f}%")
-                    df_tbl["Pedidos"] = pd.to_numeric(df_tbl["qtd_pedidos"], errors="coerce").fillna(0).astype(int)
-
-                    st.dataframe(
-                        df_tbl[["familia_descricao", "grupo_descricao", "Pedidos", "Total", "% do total"]].rename(
-                            columns={"familia_descricao": "Família", "grupo_descricao": "Grupo"}
-                        ),
-                        use_container_width=True,
-                        hide_index=True,
+            if vis.startswith("Junto"):
+                df_plot = df_show.copy()
+                df_plot["label"] = df_plot["familia_descricao"].astype(str) + " · " + df_plot["grupo_descricao"].astype(str)
+                df_plot = df_plot.sort_values("total", ascending=False)
+                df_plot = df_plot.head(topn) if topn else df_plot
+                _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title="Top Família · Grupo por gasto", height=520)
+            else:
+                left, right = st.columns(2)
+                with left:
+                    df_fam = df_scope.copy()
+                    df_fam["familia_descricao"] = df_fam.get("familia_descricao", "Sem família")
+                    df_fam["familia_descricao"] = df_fam["familia_descricao"].fillna("Sem família").astype(str).str.strip()
+                    df_fam["_valor"] = pd.to_numeric(df_fam.get("valor_total", 0), errors="coerce").fillna(0.0)
+                    fam_agg = (
+                        df_fam.groupby("familia_descricao")["_valor"]
+                        .agg(total="sum", qtd_pedidos="count")
+                        .reset_index()
+                        .sort_values("total", ascending=False)
                     )
+                    fam_agg = fam_agg.head(topn) if topn else fam_agg
+                    _plot_hbar_with_labels(fam_agg, y_col="familia_descricao", x_col="total", title="Top Famílias por gasto", height=520)
+                with right:
+                    df_grp = df_scope.copy()
+                    df_grp["grupo_descricao"] = df_grp.get("grupo_descricao", "Sem grupo")
+                    df_grp["grupo_descricao"] = df_grp["grupo_descricao"].fillna("Sem grupo").astype(str).str.strip()
+                    if fam_sel != "Todas":
+                        df_grp["familia_descricao"] = df_grp.get("familia_descricao", "Sem família")
+                        df_grp["familia_descricao"] = df_grp["familia_descricao"].fillna("Sem família").astype(str).str.strip()
+                        df_grp = df_grp[df_grp["familia_descricao"] == fam_sel]
+                    df_grp["_valor"] = pd.to_numeric(df_grp.get("valor_total", 0), errors="coerce").fillna(0.0)
+                    grp_agg = (
+                        df_grp.groupby("grupo_descricao")["_valor"]
+                        .agg(total="sum", qtd_pedidos="count")
+                        .reset_index()
+                        .sort_values("total", ascending=False)
+                    )
+                    grp_agg = grp_agg.head(topn) if topn else grp_agg
+                    _plot_hbar_with_labels(grp_agg, y_col="grupo_descricao", x_col="total", title="Top Grupos por gasto", height=520)
 
-                    _render_common_actions(df_show, "gastos_familia_grupo", dt_ini, dt_fim)
+            df_tbl = df_show.copy()
+            df_tbl["Total"] = df_tbl["total"].apply(lambda v: formatar_moeda_br(_as_float(v)))
+            df_tbl["% do total"] = df_tbl["total"].apply(lambda v: f"{_share_percent(total_geral, _as_float(v)):.1f}%")
+            df_tbl["Pedidos"] = pd.to_numeric(df_tbl["qtd_pedidos"], errors="coerce").fillna(0).astype(int)
+
+            st.dataframe(
+                df_tbl[["familia_descricao", "grupo_descricao", "Pedidos", "Total", "% do total"]].rename(
+                    columns={"familia_descricao": "Família", "grupo_descricao": "Grupo"}
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            _render_common_actions(df_show, "gastos_familia_grupo", dt_ini, dt_fim)
