@@ -559,10 +559,37 @@ def _safe_page_break(elements):
         elements.append(PageBreak())
 
 def _safe_money(v, formatar_moeda_br):
-    """Formata valores monetários e evita '0.0' poluindo o relatório."""
+    """Formata valores monetários de forma tolerante.
+
+    Aceita:
+    - números (int/float/Decimal)
+    - strings já formatadas (ex.: 'R$ 1.234,56') -> retorna como está
+    - strings numéricas com vírgula/ponto -> tenta converter
+    """
     try:
         if v is None:
             return "-"
+        # Já formatado?
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return "-"
+            if "R$" in s:
+                return s
+            # tenta converter '1.234,56' ou '1234,56'
+            s2 = s.replace(" ", "").replace("R$", "")
+            # se tem vírgula, assume decimal PT-BR
+            if "," in s2:
+                s2 = s2.replace(".", "").replace(",", ".")
+            fv = float(s2)
+        else:
+            fv = float(v)
+
+        if fv <= 0:
+            return "-"
+        return formatar_moeda_br(fv)
+    except Exception:
+        return "-"
         fv = float(v)
         if fv <= 0:
             return "-"
@@ -1241,5 +1268,4 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
     except Exception as e:
         st.error(f"Erro: {e}")
         return None
-
 
