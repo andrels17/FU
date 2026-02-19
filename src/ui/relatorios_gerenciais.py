@@ -63,6 +63,29 @@ def _pill_style() -> None:
     )
 
 
+def _premium_tabs_style() -> None:
+    # premium tabs
+    st.markdown(
+        """
+        <style>
+        /* premium tabs */
+        div[data-baseweb="tab-list"] { gap: 8px; }
+        button[role="tab"] {
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(49,51,63,0.18);
+            background: rgba(255,255,255,0.04);
+        }
+        button[role="tab"][aria-selected="true"] {
+            border: 1px solid rgba(49,51,63,0.32);
+            background: rgba(255,255,255,0.10);
+            font-weight: 600;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 def _tabs_style() -> None:
     # Deixa as abas com visual mais premium (pills, borda, espaçamento)
@@ -498,28 +521,34 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     total_prev = _as_float(df_prev.get("valor_total", pd.Series(dtype=float)).fillna(0).sum()) if df_prev is not None and not df_prev.empty else 0.0
     delta_pct = ((total_geral - total_prev) / total_prev * 100.0) if total_prev else 0.0
 
-    # ===== Resumo =====
-    with st.container(border=True):
-        st.markdown("### 📌 Resumo do período aplicado")
-        a1, a2, a3, a4 = st.columns(4)
-        a1.metric("Pedidos", qtd_geral)
-        a2.metric("Gasto total", formatar_moeda_br(total_geral), f"{delta_pct:.1f}% vs anterior" if total_prev else None)
-        a3.metric("Período anterior", formatar_moeda_br(total_prev))
-        a4.metric("Ticket médio", formatar_moeda_br(ticket))
-        st.caption(
-            f"Período: **{dt_ini.strftime('%d/%m/%Y')}** a **{dt_fim.strftime('%d/%m/%Y')}** · "
-            f"Data: **{filtros.date_field}** · Situação: **{st.session_state.get('rg_entregue_label','Todos')}**"
-        )
+    # ===== Menu de abas (no início) =====
+    tab_resumo, tab_gestor, tab_frota, tab_dept = st.tabs(["📌 Resumo", "👤 Gestor", "🚜 Frota", "🏢 Departamento"]) 
 
-    with st.container(border=True):
-        st.markdown("### 📈 Evolução do gasto (semanal)")
-        df_evol = _evolucao_semanal(df_base, filtros.date_field)
-        if df_evol.empty:
-            st.caption("Sem dados suficientes para a evolução semanal.")
-        else:
-            st.line_chart(df_evol.set_index("data")["total"])
 
-    st.divider()
+    with tab_resumo:
+
+            # ===== Resumo =====
+            with st.container(border=True):
+                st.markdown("### 📌 Resumo do período aplicado")
+                a1, a2, a3, a4 = st.columns(4)
+                a1.metric("Pedidos", qtd_geral)
+                a2.metric("Gasto total", formatar_moeda_br(total_geral), f"{delta_pct:.1f}% vs anterior" if total_prev else None)
+                a3.metric("Período anterior", formatar_moeda_br(total_prev))
+                a4.metric("Ticket médio", formatar_moeda_br(ticket))
+                st.caption(
+                    f"Período: **{dt_ini.strftime('%d/%m/%Y')}** a **{dt_fim.strftime('%d/%m/%Y')}** · "
+                    f"Data: **{filtros.date_field}** · Situação: **{st.session_state.get('rg_entregue_label','Todos')}**"
+                )
+
+            with st.container(border=True):
+                st.markdown("### 📈 Evolução do gasto (semanal)")
+                df_evol = _evolucao_semanal(df_base, filtros.date_field)
+                if df_evol.empty:
+                    st.caption("Sem dados suficientes para a evolução semanal.")
+                else:
+                    st.line_chart(df_evol.set_index("data")["total"])
+
+            st.divider()
 
     
     # ===== Governança estrutural + Performance global =====
@@ -592,10 +621,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         col1.metric("% Atraso", f"{pct_atraso:.1f}%" if pct_atraso is not None else "—")
         col2.metric("% Pendentes", f"{pct_pendente:.1f}%" if pct_pendente is not None else "—")
         col3.metric("Lead time mediano", f"{lt_med:.0f} dias" if lt_med is not None else "—")
-
-
-    tab_gestor, tab_frota, tab_dept = st.tabs(["👤 Por Gestor", "🚜 Por Frota", "🏢 Por Departamento"])
-
+    # (tabs moved to the beginning)
     # ===== Aba Gestor =====
     with tab_gestor:
         st.subheader("Gastos por Gestor")
