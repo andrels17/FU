@@ -908,10 +908,45 @@ def gerar_pdf_executivo_premium(df_pedidos, df_resumo, formatar_moeda_br):
         elements.append(Paragraph("Relatório Executivo", titulo_style))
         elements.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#667eea'), spaceAfter=12))
 
-        # KPIs
+        # KPIs (tolerante a df cru ou pré-formatado)
         total = int(len(df_pedidos)) if df_pedidos is not None else 0
-        valor = float(df_pedidos['valor_total'].sum()) if total > 0 and 'valor_total' in df_pedidos.columns else 0.0
-        entregues = int((df_pedidos['entregue'] == True).sum()) if total > 0 and 'entregue' in df_pedidos.columns else 0
+
+        def _get_col(df, candidates):
+            for c in candidates:
+                if df is not None and hasattr(df, "columns") and c in df.columns:
+                    return c
+            return None
+
+        # Coluna de valor
+        col_val = _get_col(df_pedidos, ["valor_total", "Preço", "Valor (R$)", "Valor", "valor"])
+        valor = 0.0
+        if total > 0 and col_val:
+            try:
+                s = df_pedidos[col_val]
+                if getattr(s, "dtype", None) == object:
+                    s2 = s.astype(str).str.replace("R$", "", regex=False).str.replace(" ", "", regex=False)
+                    s2 = s2.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                    valor = float(pd.to_numeric(s2, errors="coerce").fillna(0).sum())
+                else:
+                    valor = float(pd.to_numeric(s, errors="coerce").fillna(0).sum())
+            except Exception:
+                valor = 0.0
+
+        # Entregues: tenta bool 'entregue' senão inferir por Status
+        entregues = 0
+        col_entregue = _get_col(df_pedidos, ["entregue", "Entregue"])
+        col_status = _get_col(df_pedidos, ["status", "Status"])
+        if total > 0 and col_entregue:
+            try:
+                entregues = int((df_pedidos[col_entregue] == True).sum())
+            except Exception:
+                entregues = 0
+        elif total > 0 and col_status:
+            try:
+                entregues = int(df_pedidos[col_status].astype(str).str.lower().str.contains("entreg").sum())
+            except Exception:
+                entregues = 0
+
         taxa = (entregues / total * 100) if total > 0 else 0.0
 
         kpi_dados = [
