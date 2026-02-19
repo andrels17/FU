@@ -682,15 +682,29 @@ def exibir_consulta_pedidos(_supabase):
                     st.rerun()
 
         with c3:
-            # Atalhos (chips) + select (dinâmico)
+            # Atalhos (chips) + select (dinâmico) — layout responsivo
             status_opts_atual = st.session_state.get("consulta_status_opts") or []
+
+            def _can_use(label: str) -> bool:
+                if label == "Atrasados":
+                    return True
+                if label == "Sem OC":
+                    return "Sem OC" in status_opts_atual
+                if label == "Em Transporte":
+                    return "Em Transporte" in status_opts_atual
+                if label == "Entregues":
+                    return "Entregue" in status_opts_atual
+                if label == "Limpar":
+                    return True
+                return False
+
             # Presets válidos conforme o que existe no dataset
             presets = ["—", "Atrasados"]
-            if "Sem OC" in status_opts_atual:
+            if _can_use("Sem OC"):
                 presets.append("Sem OC")
-            if "Em Transporte" in status_opts_atual:
+            if _can_use("Em Transporte"):
                 presets.append("Em Transporte")
-            if "Entregue" in status_opts_atual:
+            if _can_use("Entregues"):
                 presets.append("Entregues")
             presets.append("Limpar")
 
@@ -699,28 +713,47 @@ def exibir_consulta_pedidos(_supabase):
             if cur_preset not in presets:
                 st.session_state["consulta_preset"] = "—"
 
-            # Chips (aplicam via callback -> seguro)
-            chip_cols = st.columns(5)
-            chip_defs = [
-                ("Atrasados", "Atrasados"),
-                ("Sem OC", "Sem OC"),
-                ("Em Transporte", "Em Transporte"),
-                ("Entregues", "Entregues"),
-                ("Limpar", "Limpar"),
+            st.caption("Atalhos rápidos")
+
+            # Chips em 2 linhas (fica bom no desktop e não espreme no mobile)
+            r1 = st.columns(3)
+            r2 = st.columns(2)
+
+            chip_defs_1 = [
+                ("⏰ Atrasados", "Atrasados"),
+                ("🧾 Sem OC", "Sem OC"),
+                ("🚚 Transporte", "Em Transporte"),
             ]
-            for col, (lbl, pid) in zip(chip_cols, chip_defs):
+            chip_defs_2 = [
+                ("✅ Entregues", "Entregues"),
+                ("🧹 Limpar", "Limpar"),
+            ]
+
+            for col, (lbl, pid) in zip(r1, chip_defs_1):
                 with col:
                     st.button(
                         lbl,
                         use_container_width=True,
                         key=f"consulta_chip_{pid}",
+                        disabled=not _can_use(pid),
                         on_click=_apply_preset,
                         args=(pid, status_opts_atual),
                     )
 
-            # Select (mostra selecionado)
+            for col, (lbl, pid) in zip(r2, chip_defs_2):
+                with col:
+                    st.button(
+                        lbl,
+                        use_container_width=True,
+                        key=f"consulta_chip_{pid}",
+                        disabled=not _can_use(pid),
+                        on_click=_apply_preset,
+                        args=(pid, status_opts_atual),
+                    )
+
+            # Select (opcional) — útil para manter "selecionado" visível
             st.selectbox(
-                "Atalhos",
+                "Atalho",
                 presets,
                 key="consulta_preset",
                 label_visibility="collapsed",
