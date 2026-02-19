@@ -1193,6 +1193,21 @@ def main():
     # Mostra apenas quando a sidebar está expandida (evita “prensar” no modo compacto/mobile).
     if not st.session_state.get("fu_sidebar_hidden"):
         with st.sidebar:
+            
+        st.caption(f"DEBUG tenant_id: {tenant_id}")
+        
+            try:
+                dbg = (
+                    supabase.table("materiais")
+                    .select("almoxarifado", count="exact")
+                    .eq("tenant_id", tenant_id)
+                    .limit(1)
+                    .execute()
+                )
+                st.caption(f"DEBUG materiais (tenant): {dbg.count}")
+            except Exception as e:
+                st.warning(f"DEBUG erro lendo materiais: {e}")
+
             st.markdown("### Contexto")
             almox_list = _fetch_almoxarifados_tenant(supabase, tenant_id)
             options_almox = ["Todos"] + almox_list
