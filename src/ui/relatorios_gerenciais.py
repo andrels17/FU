@@ -690,119 +690,104 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     with tab_resumo:
         _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_resumo')
+        
+st.divider()
+
+with st.container(border=True):
+    st.markdown("### Materiais (ranking)")
+
+    c1, c2, c3 = st.columns([2, 2, 2])
+    with c1:
+        criterio = st.radio(
+            "Ordenar por",
+            ["Preço unitário (estimado)", "Gasto total (soma)", "Quantidade de pedidos"],
+            index=0,
+            horizontal=True,
+            key="rg_rank_mat_criterio",
+        )
+    with c2:
+        ordem = st.radio(
+            "Ordem",
+            ["Decrescente", "Crescente"],
+            index=0,
+            horizontal=True,
+            key="rg_rank_mat_ordem",
+        )
+    with c3:
+        topn_rank = _top_selector("rg_rank_mat")
+
+    # Base para ranking
+    df_rank = _materiais_mais_caros(df_base, mode="unit" if criterio.startswith("Preço") else "total")
+
+    if df_rank.empty:
+        st.caption("Sem dados suficientes para montar o ranking.")
+    else:
+        asc = (ordem == "Crescente")
+
+        # coluna de ordenação e formatação
+        if criterio == "Quantidade de pedidos":
+            df_rank["_ord"] = pd.to_numeric(df_rank.get("qtd_pedidos", 0), errors="coerce").fillna(0).astype(int)
+            x_col = "_ord"
+            titulo = "Top materiais por quantidade de pedidos"
+            is_money = False
+        else:
+            df_rank["_ord"] = pd.to_numeric(df_rank.get("valor", 0), errors="coerce").fillna(0.0)
+            x_col = "_ord"
+            titulo = "Top materiais por preço unitário" if criterio.startswith("Preço") else "Top materiais por gasto total"
+            is_money = True
+
+        df_plot = df_rank.copy()
+        df_plot["label"] = df_plot["cod_material"].astype(str) + " · " + df_plot["descricao"].astype(str)
+        df_plot = df_plot.sort_values("_ord", ascending=asc)
+
+        # aplica Top N mantendo ordem
+        if topn_rank:
+            df_plot = df_plot.head(topn_rank)
+
+        # ========= Métricas =========
+        total_itens = int(len(df_plot))
+        total_pedidos = int(pd.to_numeric(df_plot.get("qtd_pedidos", 0), errors="coerce").fillna(0).sum())
+        soma_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).sum())
+        max_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).max()) if total_itens else 0.0
+        min_ord = float(pd.to_numeric(df_plot["_ord"], errors="coerce").fillna(0).min()) if total_itens else 0.0
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Itens no gráfico", f"{total_itens:,}".replace(",", "."))
+        k2.metric("Pedidos (soma)", f"{total_pedidos:,}".replace(",", "."))
+
+        if is_money:
+            k3.metric("Soma (seleção)", formatar_moeda_br(soma_ord))
+            k4.metric("Maior / Menor", f"{formatar_moeda_br(max_ord)} / {formatar_moeda_br(min_ord)}")
+        else:
+            k3.metric("Soma (seleção)", f"{soma_ord:,.0f}".replace(",", "."))
+            k4.metric("Maior / Menor", f"{max_ord:,.0f}".replace(",", ".") + " / " + f"{min_ord:,.0f}".replace(",", "."))
+
         st.divider()
 
-        with st.container(border=True):
-            st.markdown("### Materiais mais caros")
-            c1, c2 = st.columns([2, 1])
-            with c1:
-                modo = st.radio(
-                    "Ranking por",
-                    ["Preço unitário (última compra)", "Gasto total (soma)"],
-                    index=0,
-                    horizontal=True,
-                    key="rg_caros_modo",
-                )
-            with c2:
-                topn_caros = _top_selector("rg_caros")
+        # ========= Gráfico =========
+        if is_money:
+            # usa x_col="total" para aplicar rótulos em moeda BR no helper
+            df_plot["total"] = df_plot["_ord"].astype(float)
+            _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title=titulo, height=520)
+        else:
+            _plot_hbar_with_labels(df_plot, y_col="label", x_col="_ord", title=titulo, height=520)
 
-            mode_key = "unit" if modo.startswith("Preço") else "total"
-            df_caros = _materiais_mais_caros(df_base, mode=mode_key)
+        # ========= Tabela =========
+        df_tbl = df_plot.copy()
+        df_tbl["Pedidos"] = pd.to_numeric(df_tbl.get("qtd_pedidos", 0), errors="coerce").fillna(0).astype(int)
 
-            if df_caros.empty:
-                st.caption("Sem dados suficientes para ranquear materiais.")
-            else:
-                df_plot = df_caros.copy()
-                df_plot["label"] = df_plot["cod_material"].astype(str) + " · " + df_plot["descricao"].astype(str)
-                df_plot = df_plot.sort_values("valor", ascending=False)
-                df_plot = df_plot.head(topn_caros) if topn_caros else df_plot
+        if is_money:
+            df_tbl["Valor"] = df_tbl["_ord"].apply(lambda v: formatar_moeda_br(_as_float(v)))
+        else:
+            df_tbl["Valor"] = df_tbl["_ord"].apply(lambda v: f"{_as_float(v):,.0f}".replace(",", "."))
 
-                titulo = "Top materiais por preço unitário" if mode_key == "unit" else "Top materiais por gasto total"
-                _plot_hbar_with_labels(df_plot, y_col="label", x_col="valor", title=titulo, height=520)
-
-                df_tbl = df_plot.copy()
-                df_tbl["Valor"] = df_tbl["valor"].apply(lambda v: formatar_moeda_br(_as_float(v)))
-                df_tbl["Pedidos"] = pd.to_numeric(df_tbl["qtd_pedidos"], errors="coerce").fillna(0).astype(int)
-
-                st.dataframe(
-                    df_tbl[["cod_material", "descricao", "Pedidos", "Valor"]].rename(
-                        columns={"cod_material": "Cód. Material", "descricao": "Descrição"}
-                    ),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-                # ===== Governança estrutural + Performance global =====
-                with st.container(border=True):
-                    st.markdown("### Governança estrutural")
-                    # Departamentos presentes nos pedidos do período aplicado
-                    depts_base = set(df_base.get("departamento", pd.Series(dtype=str)).dropna().astype(str).str.strip().unique())
-                    depts_base = {d for d in depts_base if d}
-                    depts_vinculados = set(dept_map.keys())
-                    depts_sem_gestor = sorted(list(depts_base - depts_vinculados))
-
-                    # Gestores (no mapa) sem departamento vinculado
-                    gestores_ids = set(user_df.get("user_id", pd.Series(dtype=str)).dropna().astype(str).unique()) if "user_id" in user_df.columns else set()
-                    gestores_vinculados = set(str(v) for v in dept_map.values())
-                    gestores_sem_dept = sorted(list(gestores_ids - gestores_vinculados))
-
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Departamentos no período", len(depts_base))
-                    c2.metric("Deptos com gestor", len(depts_base & depts_vinculados))
-                    c3.metric("Deptos sem gestor", len(depts_sem_gestor))
-                    c4.metric("Gestores sem depto", len(gestores_sem_dept))
-
-                    colA, colB = st.columns(2)
-                    with colA:
-                        if depts_sem_gestor:
-                            st.warning("Departamentos sem gestor vinculado")
-                            st.dataframe(pd.DataFrame({"departamento": depts_sem_gestor}), use_container_width=True, hide_index=True)
-                        else:
-                            st.success("Todos os departamentos do período têm gestor vinculado ")
-                    with colB:
-                        if gestores_sem_dept:
-                            st.warning("Gestores no tenant sem departamento vinculado")
-                            if "user_id" in user_df.columns:
-                                df_gs = user_df[user_df["user_id"].astype(str).isin(gestores_sem_dept)].copy()
-                                cols = [c for c in ["nome", "email", "role", "user_id"] if c in df_gs.columns]
-                                st.dataframe(df_gs[cols], use_container_width=True, hide_index=True)
-                            else:
-                                st.write(gestores_sem_dept)
-                        else:
-                            st.success("Sem gestores “órfãos” de departamento ")
-
-                # Performance operacional (global)
-                with st.container(border=True):
-                    st.markdown("### Performance operacional (visão geral)")
-                    col1, col2, col3 = st.columns(3)
-
-                    pct_atraso = None
-                    if "atrasado" in df_base.columns:
-                        s = pd.to_numeric(df_base["atrasado"], errors="coerce")
-                        if s.notna().any():
-                            pct_atraso = float(s.fillna(0).mean() * 100)
-
-                    pct_pendente = None
-                    if "entregue" in df_base.columns:
-                        s = df_base["entregue"]
-                        # entregue pode vir bool, 't/f', 0/1…
-                        sb = s.apply(lambda x: bool(x) if isinstance(x, bool) else (str(x).strip().lower() in ("true","t","1","sim","s","yes")))
-                        pct_pendente = float((~sb).mean() * 100) if len(sb) else None
-
-                    # lead time (dias) se houver datas
-                    lt_med = None
-                    if "data_solicitacao" in df_base.columns and "data_entrega_real" in df_base.columns:
-                        ds = pd.to_datetime(df_base["data_solicitacao"], errors="coerce")
-                        de = pd.to_datetime(df_base["data_entrega_real"], errors="coerce")
-                        lt = (de - ds).dt.days
-                        lt = lt[lt.notna() & (lt >= 0)]
-                        if len(lt) > 0:
-                            lt_med = float(lt.median())
-
-                    col1.metric("% Atraso", f"{pct_atraso:.1f}%" if pct_atraso is not None else "—")
-                    col2.metric("% Pendentes", f"{pct_pendente:.1f}%" if pct_pendente is not None else "—")
-                    col3.metric("Lead time mediano", f"{lt_med:.0f} dias" if lt_med is not None else "—")
-                # (tabs moved to the beginning)
+        st.dataframe(
+            df_tbl[["cod_material", "descricao", "Pedidos", "Valor"]].rename(
+                columns={"cod_material": "Cód. Material", "descricao": "Descrição"}
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
         # ===== Aba Gestor =====
