@@ -170,20 +170,54 @@ def _download_df(df: pd.DataFrame, prefix: str, dt_ini: date, dt_fim: date) -> t
 
 
 def _links_to_dept_map(_links) -> dict[str, str]:
-    """Normaliza links para dict: {departamento: gestor_user_id}."""
+    """Normaliza 'links' (vínculos depto→gestor) para dict: {departamento: gestor_user_id}.
+
+    Aceita:
+      - dict: {"Compras": "<user_id>", ...}
+      - list[dict]: [{"departamento": "...", "gestor_user_id": "..."}, ...]
+      - pandas.DataFrame: colunas "departamento" e "gestor_user_id" (ou variações comuns)
+    """
     if _links is None:
         return {}
+
+    # dict direto
     if isinstance(_links, dict):
         return {str(k).strip(): v for k, v in _links.items() if str(k).strip()}
+
     out: dict[str, str] = {}
-    for l in (_links or []):
-        try:
-            dept = (l.get("departamento") or "").strip()
-            gid = l.get("gestor_user_id")
+
+    # DataFrame (evita "truth value of a DataFrame is ambiguous")
+    try:
+        import pandas as pd  # type: ignore
+        if isinstance(_links, pd.DataFrame):
+            if _links.empty:
+                return {}
+            cols = {c.lower().strip(): c for c in _links.columns}
+            c_dept = cols.get("departamento") or cols.get("depto") or cols.get("depart") or cols.get("department")
+            c_gid = cols.get("gestor_user_id") or cols.get("gestor_id") or cols.get("user_id") or cols.get("gestor")
+            if not c_dept or not c_gid:
+                return {}
+            for _, row in _links[[c_dept, c_gid]].iterrows():
+                dept = str(row.get(c_dept) or "").strip()
+                gid = row.get(c_gid)
+                if dept:
+                    out[dept] = gid
+            return out
+    except Exception:
+        pass
+
+    # iterável de dicts (lista, tupla, etc.)
+    try:
+        for l in _links:
+            if not isinstance(l, dict):
+                continue
+            dept = (l.get("departamento") or l.get("depto") or l.get("department") or "").strip()
+            gid = l.get("gestor_user_id") or l.get("gestor_id") or l.get("user_id") or l.get("gestor")
             if dept:
                 out[dept] = gid
-        except Exception:
-            continue
+    except Exception:
+        return {}
+
     return out
 
 
