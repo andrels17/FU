@@ -851,6 +851,16 @@ def _cached_alertas(df_pedidos, df_fornecedores):
     return sa.calcular_alertas(df_pedidos, df_fornecedores)
 
 
+
+def _norm_txt(s: str) -> str:
+    """Normaliza texto para comparação (remove acentos, espaços, caixa)."""
+    if s is None:
+        return ""
+    s = str(s).strip().lower()
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    return s
+
 def main():
 
     # 🔒 Garante estrutura mínima de sessão (evita AttributeError)
