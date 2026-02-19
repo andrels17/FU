@@ -1192,7 +1192,7 @@ def main():
     # ===== Filtro global por Almoxarifado (contexto do app) =====
     # Mostra apenas quando a sidebar está expandida (evita “prensar” no modo compacto/mobile).
     if not st.session_state.get("fu_sidebar_hidden"):
-        with st.sidebar:
+    with st.sidebar:
             
         st.caption(f"DEBUG tenant_id: {tenant_id}")
         
