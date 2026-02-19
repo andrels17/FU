@@ -456,7 +456,7 @@ def preparar_dados_exportacao(df):
             'fornecedor_nome': 'Fornecedor',
             'fornecedor_uf': 'UF',
             'descricao': 'Descrição',
-            'qtde_pendente': 'Qtde. Pendente',
+            'qtde_pendente': 'Q. Pendente',
             'valor_total': 'Preço',
         }
         df_export = df_export.rename(columns=rename)
@@ -478,16 +478,16 @@ def preparar_dados_exportacao(df):
             'UF': 'UF',
             'descricao': 'Descrição',
             'Descrição': 'Descrição',
-            'qtde_pendente': 'Qtde. Pendente',
-            'Qtd Pendente': 'Qtde. Pendente',
-            'Qtde. Pendente': 'Qtde. Pendente',
+            'qtde_pendente': 'Q. Pendente',
+            'Q. Pendente': 'Q. Pendente',
+            'Q. Pendente': 'Q. Pendente',
             'valor_total': 'Preço',
             'Valor (R$)': 'Preço',
             'Preço': 'Preço',
         }
         df_export = base.rename(columns=rename2)
 
-    ordem = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Qtde. Pendente', 'Preço']
+    ordem = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Q. Pendente', 'Preço']
     cols = [c for c in ordem if c in df_export.columns]
     extras = [c for c in df_export.columns if c not in cols]
     return df_export[cols + extras].copy()
@@ -1065,7 +1065,7 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
 
         df_export = preparar_dados_exportacao(df_pedidos)
         # Colunas padrão
-        colunas_pdf = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Qtde. Pendente', 'Preço']
+        colunas_pdf = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Q. Pendente', 'Preço']
         cols = [c for c in colunas_pdf if c in df_export.columns]
         df_pdf = df_export[cols].copy()
 
@@ -1084,7 +1084,7 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
                     row.append(Paragraph(_truncate_text(str(r[c]), 60), forn_style))
                 elif c == 'Data OC':
                     row.append(_safe_date(r[c]))
-                elif c == 'Qtde. Pendente':
+                elif c == 'Q. Pendente':
                     try:
                         q = r[c]
                         if q is None or str(q).strip() == "" or str(q).lower() == "nan":
@@ -1200,7 +1200,7 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
         # Detalhamento (paginação inteligente)
 
         df_export = preparar_dados_exportacao(df_fornecedor)
-        colunas = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Qtde. Pendente', 'Preço']
+        colunas = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Q. Pendente', 'Preço']
         cols = [c for c in colunas if c in df_export.columns]
         df_pdf = df_export[cols].copy()
 
@@ -1331,7 +1331,7 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
         # Detalhamento (paginação inteligente)
 
         df_export = preparar_dados_exportacao(df_dept)
-        colunas = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Qtde. Pendente', 'Preço']
+        colunas = ['Data OC', 'N° OC', 'Frota', 'Departamento', 'Fornecedor', 'UF', 'Descrição', 'Q. Pendente', 'Preço']
         cols = [c for c in colunas if c in df_export.columns]
         df_pdf = df_export[cols].copy()
 
