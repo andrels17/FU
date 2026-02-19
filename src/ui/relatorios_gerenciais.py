@@ -403,6 +403,45 @@ def _add_prev_delta(df_now: pd.DataFrame, df_prev_group: pd.DataFrame, key_col: 
     return out
 
 
+
+
+def _gastos_por_familia_grupo(df_base: pd.DataFrame) -> pd.DataFrame:
+    """Agrupa gastos por família e grupo (usa colunas vindas do catálogo/material)."""
+    if df_base is None or df_base.empty:
+        return pd.DataFrame(columns=["familia_descricao", "grupo_descricao", "qtd_pedidos", "total"])
+
+    fam_col = "familia_descricao" if "familia_descricao" in df_base.columns else None
+    grp_col = "grupo_descricao" if "grupo_descricao" in df_base.columns else None
+
+    if not fam_col and not grp_col:
+        return pd.DataFrame(columns=["familia_descricao", "grupo_descricao", "qtd_pedidos", "total"])
+
+    tmp = df_base.copy()
+    if fam_col:
+        tmp[fam_col] = tmp[fam_col].fillna("Sem família").astype(str).str.strip()
+        tmp.loc[tmp[fam_col] == "", fam_col] = "Sem família"
+    else:
+        tmp["familia_descricao"] = "Sem família"
+        fam_col = "familia_descricao"
+
+    if grp_col:
+        tmp[grp_col] = tmp[grp_col].fillna("Sem grupo").astype(str).str.strip()
+        tmp.loc[tmp[grp_col] == "", grp_col] = "Sem grupo"
+    else:
+        tmp["grupo_descricao"] = "Sem grupo"
+        grp_col = "grupo_descricao"
+
+    tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0.0)
+
+    out = (
+        tmp.groupby([fam_col, grp_col])["_valor"]
+        .agg(total="sum", qtd_pedidos="count")
+        .reset_index()
+        .rename(columns={fam_col: "familia_descricao", grp_col: "grupo_descricao"})
+        .sort_values("total", ascending=False)
+    )
+    return out
+
 # ============================
 # Main entry
 # ============================
@@ -465,7 +504,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     # ===== Sidebar =====
     with st.sidebar:
-        st.markdown("### 🧾 Filtros do relatório")
+        st.markdown("### Filtros do relatório")
 
         p1, p2, p3, p4 = st.columns(4)
         if p1.button("7d", use_container_width=True):
@@ -517,7 +556,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         )
 
         st.divider()
-        st.markdown("### 👥 Filtro de Pessoas (aba Gestor)")
+        st.markdown("### Filtro de Pessoas (aba Gestor)")
 
         roles = sorted([str(x).strip().lower() for x in user_df["role"].dropna().unique().tolist() if str(x).strip()]) if "role" in user_df.columns else []
         if not roles:
@@ -560,13 +599,13 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     delta_pct = ((total_geral - total_prev) / total_prev * 100.0) if total_prev else 0.0
 
     # ===== Menu de abas (no início) =====
-    tab_resumo, tab_gestor, tab_frota, tab_dept = st.tabs(["📌 Resumo", "👤 Gestor", "🚜 Frota", "🏢 Departamento"])
+    tab_resumo, tab_gestor, tab_frota, tab_dept, tab_materiais = st.tabs(["Resumo", "Gestor", "Frota", "Departamento", "Família & Grupo"])
 
     with tab_resumo:
         _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_resumo')
 
         with st.container(border=True):
-            st.markdown("### 📌 Resumo do período aplicado")
+            st.markdown("### Resumo do período aplicado")
             a1, a2, a3, a4 = st.columns(4)
             a1.metric("Pedidos", qtd_geral)
             a2.metric("Gasto total", formatar_moeda_br(total_geral), f"{delta_pct:.1f}% vs anterior" if total_prev else None)
@@ -578,7 +617,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             )
 
         with st.container(border=True):
-            st.markdown("### 📈 Evolução do gasto (semanal)")
+            st.markdown("### Evolução do gasto (semanal)")
             df_evol = _evolucao_semanal(df_base, filtros.date_field)
             if df_evol.empty:
                 st.caption("Sem dados suficientes para a evolução semanal.")
@@ -590,7 +629,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     
     # ===== Governança estrutural + Performance global =====
     with st.container(border=True):
-        st.markdown("### 🧭 Governança estrutural")
+        st.markdown("### Governança estrutural")
         # Departamentos presentes nos pedidos do período aplicado
         depts_base = set(df_base.get("departamento", pd.Series(dtype=str)).dropna().astype(str).str.strip().unique())
         depts_base = {d for d in depts_base if d}
@@ -614,7 +653,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                 st.warning("Departamentos sem gestor vinculado")
                 st.dataframe(pd.DataFrame({"departamento": depts_sem_gestor}), use_container_width=True, hide_index=True)
             else:
-                st.success("Todos os departamentos do período têm gestor vinculado ✅")
+                st.success("Todos os departamentos do período têm gestor vinculado ")
         with colB:
             if gestores_sem_dept:
                 st.warning("Gestores no tenant sem departamento vinculado")
@@ -625,11 +664,11 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                 else:
                     st.write(gestores_sem_dept)
             else:
-                st.success("Sem gestores “órfãos” de departamento ✅")
+                st.success("Sem gestores “órfãos” de departamento ")
 
     # Performance operacional (global)
     with st.container(border=True):
-        st.markdown("### ⚙️ Performance operacional (visão geral)")
+        st.markdown("### Performance operacional (visão geral)")
         col1, col2, col3 = st.columns(3)
 
         pct_atraso = None
@@ -663,7 +702,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     with tab_gestor:
         _actions_bar(df_base, dt_ini, dt_fim, prefix='rg_gestor')
 
-        st.subheader("Gastos por Gestor")
+        st.subheader("Gastos por Coordenador")
         topn = _top_selector("rg_gestor")
         comparar = st.toggle("Comparar com período anterior", value=True, key="rg_cmp_gestor")
 
@@ -671,7 +710,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         df_g = _safe_gastos_por_gestor(df_base, links_df, user_df)
 
         if df_g.empty:
-            st.info("Sem dados por Gestor. Verifique se há vínculos em gestor_departamentos para os departamentos filtrados.")
+            st.info("Sem dados por Coordenador. Verifique se há vínculos em gestor_departamentos para os departamentos filtrados.")
             st.stop()
 
         # adiciona role via user_df
@@ -696,7 +735,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             ]
 
         if df_g.empty:
-            st.warning("Nenhum gestor após filtros de pessoas (roles/busca).")
+            st.warning("Nenhum coordenador após filtros de pessoas (roles/busca).")
             st.stop()
 
         # comparação
@@ -714,7 +753,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         # KPIs
         with st.container(border=True):
             g1, g2, g3 = st.columns(3)
-            g1.metric("Gestores no período", int(df_g["gestor_user_id"].nunique()))
+            g1.metric("Coordenadores no período", int(df_g["gestor_user_id"].nunique()))
             g2.metric("Gasto total", formatar_moeda_br(_as_float(df_g["total"].sum())))
             g3.metric("Pedidos", int(_as_float(df_g["qtd_pedidos"].sum())) if "qtd_pedidos" in df_g.columns else "-")
 
@@ -735,15 +774,15 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             df_plot,
             y_col="gestor_nome",
             x_col="total",
-            title="Top gestores por gasto",
+            title="Top Coordenadores por gasto",
             height=420,
         )
 
-        with st.expander("🧠 Insights avançados", expanded=False):
+        with st.expander("Dados avançados", expanded=False):
 
             # ===== Inteligência gerencial (ranking + destaques) =====
             with st.container(border=True):
-                st.markdown("### 🏆 Ranking executivo")
+                st.markdown("### Ranking executivo")
                 top3 = df_g.head(3).copy()
                 cols = st.columns(3)
 
@@ -771,7 +810,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
                 if not alta.empty:
                     with st.container(border=True):
-                        st.markdown("#### 📈 Crescimentos relevantes (> 20%)")
+                        st.markdown("#### Crescimentos relevantes (> 20%)")
                         st.dataframe(
                             alta[["gestor_nome", "total", "prev_total", "delta_pct"]].assign(
                                 total=lambda x: x["total"].map(lambda v: formatar_moeda_br(_as_float(v))),
@@ -784,7 +823,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
                 if not queda.empty:
                     with st.container(border=True):
-                        st.markdown("#### 📉 Quedas relevantes (< -20%)")
+                        st.markdown("#### Quedas relevantes (< -20%)")
                         st.dataframe(
                             queda[["gestor_nome", "total", "prev_total", "delta_pct"]].assign(
                                 total=lambda x: x["total"].map(lambda v: formatar_moeda_br(_as_float(v))),
@@ -799,7 +838,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             try:
                 top = df_g.iloc[0]
                 st.info(
-                    f"🧠 No período aplicado, **{top.get('gestor_nome','(Sem nome)')}** foi o gestor com maior impacto, "
+                    f"No período aplicado, **{top.get('gestor_nome','(Sem nome)')}** foi o coordenador com maior impacto, "
                     f"respondendo por **{_as_float(top.get('participacao_pct')):.1f}%** do gasto total."
                 )
             except Exception:
@@ -864,9 +903,9 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
         st.subheader("Gastos por Departamento")
 
-        with st.expander("🧠 Insights (Departamento)", expanded=False):
+        with st.expander("Insights (Departamento)", expanded=False):
             with st.container(border=True):
-                st.markdown("#### 🏢 Top Departamentos (gasto)")
+                st.markdown("#### Top Departamentos (gasto)")
                 tmp = df_base.copy()
                 if "departamento" not in tmp.columns:
                     st.caption("Sem coluna 'departamento' na base.")
@@ -942,3 +981,71 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
         _render_common_actions(df_d, "gastos_por_departamento", dt_ini, dt_fim)
+
+# ===== Aba Família & Grupo =====
+with tab_materiais:
+    _actions_bar(df_base, dt_ini, dt_fim, prefix="rg_familia_grupo")
+
+    st.subheader("Gastos por Família e Grupo de Material")
+
+    if ("familia_descricao" not in df_base.columns) and ("grupo_descricao" not in df_base.columns):
+        st.info("Ainda não há colunas de Família/Grupo na base. Verifique se a view de pedidos já traz esses campos do catálogo de materiais.")
+    else:
+        df_fg = _gastos_por_familia_grupo(df_base)
+        if df_fg.empty:
+            st.info("Sem dados para Família/Grupo no filtro atual.")
+        else:
+            # filtros locais (opcionais)
+            c1, c2, c3 = st.columns([2, 2, 1])
+            with c1:
+                fam_opts = ["Todas"] + sorted([x for x in df_fg["familia_descricao"].dropna().unique().tolist()])
+                fam_sel = st.selectbox("Família", fam_opts, index=0, key="rg_fg_familia")
+            with c2:
+                grp_opts_all = df_fg.copy()
+                if fam_sel != "Todas":
+                    grp_opts_all = grp_opts_all[grp_opts_all["familia_descricao"] == fam_sel]
+                grp_opts = ["Todos"] + sorted([x for x in grp_opts_all["grupo_descricao"].dropna().unique().tolist()])
+                grp_sel = st.selectbox("Grupo", grp_opts, index=0, key="rg_fg_grupo")
+            with c3:
+                topn = _top_selector("rg_fg")
+
+            df_show = df_fg.copy()
+            if fam_sel != "Todas":
+                df_show = df_show[df_show["familia_descricao"] == fam_sel]
+            if grp_sel != "Todos":
+                df_show = df_show[df_show["grupo_descricao"] == grp_sel]
+
+            total_local = float(pd.to_numeric(df_show["total"], errors="coerce").fillna(0).sum())
+            qtd_local = int(pd.to_numeric(df_show["qtd_pedidos"], errors="coerce").fillna(0).sum())
+
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Gasto (seleção)", formatar_moeda_br(total_local))
+            k2.metric("Pedidos (seleção)", f"{qtd_local:,}".replace(",", "."))
+            k3.metric("Participação", f"{_share_percent(total_geral, total_local):.1f}%")
+
+            st.divider()
+
+            # gráfico: top grupos dentro da família escolhida
+            df_plot = df_show.copy()
+            df_plot["label"] = df_plot["familia_descricao"].astype(str) + " · " + df_plot["grupo_descricao"].astype(str)
+            df_plot = df_plot.sort_values("total", ascending=False)
+            df_plot = df_plot.head(topn) if topn else df_plot
+
+            _plot_hbar_with_labels(df_plot, y_col="label", x_col="total", title="Top Família · Grupo por gasto", height=520)
+
+            # tabela
+            df_tbl = df_show.copy()
+            df_tbl["Total"] = df_tbl["total"].apply(lambda v: formatar_moeda_br(_as_float(v)))
+            df_tbl["% do total"] = df_tbl["total"].apply(lambda v: f"{_share_percent(total_geral, _as_float(v)):.1f}%")
+            df_tbl["Pedidos"] = pd.to_numeric(df_tbl["qtd_pedidos"], errors="coerce").fillna(0).astype(int)
+
+            st.dataframe(
+                df_tbl[["familia_descricao", "grupo_descricao", "Pedidos", "Total", "% do total"]].rename(
+                    columns={"familia_descricao": "Família", "grupo_descricao": "Grupo"}
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            _render_common_actions(df_show, "gastos_familia_grupo", dt_ini, dt_fim)
+
