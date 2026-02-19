@@ -26,8 +26,7 @@ from src.services.relatorios_gastos import (
 
 def _date_defaults() -> Tuple[date, date]:
     hoje = date.today()
-    ini = hoje - timedelta(days=30)
-    return ini, hoje
+    return hoje - timedelta(days=30), hoje
 
 
 def _as_float(x: Any) -> float:
@@ -38,9 +37,7 @@ def _as_float(x: Any) -> float:
 
 
 def _share_percent(total: float, part: float) -> float:
-    if not total:
-        return 0.0
-    return (part / total) * 100.0
+    return (part / total * 100.0) if total else 0.0
 
 
 def _download_name(prefix: str, dt_ini: date, dt_fim: date) -> str:
@@ -48,7 +45,6 @@ def _download_name(prefix: str, dt_ini: date, dt_fim: date) -> str:
 
 
 def _pill_style() -> None:
-    # micro UX: compacta multiselects
     st.markdown(
         """
         <style>
@@ -67,9 +63,6 @@ def _init_filter_state() -> None:
     st.session_state.setdefault("rg_entregue_label", "Todos")
     st.session_state.setdefault("rg_depts", [])
     st.session_state.setdefault("rg_frotas", [])
-    st.session_state.setdefault("rg_applied", False)
-
-    # aba gestor
     st.session_state.setdefault("rg_roles_incluidos", ["admin", "gestor"])
     st.session_state.setdefault("rg_busca_gestor", "")
 
@@ -81,8 +74,8 @@ def _build_filtros_from_state() -> Tuple[FiltrosGastos, date, date]:
         "Entrega real": "data_entrega_real",
         "Criação": "criado_em",
     }
-    dt_ini = st.session_state.get("rg_dt_ini")
-    dt_fim = st.session_state.get("rg_dt_fim")
+    dt_ini: date = st.session_state.get("rg_dt_ini")
+    dt_fim: date = st.session_state.get("rg_dt_fim")
     date_field = date_field_map.get(st.session_state.get("rg_date_field_label", "Solicitação"), "data_solicitacao")
 
     entregue_opt = st.session_state.get("rg_entregue_label", "Todos")
@@ -104,7 +97,6 @@ def _build_filtros_from_state() -> Tuple[FiltrosGastos, date, date]:
 
 
 def _periodo_anterior(dt_ini: date, dt_fim: date) -> Tuple[date, date]:
-    """Retorna (dt_ini_prev, dt_fim_prev) com o mesmo número de dias do período atual."""
     if not dt_ini or not dt_fim or dt_fim < dt_ini:
         return dt_ini, dt_fim
     dias = (dt_fim - dt_ini).days
@@ -114,7 +106,6 @@ def _periodo_anterior(dt_ini: date, dt_fim: date) -> Tuple[date, date]:
 
 
 def _evolucao_semanal(df_base: pd.DataFrame, date_col: str) -> pd.DataFrame:
-    """Soma valor_total por semana (freq=W)."""
     if df_base is None or df_base.empty or date_col not in df_base.columns:
         return pd.DataFrame(columns=["data", "total"])
 
@@ -127,12 +118,10 @@ def _evolucao_semanal(df_base: pd.DataFrame, date_col: str) -> pd.DataFrame:
 
     tmp["_valor"] = pd.to_numeric(tmp.get("valor_total", 0), errors="coerce").fillna(0)
     out = tmp.groupby(pd.Grouper(key="_data", freq="W"))["_valor"].sum().reset_index()
-    out = out.rename(columns={"_data": "data", "_valor": "total"})
-    return out
+    return out.rename(columns={"_data": "data", "_valor": "total"})
 
 
 def _cols_detail(df: pd.DataFrame, date_field: str) -> List[str]:
-    """Colunas sugeridas para drill-down (apenas as que existirem)."""
     prefer = [
         date_field,
         "id",
@@ -153,11 +142,6 @@ def _cols_detail(df: pd.DataFrame, date_field: str) -> List[str]:
     return [c for c in prefer if c in df.columns]
 
 
-def _download_df(df: pd.DataFrame, prefix: str, dt_ini: date, dt_fim: date) -> Tuple[bytes, str]:
-    csv = df.to_csv(index=False).encode("utf-8")
-    return csv, _download_name(prefix, dt_ini, dt_fim)
-
-
 def _top_selector(prefix: str) -> int | None:
     opt = st.radio(
         "Exibir",
@@ -166,13 +150,7 @@ def _top_selector(prefix: str) -> int | None:
         key=f"{prefix}_top",
         index=0,
     )
-    if opt == "Top 10":
-        return 10
-    if opt == "Top 20":
-        return 20
-    if opt == "Top 50":
-        return 50
-    return None
+    return {"Top 10": 10, "Top 20": 20, "Top 50": 50}.get(opt, None)
 
 
 def _render_common_actions(df_out: pd.DataFrame, filename_prefix: str, dt_ini: date, dt_fim: date) -> None:
@@ -186,38 +164,83 @@ def _render_common_actions(df_out: pd.DataFrame, filename_prefix: str, dt_ini: d
     )
 
 
-def _links_to_dept_map(_links: Any) -> Dict[str, str]:
-    """Normaliza links para dict: {departamento: gestor_user_id}."""
-    if _links is None:
-        return {}
+def _links_to_dept_map_df(links: Any) -> pd.DataFrame:
+    """
+    Normaliza links para DataFrame com colunas: departamento, gestor_user_id.
+    O serviço gastos_por_gestor exige DataFrame. fileciteturn10file0
+    """
+    if links is None:
+        return pd.DataFrame(columns=["departamento", "gestor_user_id"])
+    if isinstance(links, pd.DataFrame):
+        if links.empty:
+            return pd.DataFrame(columns=["departamento", "gestor_user_id"])
+        cols = set(links.columns)
+        if {"departamento", "gestor_user_id"}.issubset(cols):
+            return links[["departamento", "gestor_user_id"]].copy()
+        return pd.DataFrame(links.to_dict("records")).reindex(columns=["departamento", "gestor_user_id"])
+    if isinstance(links, dict):
+        rows = [{"departamento": str(k).strip(), "gestor_user_id": v} for k, v in links.items() if str(k).strip()]
+        return pd.DataFrame(rows).reindex(columns=["departamento", "gestor_user_id"])
+    if isinstance(links, list):
+        rows = [r for r in links if isinstance(r, dict)]
+        return pd.DataFrame(rows).reindex(columns=["departamento", "gestor_user_id"])
+    return pd.DataFrame(columns=["departamento", "gestor_user_id"])
 
-    # Se vier DataFrame, transforma em registros
-    if isinstance(_links, pd.DataFrame):
-        if _links.empty:
-            return {}
-        records = _links.to_dict("records")
-        _links = records
 
-    if isinstance(_links, dict):
-        return {str(k).strip(): str(v) for k, v in _links.items() if str(k).strip()}
+def _ensure_user_map_df(user_map: Any) -> pd.DataFrame:
+    """
+    Normaliza user_map para DataFrame com colunas:
+      user_id, nome, email, whatsapp, role
+    O serviço gastos_por_gestor usa .empty e merge, então precisa DF. fileciteturn10file0
+    """
+    if user_map is None:
+        return pd.DataFrame(columns=["user_id", "nome", "email", "whatsapp", "role"])
+    if isinstance(user_map, pd.DataFrame):
+        df = user_map.copy()
+        if "user_id" not in df.columns and "id" in df.columns:
+            df = df.rename(columns={"id": "user_id"})
+        for c in ["user_id", "nome", "email", "whatsapp", "role"]:
+            if c not in df.columns:
+                df[c] = None
+        return df[["user_id", "nome", "email", "whatsapp", "role"]].copy()
+    if isinstance(user_map, dict):
+        rows = []
+        for uid, v in user_map.items():
+            if isinstance(v, dict):
+                rows.append(
+                    {
+                        "user_id": uid,
+                        "nome": v.get("nome") or v.get("name"),
+                        "email": v.get("email"),
+                        "whatsapp": v.get("whatsapp"),
+                        "role": v.get("role"),
+                    }
+                )
+            else:
+                rows.append({"user_id": uid, "nome": str(v), "email": None, "whatsapp": None, "role": None})
+        return pd.DataFrame(rows).reindex(columns=["user_id", "nome", "email", "whatsapp", "role"])
+    if isinstance(user_map, list):
+        rows = [r for r in user_map if isinstance(r, dict)]
+        df = pd.DataFrame(rows)
+        if "user_id" not in df.columns and "id" in df.columns:
+            df = df.rename(columns={"id": "user_id"})
+        for c in ["user_id", "nome", "email", "whatsapp", "role"]:
+            if c not in df.columns:
+                df[c] = None
+        return df[["user_id", "nome", "email", "whatsapp", "role"]].copy()
+    return pd.DataFrame(columns=["user_id", "nome", "email", "whatsapp", "role"])
 
-    out: Dict[str, str] = {}
-    if isinstance(_links, list):
-        for l in _links:
-            try:
-                if not isinstance(l, dict):
-                    continue
-                dept = (l.get("departamento") or "").strip()
-                gid = l.get("gestor_user_id")
-                if dept and gid:
-                    out[dept] = str(gid)
-            except Exception:
-                continue
-    return out
+
+def _safe_gastos_por_gestor(df_base: pd.DataFrame, links: Any, user_map: Any) -> pd.DataFrame:
+    """
+    Chama o serviço gastos_por_gestor com os tipos corretos (DataFrames). fileciteturn10file0
+    """
+    links_df = _links_to_dept_map_df(links)
+    user_df = _ensure_user_map_df(user_map)
+    return gastos_por_gestor(df_base, links_df, user_df)
 
 
 def _add_prev_delta(df_now: pd.DataFrame, df_prev_group: pd.DataFrame, key_col: str) -> pd.DataFrame:
-    """Adiciona colunas prev_total e delta_pct (total vs prev_total) se possível."""
     if df_now is None or df_now.empty:
         return df_now
     if df_prev_group is None or df_prev_group.empty or key_col not in df_prev_group.columns:
@@ -225,8 +248,7 @@ def _add_prev_delta(df_now: pd.DataFrame, df_prev_group: pd.DataFrame, key_col: 
         df_now["delta_pct"] = 0.0
         return df_now
 
-    prev = df_prev_group[[key_col, "total"]].copy()
-    prev = prev.rename(columns={"total": "prev_total"})
+    prev = df_prev_group[[key_col, "total"]].copy().rename(columns={"total": "prev_total"})
     out = df_now.merge(prev, how="left", on=key_col)
 
     out["prev_total"] = pd.to_numeric(out.get("prev_total", 0), errors="coerce").fillna(0.0)
@@ -238,74 +260,13 @@ def _add_prev_delta(df_now: pd.DataFrame, df_prev_group: pd.DataFrame, key_col: 
     return out
 
 
-def _safe_gastos_por_gestor(df_base: pd.DataFrame, links: Any, user_map: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
-    """Compatibilidade: tenta diferentes assinaturas de gastos_por_gestor()."""
-    try:
-        return gastos_por_gestor(df_base, links=links, user_map=user_map)
-    except TypeError:
-        pass
-    try:
-        return gastos_por_gestor(df_base, links, user_map)
-    except TypeError:
-        pass
-    try:
-        return gastos_por_gestor(df_base, links)
-    except TypeError:
-        pass
-    # fallback: tenta passar só um dict dept->gestor se existir
-    try:
-        mapa = { (l.get("departamento") or "").strip(): l.get("gestor_user_id") for l in (links or []) if isinstance(l, dict) and (l.get("departamento") or "").strip() }
-        return gastos_por_gestor(df_base, mapa)
-    except TypeError:
-        return gastos_por_gestor(df_base)
-
-
-def _normalize_user_map(user_map: Any) -> Dict[str, Dict[str, Any]]:
-    """
-    Garante formato:
-      {user_id: {"nome": ..., "email": ..., "role": ...}}
-    """
-    if user_map is None:
-        return {}
-    if isinstance(user_map, dict):
-        out: Dict[str, Dict[str, Any]] = {}
-        for k, v in user_map.items():
-            if not k:
-                continue
-            if isinstance(v, dict):
-                out[str(k)] = {
-                    "nome": v.get("nome") or v.get("name") or v.get("full_name") or "",
-                    "email": v.get("email") or "",
-                    "role": (v.get("role") or v.get("perfil") or v.get("cargo") or "").lower(),
-                }
-            else:
-                out[str(k)] = {"nome": str(v), "email": "", "role": ""}
-        return out
-    # Se vier list[dict]
-    if isinstance(user_map, list):
-        out = {}
-        for r in user_map:
-            if not isinstance(r, dict):
-                continue
-            uid = r.get("user_id") or r.get("id")
-            if not uid:
-                continue
-            out[str(uid)] = {
-                "nome": r.get("nome") or r.get("name") or "",
-                "email": r.get("email") or "",
-                "role": (r.get("role") or r.get("perfil") or "").lower(),
-            }
-        return out
-    return {}
-
-
 # ============================
 # Main entry
 # ============================
 
 def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     st.title("📈 Relatórios Gerenciais")
-    st.caption("Visão de gastos por Gestor, Frota (cód. equipamento) e Departamento.")
+    st.caption("Gestores por vínculo de departamento (gestor_departamentos) — não depende de quem lançou o pedido.")
 
     if not tenant_id:
         st.error("Tenant não identificado.")
@@ -320,7 +281,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     except Exception:
         supabase_admin = None
 
-    # ===== Carregar pedidos uma vez (base para filtros + análise) =====
+    # ===== Carregar pedidos =====
     with st.spinner("Carregando pedidos..."):
         df_pedidos = carregar_pedidos(_supabase, tenant_id=tenant_id)
 
@@ -328,7 +289,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         st.info("Nenhum pedido encontrado para este tenant.")
         st.stop()
 
-    # Opções de filtros (evita repetir)
+    # opções para filtros
     df_tmp = df_pedidos.copy()
     for col in ["departamento", "cod_equipamento"]:
         if col in df_tmp.columns:
@@ -339,19 +300,27 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     dept_opts = sorted([d for d in df_tmp["departamento"].unique().tolist() if d])
     frota_opts = sorted([f for f in df_tmp["cod_equipamento"].unique().tolist() if f])
 
-    # ===== Carregar vínculos e mapa de usuários (1x) =====
+    # ===== links + user_map (DataFrames, como o serviço espera) =====
     with st.spinner("Carregando vínculos e usuários..."):
-        links = carregar_links_departamento_gestor(supabase_admin or _supabase, tenant_id=tenant_id)
-        user_map_raw = carregar_mapa_usuarios_tenant(supabase_admin or _supabase, tenant_id=tenant_id)
+        links_df = carregar_links_departamento_gestor(supabase_admin or _supabase, tenant_id=tenant_id)
+        user_df = carregar_mapa_usuarios_tenant(supabase_admin or _supabase, tenant_id=tenant_id)
 
-    user_map = _normalize_user_map(user_map_raw)
-    dept_map = _links_to_dept_map(links)
+    links_df = _links_to_dept_map_df(links_df)
+    user_df = _ensure_user_map_df(user_df)
 
-    # ===== Filtros do relatório (sidebar) =====
+    # dict dept->gestor para drilldown (rápido)
+    dept_map: Dict[str, str] = {}
+    if not links_df.empty:
+        for _, r in links_df.iterrows():
+            d = str(r.get("departamento") or "").strip()
+            gid = r.get("gestor_user_id")
+            if d and pd.notna(gid):
+                dept_map[d] = str(gid)
+
+    # ===== Sidebar =====
     with st.sidebar:
         st.markdown("### 🧾 Filtros do relatório")
 
-        # presets
         p1, p2, p3, p4 = st.columns(4)
         if p1.button("7d", use_container_width=True):
             hoje = date.today()
@@ -403,9 +372,11 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
         st.divider()
         st.markdown("### 👥 Filtro de Pessoas (aba Gestor)")
-        roles = sorted(list({(v.get("role") or "").lower() for v in user_map.values()} - {""}))
+
+        roles = sorted([str(x).strip().lower() for x in user_df["role"].dropna().unique().tolist() if str(x).strip()]) if "role" in user_df.columns else []
         if not roles:
             roles = ["admin", "gestor", "user"]
+
         st.multiselect(
             "Roles incluídos",
             options=roles,
@@ -414,12 +385,10 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         )
         st.text_input("Buscar gestor (nome/e-mail)", value=st.session_state.get("rg_busca_gestor", ""), key="rg_busca_gestor")
 
-        st.caption(f"Deptos vinculados: {len(dept_map)} · Usuários no mapa: {len(user_map)}")
+        st.caption(f"Deptos vinculados: {len(dept_map)} · Usuários no mapa: {len(user_df)}")
 
-    # ===== Aplicar filtros (estado aplicado) =====
+    # ===== Aplicar filtros =====
     filtros, dt_ini, dt_fim = _build_filtros_from_state()
-
-    # Dataset base já filtrado (serve para KPIs + abas)
     df_base = filtrar_pedidos_base(df_pedidos, filtros=filtros)
 
     if df_base is None or df_base.empty:
@@ -460,14 +429,13 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     with st.container(border=True):
         st.markdown("### 📈 Evolução do gasto (semanal)")
         df_evol = _evolucao_semanal(df_base, filtros.date_field)
-        if df_evol is None or df_evol.empty:
+        if df_evol.empty:
             st.caption("Sem dados suficientes para a evolução semanal.")
         else:
             st.line_chart(df_evol.set_index("data")["total"])
 
     st.divider()
 
-    # ===== Abas =====
     tab_gestor, tab_frota, tab_dept = st.tabs(["👤 Por Gestor", "🚜 Por Frota", "🏢 Por Departamento"])
 
     # ===== Aba Gestor =====
@@ -476,43 +444,42 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         topn = _top_selector("rg_gestor")
         comparar = st.toggle("Comparar com período anterior", value=True, key="rg_cmp_gestor")
 
-        # Calcula agrupamento de gestores baseado em vínculos departamento->gestor (NÃO por criado_por)
-        df_g = _safe_gastos_por_gestor(df_base, links, user_map)
+        # Aqui é o ponto: usa vínculo dept->gestor (serviço) fileciteturn10file0
+        df_g = _safe_gastos_por_gestor(df_base, links_df, user_df)
 
-        if df_g is None or df_g.empty:
-            st.info("Sem dados para o agrupamento por Gestor (verifique vínculos de departamento → gestor).")
+        if df_g.empty:
+            st.info("Sem dados por Gestor. Verifique se há vínculos em gestor_departamentos para os departamentos filtrados.")
             st.stop()
 
-        # Enriquecer com role a partir do user_map (quando faltar)
-        if "gestor_user_id" in df_g.columns and "gestor_role" not in df_g.columns:
-            df_g["gestor_role"] = df_g["gestor_user_id"].astype(str).map(lambda uid: (user_map.get(str(uid)) or {}).get("role", ""))
+        # adiciona role via user_df
+        um_role = user_df.copy()
+        if "user_id" in um_role.columns:
+            um_role = um_role.rename(columns={"user_id": "gestor_user_id"})
+        if "role" not in um_role.columns:
+            um_role["role"] = None
+        df_g = df_g.merge(um_role[["gestor_user_id", "role"]].rename(columns={"role": "gestor_role"}), on="gestor_user_id", how="left")
 
-        # Filtro por roles incluídos (sidebar)
+        # filtro roles
         roles_incl = set([(r or "").lower() for r in (st.session_state.get("rg_roles_incluidos") or [])])
         if roles_incl and "gestor_role" in df_g.columns:
             df_g = df_g[df_g["gestor_role"].fillna("").astype(str).str.lower().isin(roles_incl)]
 
-        # Busca (sidebar)
+        # busca
         q = (st.session_state.get("rg_busca_gestor") or "").strip().lower()
         if q:
-            nome_col = "gestor_nome" if "gestor_nome" in df_g.columns else None
-            email_col = "gestor_email" if "gestor_email" in df_g.columns else None
-            if nome_col and email_col:
-                df_g = df_g[
-                    df_g[nome_col].fillna("").astype(str).str.lower().str.contains(q)
-                    | df_g[email_col].fillna("").astype(str).str.lower().str.contains(q)
-                ]
-            elif nome_col:
-                df_g = df_g[df_g[nome_col].fillna("").astype(str).str.lower().str.contains(q)]
+            df_g = df_g[
+                df_g["gestor_nome"].fillna("").astype(str).str.lower().str.contains(q)
+                | df_g["gestor_email"].fillna("").astype(str).str.lower().str.contains(q)
+            ]
 
         if df_g.empty:
-            st.warning("Nenhum gestor após os filtros de pessoas (roles/busca).")
+            st.warning("Nenhum gestor após filtros de pessoas (roles/busca).")
             st.stop()
 
-        # Comparação
+        # comparação
         if comparar:
-            df_g_prev = _safe_gastos_por_gestor(df_prev, links, user_map) if df_prev is not None and not df_prev.empty else pd.DataFrame()
-            if df_g_prev is not None and not df_g_prev.empty and "gestor_user_id" in df_g.columns:
+            df_g_prev = _safe_gastos_por_gestor(df_prev, links_df, user_df) if df_prev is not None and not df_prev.empty else pd.DataFrame()
+            if not df_g_prev.empty:
                 df_g = _add_prev_delta(df_g, df_g_prev, "gestor_user_id")
             else:
                 df_g["prev_total"] = 0.0
@@ -521,57 +488,46 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             df_g["prev_total"] = 0.0
             df_g["delta_pct"] = 0.0
 
+        # KPIs
         with st.container(border=True):
             g1, g2, g3 = st.columns(3)
-            g1.metric("Gestores no período", int(df_g["gestor_user_id"].nunique()) if "gestor_user_id" in df_g.columns else len(df_g))
+            g1.metric("Gestores no período", int(df_g["gestor_user_id"].nunique()))
             g2.metric("Gasto total", formatar_moeda_br(_as_float(df_g["total"].sum())))
-            g3.metric("Pedidos", int(_as_float(df_g.get("qtd_pedidos", pd.Series(dtype=float)).sum())))
+            g3.metric("Pedidos", int(_as_float(df_g["qtd_pedidos"].sum())) if "qtd_pedidos" in df_g.columns else "-")
 
         df_g = df_g.copy()
         df_g["participacao_pct"] = df_g["total"].apply(lambda v: _share_percent(total_geral, _as_float(v)))
         df_g = df_g.sort_values("total", ascending=False)
 
+        # gráfico
         df_plot = df_g.head(topn) if topn else df_g
-        if "gestor_nome" in df_plot.columns:
-            st.bar_chart(df_plot.set_index("gestor_nome")[["total"]], height=280)
-        else:
-            st.bar_chart(df_plot.set_index("gestor_user_id")[["total"]], height=280)
+        st.bar_chart(df_plot.set_index("gestor_nome")[["total"]], height=280)
 
-        # Tabela
+        # tabela
         df_show = df_g.copy()
-        df_show["Gestor"] = df_show.get("gestor_nome", pd.Series(["(Sem nome)"] * len(df_show))).fillna("(Sem nome)")
-        df_show["Role"] = df_show.get("gestor_role", pd.Series([""] * len(df_show))).fillna("")
-        df_show["E-mail"] = df_show.get("gestor_email", pd.Series([""] * len(df_show))).fillna("")
+        df_show["Gestor"] = df_show["gestor_nome"].fillna("(Sem nome)")
+        df_show["Role"] = df_show["gestor_role"].fillna("")
+        df_show["E-mail"] = df_show["gestor_email"].fillna("")
         df_show["Pedidos"] = df_show.get("qtd_pedidos", 0).fillna(0).astype(int)
         df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
         df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
 
+        cols = ["Gestor", "Role", "E-mail", "Pedidos", "Total", "% do total"]
         if comparar:
             df_show["Anterior"] = df_show["prev_total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
             df_show["Δ%"] = df_show["delta_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
             cols = ["Gestor", "Role", "E-mail", "Pedidos", "Total", "Anterior", "Δ%", "% do total"]
-        else:
-            cols = ["Gestor", "Role", "E-mail", "Pedidos", "Total", "% do total"]
 
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
 
         with st.expander("🔎 Ver pedidos de um gestor", expanded=False):
             opt_names = sorted(list(set(df_show["Gestor"].tolist())))
             sel_nome = st.selectbox("Gestor", options=opt_names, key="rg_drill_gestor_nome")
-
-            sel_gid = None
-            try:
-                # tenta achar gid pelo nome na base original df_g (não formatada)
-                sel_row = df_g[df_g.get("gestor_nome", "").fillna("(Sem nome)") == sel_nome].head(1)
-                if not sel_row.empty and "gestor_user_id" in sel_row.columns:
-                    sel_gid = sel_row["gestor_user_id"].iloc[0]
-            except Exception:
-                sel_gid = None
-
-            if not sel_gid:
+            row = df_g[df_g["gestor_nome"].fillna("(Sem nome)") == sel_nome].head(1)
+            if row.empty:
                 st.info("Selecione um gestor válido.")
             else:
-                # departamentos ligados ao gestor e pedidos filtrados por esses departamentos
+                sel_gid = row["gestor_user_id"].iloc[0]
                 deptos = [d for d, gid in dept_map.items() if str(gid) == str(sel_gid)]
                 st.caption(f"Departamentos vinculados: {', '.join(deptos) if deptos else '(nenhum)'}")
                 df_det = df_base[df_base.get("departamento", "").astype(str).isin(deptos)].copy() if deptos else df_base.iloc[0:0].copy()
@@ -581,8 +537,14 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
                 else:
                     cols_det = _cols_detail(df_det, filtros.date_field)
                     st.dataframe(df_det[cols_det], use_container_width=True, hide_index=True)
-                    csv_det, name_det = _download_df(df_det[cols_det], "pedidos_gestor", dt_ini, dt_fim)
-                    st.download_button("⬇️ Baixar pedidos (gestor)", csv_det, name_det, "text/csv", use_container_width=True)
+                    csv_det = df_det[cols_det].to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "⬇️ Baixar pedidos (gestor)",
+                        csv_det,
+                        _download_name("pedidos_gestor", dt_ini, dt_fim),
+                        "text/csv",
+                        use_container_width=True,
+                    )
 
         _render_common_actions(df_g, "gastos_por_gestor", dt_ini, dt_fim)
 
@@ -593,13 +555,13 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         comparar = st.toggle("Comparar com período anterior", value=True, key="rg_cmp_frota")
 
         df_f = gastos_por_frota(df_base)
-        if df_f is None or df_f.empty:
+        if df_f.empty:
             st.info("Sem dados para o agrupamento por Frota (cod_equipamento).")
             st.stop()
 
         if comparar:
             df_f_prev = gastos_por_frota(df_prev) if df_prev is not None and not df_prev.empty else pd.DataFrame()
-            if df_f_prev is not None and not df_f_prev.empty and "cod_equipamento" in df_f.columns:
+            if not df_f_prev.empty and "cod_equipamento" in df_f.columns:
                 df_f = _add_prev_delta(df_f, df_f_prev, "cod_equipamento")
             else:
                 df_f["prev_total"] = 0.0
@@ -608,12 +570,6 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             df_f["prev_total"] = 0.0
             df_f["delta_pct"] = 0.0
 
-        with st.container(border=True):
-            f1, f2, f3 = st.columns(3)
-            f1.metric("Frotas no período", int(df_f["cod_equipamento"].nunique()) if "cod_equipamento" in df_f.columns else len(df_f))
-            f2.metric("Gasto total", formatar_moeda_br(_as_float(df_f["total"].sum())))
-            f3.metric("Pedidos", int(_as_float(df_f.get("qtd_pedidos", pd.Series(dtype=float)).sum())))
-
         df_f = df_f.copy()
         df_f["participacao_pct"] = df_f["total"].apply(lambda v: _share_percent(total_geral, _as_float(v)))
         df_f = df_f.sort_values("total", ascending=False)
@@ -621,39 +577,19 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         df_plot = df_f.head(topn) if topn else df_f
         st.bar_chart(df_plot.set_index("cod_equipamento")[["total"]], height=280)
 
-        q = st.text_input("Buscar frota (cód.)", value="", key="rg_busca_frota", placeholder="Digite parte do código…")
         df_show = df_f.copy()
         df_show["Frota"] = df_show["cod_equipamento"].fillna("(Sem código)").astype(str)
-        if q.strip():
-            qq = q.strip().lower()
-            df_show = df_show[df_show["Frota"].astype(str).str.lower().str.contains(qq)]
-
         df_show["Pedidos"] = df_show.get("qtd_pedidos", 0).fillna(0).astype(int)
         df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
         df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
+
+        cols = ["Frota", "Pedidos", "Total", "% do total"]
         if comparar:
             df_show["Anterior"] = df_show["prev_total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
             df_show["Δ%"] = df_show["delta_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
             cols = ["Frota", "Pedidos", "Total", "Anterior", "Δ%", "% do total"]
-        else:
-            cols = ["Frota", "Pedidos", "Total", "% do total"]
+
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
-
-        with st.expander("🔎 Ver pedidos de uma frota (cód. equipamento)", expanded=False):
-            sel_frota = st.selectbox(
-                "Frota (cód.)",
-                options=df_f["cod_equipamento"].fillna("(Sem código)").astype(str).tolist(),
-                key="rg_drill_frota",
-            )
-            df_det = df_base[df_base.get("cod_equipamento", "").astype(str) == str(sel_frota)].copy()
-            if df_det.empty:
-                st.warning("Sem pedidos para esta frota no período aplicado.")
-            else:
-                cols_det = _cols_detail(df_det, filtros.date_field)
-                st.dataframe(df_det[cols_det], use_container_width=True, hide_index=True)
-                csv_det, name_det = _download_df(df_det[cols_det], "pedidos_frota", dt_ini, dt_fim)
-                st.download_button("⬇️ Baixar pedidos (frota)", csv_det, name_det, "text/csv", use_container_width=True)
-
         _render_common_actions(df_f, "gastos_por_frota", dt_ini, dt_fim)
 
     # ===== Aba Departamento =====
@@ -663,13 +599,13 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         comparar = st.toggle("Comparar com período anterior", value=True, key="rg_cmp_dept")
 
         df_d = gastos_por_departamento(df_base)
-        if df_d is None or df_d.empty:
+        if df_d.empty:
             st.info("Sem dados para o agrupamento por Departamento.")
             st.stop()
 
         if comparar:
             df_d_prev = gastos_por_departamento(df_prev) if df_prev is not None and not df_prev.empty else pd.DataFrame()
-            if df_d_prev is not None and not df_d_prev.empty and "departamento" in df_d.columns:
+            if not df_d_prev.empty and "departamento" in df_d.columns:
                 df_d = _add_prev_delta(df_d, df_d_prev, "departamento")
             else:
                 df_d["prev_total"] = 0.0
@@ -678,50 +614,25 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             df_d["prev_total"] = 0.0
             df_d["delta_pct"] = 0.0
 
-        with st.container(border=True):
-            d1, d2, d3 = st.columns(3)
-            d1.metric("Departamentos", int(df_d["departamento"].nunique()) if "departamento" in df_d.columns else len(df_d))
-            d2.metric("Gasto total", formatar_moeda_br(_as_float(df_d["total"].sum())))
-            d3.metric("Pedidos", int(_as_float(df_d.get("qtd_pedidos", pd.Series(dtype=float)).sum())))
-
         df_d = df_d.copy()
         df_d["participacao_pct"] = df_d["total"].apply(lambda v: _share_percent(total_geral, _as_float(v)))
         df_d = df_d.sort_values("total", ascending=False)
+
         df_plot = df_d.head(topn) if topn else df_d
         st.bar_chart(df_plot.set_index("departamento")[["total"]], height=280)
 
-        q = st.text_input("Buscar departamento", value="", key="rg_busca_dept", placeholder="Digite parte do nome…")
         df_show = df_d.copy()
         df_show["Departamento"] = df_show["departamento"].fillna("(Sem dept)").astype(str)
-        if q.strip():
-            qq = q.strip().lower()
-            df_show = df_show[df_show["Departamento"].str.lower().str.contains(qq)]
-
         df_show["Pedidos"] = df_show.get("qtd_pedidos", 0).fillna(0).astype(int)
         df_show["Total"] = df_show["total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
         df_show["% do total"] = df_show["participacao_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
+
+        cols = ["Departamento", "Pedidos", "Total", "% do total"]
         if comparar:
             df_show["Anterior"] = df_show["prev_total"].apply(lambda x: formatar_moeda_br(_as_float(x)))
             df_show["Δ%"] = df_show["delta_pct"].apply(lambda x: f"{_as_float(x):.1f}%")
             cols = ["Departamento", "Pedidos", "Total", "Anterior", "Δ%", "% do total"]
-        else:
-            cols = ["Departamento", "Pedidos", "Total", "% do total"]
 
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True)
-
-        with st.expander("🔎 Ver pedidos de um departamento", expanded=False):
-            sel_dept = st.selectbox(
-                "Departamento",
-                options=df_d["departamento"].fillna("(Sem dept)").astype(str).tolist(),
-                key="rg_drill_dept",
-            )
-            df_det = df_base[df_base.get("departamento", "").astype(str) == str(sel_dept)].copy()
-            if df_det.empty:
-                st.warning("Sem pedidos para este departamento no período aplicado.")
-            else:
-                cols_det = _cols_detail(df_det, filtros.date_field)
-                st.dataframe(df_det[cols_det], use_container_width=True, hide_index=True)
-                csv_det, name_det = _download_df(df_det[cols_det], "pedidos_departamento", dt_ini, dt_fim)
-                st.download_button("⬇️ Baixar pedidos (departamento)", csv_det, name_det, "text/csv", use_container_width=True)
-
         _render_common_actions(df_d, "gastos_por_departamento", dt_ini, dt_fim)
+
