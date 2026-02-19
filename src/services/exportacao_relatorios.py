@@ -160,10 +160,31 @@ def ui_filtro_periodo(
         opcoes = [nomes_colunas.get(c, c) for c in colunas_existentes]
         nome_escolhido = st.selectbox("Base de data", opcoes, index=0, disabled=not usar, key=f"col_{label}")
         coluna_escolhida = colunas_existentes[opcoes.index(nome_escolhido)]
-
     s_dt = pd.to_datetime(df[coluna_escolhida], errors='coerce').dropna()
     if s_dt.empty:
         return df, "", coluna_escolhida
+
+    dt_min = s_dt.min().date()
+    dt_max = s_dt.max().date()
+
+    with col3:
+        dt_ini = st.date_input("Início", value=dt_min, min_value=dt_min, max_value=dt_max, disabled=not usar, key=f"dt_ini_{label}")
+    with col4:
+        dt_fim = st.date_input("Fim", value=dt_max, min_value=dt_min, max_value=dt_max, disabled=not usar, key=f"dt_fim_{label}")
+
+    if not usar:
+        return df, "", coluna_escolhida
+
+    if dt_ini and dt_fim and dt_ini > dt_fim:
+        dt_ini, dt_fim = dt_fim, dt_ini
+
+    s_all = pd.to_datetime(df[coluna_escolhida], errors='coerce')
+    mask = (s_all.dt.date >= dt_ini) & (s_all.dt.date <= dt_fim)
+    df_filtrado = df.loc[mask].copy()
+
+    nome_col = nomes_colunas.get(coluna_escolhida, coluna_escolhida)
+    subtitulo = f"{nome_col}: {dt_ini.strftime('%d/%m/%Y')} a {dt_fim.strftime('%d/%m/%Y')}"
+    return df_filtrado, subtitulo, coluna_escolhida
 
 
 def gerar_botoes_exportacao(df_pedidos, formatar_moeda_br):
@@ -1220,4 +1241,5 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
     except Exception as e:
         st.error(f"Erro: {e}")
         return None
+
 
