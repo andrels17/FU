@@ -1,3 +1,8 @@
+"""
+Módulo de Exportação de Relatórios - VERSÃO PREMIUM
+PDFs profissionais com design avançado, gráficos e análises detalhadas
+"""
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -27,7 +32,7 @@ except ImportError:
 
 
 # --- Anti páginas em branco: quebra descrições longas em múltiplas linhas ---
-def _split_text_chunks(text, max_chars=240):
+def _split_text_chunks(text, max_chars=180):
     if text is None:
         return [""]
     s = str(text).strip()
@@ -47,7 +52,7 @@ def _split_text_chunks(text, max_chars=240):
         start = end
     return chunks or [s]
 
-def _expand_rows_for_long_description(rows, header, desc_col='Descrição', max_chars=240, atraso_mask=None, desc_style=None):
+def _expand_rows_for_long_description(rows, header, desc_col='Descrição', max_chars=180, atraso_mask=None, desc_style=None):
     if not rows:
         return rows, atraso_mask
     try:
@@ -622,9 +627,29 @@ def criar_tabela_kpi(dados, cores=True):
     return table
 
 def _tabela_detalhamento(df_pdf, col_widths, atraso_mask=None):
-    """Monta tabela com repeatRows e estilo consistente, com destaque opcional para atrasados."""
-    dados = [df_pdf.columns.tolist()] + df_pdf.values.tolist()
+    """Monta tabela com repeatRows e estilo consistente, com destaque opcional para atrasados.
+    Melhorias:
+    - Alinhamentos por coluna (valor à direita, datas/UF/status centralizados)
+    - Paddings mais compactos
+    - Destaque de STATUS em estilo "pill" (cor de fundo por status)
+    """
+    header = df_pdf.columns.tolist()
+    dados = [header] + df_pdf.values.tolist()
+
     t = Table(dados, colWidths=col_widths, repeatRows=1, hAlign='LEFT', splitByRow=1)
+
+    def _idx(col_name: str):
+        try:
+            return header.index(col_name)
+        except Exception:
+            return None
+
+    idx_valor = _idx('Valor (R$)')
+    idx_status = _idx('Status')
+    idx_data_oc = _idx('Data OC')
+    idx_oc = _idx('N° OC')
+    idx_frota = _idx('Frota')
+    idx_uf = _idx('UF')
 
     estilo = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#764ba2')),
@@ -635,22 +660,59 @@ def _tabela_detalhamento(df_pdf, col_widths, atraso_mask=None):
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        # mais respiro entre colunas longas (Descrição) e dinheiro
-        ('RIGHTPADDING', (3, 0), (3, -1), 10),
-        ('LEFTPADDING', (4, 0), (4, -1), 10),
-        ('ALIGN', (4, 1), (4, -1), 'RIGHT'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#cbd5e1')),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#cbd5e1')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#faf5ff')]),
     ]
+
+    if idx_valor is not None:
+        estilo.append(('ALIGN', (idx_valor, 1), (idx_valor, -1), 'RIGHT'))
+        estilo.append(('RIGHTPADDING', (idx_valor, 0), (idx_valor, -1), 8))
+        estilo.append(('LEFTPADDING', (idx_valor, 0), (idx_valor, -1), 8))
+
+    for idx in [idx_data_oc, idx_oc, idx_frota, idx_uf, idx_status]:
+        if idx is not None:
+            estilo.append(('ALIGN', (idx, 0), (idx, -1), 'CENTER'))
 
     if atraso_mask is not None:
         for i, is_atraso in enumerate(atraso_mask, start=1):
             if bool(is_atraso):
                 estilo.append(('BACKGROUND', (0, i), (-1, i), colors.HexColor('#fee2e2')))
+
+    if idx_status is not None:
+        estilo.append(('FONTNAME', (idx_status, 1), (idx_status, -1), 'Helvetica-Bold'))
+        estilo.append(('TEXTCOLOR', (idx_status, 1), (idx_status, -1), colors.HexColor('#0f172a')))
+        estilo.append(('LEFTPADDING', (idx_status, 1), (idx_status, -1), 6))
+        estilo.append(('RIGHTPADDING', (idx_status, 1), (idx_status, -1), 6))
+
+        status_colors = {
+            'entregue': colors.HexColor('#dcfce7'),
+            'entregues': colors.HexColor('#dcfce7'),
+            'em transporte': colors.HexColor('#ffedd5'),
+            'transporte': colors.HexColor('#ffedd5'),
+            'sem oc': colors.HexColor('#dbeafe'),
+            'atrasado': colors.HexColor('#fee2e2'),
+            'atrasados': colors.HexColor('#fee2e2'),
+        }
+
+        for r_i in range(1, len(dados)):
+            raw = dados[r_i][idx_status]
+            try:
+                s = str(raw)
+            except Exception:
+                s = ""
+            s_norm = s.strip().lower()
+            bg = None
+            for key, color in status_colors.items():
+                if key in s_norm:
+                    bg = color
+                    break
+            if bg is not None:
+                estilo.append(('BACKGROUND', (idx_status, r_i), (idx_status, r_i), bg))
+                estilo.append(('BOX', (idx_status, r_i), (idx_status, r_i), 0.6, colors.HexColor('#cbd5e1')))
 
     t.setStyle(TableStyle(estilo))
     return t
@@ -901,7 +963,7 @@ def gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br):
 
         rows_list, atraso_mask_new = _expand_rows_for_long_description(
 
-            rows_list, header, desc_col='Descrição', max_chars=240, atraso_mask=locals().get('atraso_mask'), desc_style=desc_style
+            rows_list, header, desc_col='Descrição', max_chars=180, atraso_mask=locals().get('atraso_mask'), desc_style=desc_style
 
         )
 
@@ -1014,7 +1076,7 @@ def gerar_pdf_fornecedor_premium(df_fornecedor, fornecedor, formatar_moeda_br):
 
         rows_list, atraso_mask_new = _expand_rows_for_long_description(
 
-            rows_list, header, desc_col='Descrição', max_chars=240, atraso_mask=locals().get('atraso_mask'), desc_style=desc_style
+            rows_list, header, desc_col='Descrição', max_chars=180, atraso_mask=locals().get('atraso_mask'), desc_style=desc_style
 
         )
 
@@ -1126,7 +1188,7 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
 
         rows_list, atraso_mask_new = _expand_rows_for_long_description(
 
-            rows_list, header, desc_col='Descrição', max_chars=240, atraso_mask=locals().get('atraso_mask'), desc_style=desc_style
+            rows_list, header, desc_col='Descrição', max_chars=180, atraso_mask=locals().get('atraso_mask'), desc_style=desc_style
 
         )
 
