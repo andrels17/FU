@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 @st.cache_data(ttl=60)
-def carregar_pedidos(_supabase, tenant_id: str | None = None):
+def carregar_pedidos(_supabase, tenant_id: str | None = None, almoxarifado: str | None = None):
     """
     Carrega todos os pedidos com informações do fornecedor
     VERSÃO CORRIGIDA com diagnóstico automático de datas
@@ -19,6 +19,17 @@ def carregar_pedidos(_supabase, tenant_id: str | None = None):
         resultado = q.execute()
         if resultado.data:
             df = pd.DataFrame(resultado.data)
+
+            # ===== Filtro global por Almoxarifado =====
+            if almoxarifado and almoxarifado != "Todos":
+                if "almoxarifado" in df.columns:
+                    df = df[
+                        df["almoxarifado"]
+                        .astype(str)
+                        .fillna("")
+                        .str.strip() == str(almoxarifado)
+                    ]
+
             
             # Converter datas com MÚLTIPLAS TENTATIVAS
             date_columns = ['data_solicitacao', 'data_oc', 'previsao_entrega', 'data_entrega_real', 'criado_em', 'atualizado_em']
