@@ -335,14 +335,6 @@ def _safe_len(x) -> int:
         return int(len(x or []))
     except Exception:
         return 0
-def _norm_txt(s: str) -> str:
-    """Normaliza texto para comparação (remove acentos, espaços, caixa)."""
-    if s is None:
-        return ""
-    s = str(s).strip().lower()
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    return s
 
 
 def _industrial_sidebar_css() -> None:
@@ -1226,18 +1218,18 @@ def main():
         df_pedidos = _cached_carregar_pedidos(supabase, tenant_id, st.session_state.get('almox_ctx'))
         st.session_state["last_update"] = datetime.now().strftime("%H:%M:%S")
 
-        
-# Aplica contexto global de almoxarifado (se o dataframe já contiver a coluna).
-# Comparação normalizada (remove acentos, espaços, caixa) para evitar divergências
-# como "IRRIGAÇÃO" vs "IRRIGACAO".
-almox_ctx = st.session_state.get("almox_ctx") or "Todos"
-if almox_ctx != "Todos":
-    for col in ("almoxarifado", "Almoxarifado"):
-        if col in df_pedidos.columns:
-            alvo = _norm_txt(almox_ctx)
-            serie = df_pedidos[col].astype(str).fillna("").map(_norm_txt)
-            df_pedidos = df_pedidos[serie == alvo]
-            break
+
+        # Aplica contexto global de almoxarifado (se o dataframe já contiver a coluna).
+        # Comparação normalizada (remove acentos, espaços, caixa) para evitar divergências
+        # como "IRRIGAÇÃO" vs "IRRIGACAO".
+        almox_ctx = st.session_state.get("almox_ctx") or "Todos"
+        if almox_ctx != "Todos":
+            for col in ("almoxarifado", "Almoxarifado"):
+                if col in df_pedidos.columns:
+                    alvo = _norm_txt(almox_ctx)
+                    serie = df_pedidos[col].astype(str).fillna("").map(_norm_txt)
+                    df_pedidos = df_pedidos[serie == alvo]
+                    break
     with st.spinner("🔄 Carregando fornecedores..."):
         df_fornecedores = _cached_carregar_fornecedores(supabase, tenant_id)
 
