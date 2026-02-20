@@ -150,7 +150,7 @@ if "fu_sidebar_hidden" not in st.session_state:
     st.session_state.fu_sidebar_hidden = True if is_mobile_default else False
 
 def _fu_inject_global_css(sidebar_hidden: bool) -> None:
-    """Injeta CSS global e regras de sidebar colapsada sem usar f-string (evita NameError)."""
+    """Injeta CSS global e regras de sidebar colapsada."""
     collapsed_css = (
         textwrap.dedent(
             """
@@ -176,7 +176,6 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
     style = textwrap.dedent(
         """
         <style>
-        
         /* ===== Sidebar toggle (hamburger) ===== */
         .fu-sidebar-toggle{ display:flex; justify-content:flex-start; margin: 4px 0 10px 0; }
         .fu-sidebar-toggle .stButton > button{
@@ -195,10 +194,11 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         }
         .fu-sidebar-toggle .stButton > button:hover{
           transform: translateY(-1px);
-          border-color: rgba(245,158,11,0.30) !important;
-          background: rgba(245,158,11,0.10) !important;
+          border-color: rgba(239,68,68,0.30) !important;
+          background: rgba(239,68,68,0.10) !important;
         }
-/* ===== Compact sidebar nav (ícones only) ===== */
+
+        /* ===== Compact sidebar container ===== */
         .fu-compact-nav{
           display:flex;
           flex-direction:column;
@@ -211,92 +211,43 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           display:flex;
           align-items:center;
           justify-content:center;
-          gap: 8px;
-        }
-        .fu-compact-dot{
-          width: 6px;
-          height: 20px;
-          border-radius: 999px;
-          background: rgba(245,158,11,0.95);
-          box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
-        }
-        .fu-compact-dot--off{
-          background: rgba(255,255,255,0.10);
-          box-shadow: none;
-          height: 10px;
         }
 
-        /* Botões somente na sidebar (não afeta botões do topo) */
+        /* ===== Compact sidebar (glyph buttons): branco / hover vermelho / ativo vermelho ===== */
         .fu-compact-nav .stButton > button{
-          width: 54px !important;
-          height: 54px !important;
+          width: 52px !important;
+          height: 52px !important;
           border-radius: 14px !important;
           padding: 0 !important;
           display:flex !important;
           align-items:center !important;
           justify-content:center !important;
-          font-size: 18px !important;
+          font-size: 20px !important;
           line-height: 1 !important;
-          white-space: nowrap !important;
+          color: rgba(255,255,255,0.92) !important;
+          border: 1px solid rgba(255,255,255,0.10) !important;
+          background: rgba(255,255,255,0.03) !important;
+          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease !important;
         }
         .fu-compact-nav .stButton > button:hover{
-          border-color: rgba(245,158,11,0.35) !important;
-          background: rgba(255,255,255,0.05) !important;
           transform: translateY(-1px);
+          border-color: rgba(239,68,68,0.35) !important;
+          background: rgba(239,68,68,0.10) !important;
+          color: rgba(239,68,68,0.95) !important;
+        }
+        .fu-compact-active .stButton > button{
+          border-color: rgba(239,68,68,0.55) !important;
+          background: rgba(239,68,68,0.95) !important;
+          color: #ffffff !important;
+          box-shadow: 0 12px 24px rgba(239,68,68,0.18) !important;
+        }
+        .fu-compact-active .stButton > button:hover{
+          transform: translateY(-1px);
+          color: #ffffff !important;
+          background: rgba(239,68,68,0.95) !important;
         }
 
-
-/* ===== Compact sidebar nav (SVG icons: branco sólido / hover vermelho / ativo vermelho) ===== */
-.fu-compact-nav a.fu-ico{
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.03);
-  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
-  cursor: pointer;
-  user-select: none;
-  text-decoration: none !important;
-}
-.fu-compact-nav a.fu-ico glyph{
-  width: 22px;
-  height: 22px;
-  fill: rgba(255,255,255,0.92);
-  transition: fill 120ms ease;
-  display:block;
-}
-.fu-compact-nav a.fu-ico:hover{
-  transform: translateY(-1px);
-  border-color: rgba(239,68,68,0.35) !important;
-  background: rgba(239,68,68,0.10) !important;
-}
-.fu-compact-nav a.fu-ico:hover glyph{
-  fill: rgba(239,68,68,0.95) !important;
-}
-.fu-compact-nav a.fu-ico.fu-ico--active{
-  border-color: rgba(239,68,68,0.55) !important;
-  background: rgba(239,68,68,0.95) !important;
-  box-shadow: 0 12px 24px rgba(239,68,68,0.18);
-}
-.fu-compact-nav a.fu-ico.fu-ico--active glyph{
-  fill: #ffffff !important;
-}
-@media (prefers-reduced-motion: reduce){
-  .fu-compact-nav a.fu-ico{ transition:none !important; }
-  .fu-compact-nav a.fu-ico glyph{ transition:none !important; }
-}
-
-
-        /* Conteúdo fluido em qualquer zoom */
-        .fu-wrap{
-          width: min(1200px, calc(100% - 32px));
-          margin: 0 auto;
-        }
-
-                /* Sidebar responsiva (performance-first) */
+        /* Sidebar responsiva */
         section[data-testid="stSidebar"]{
           width: clamp(220px, 18vw, 300px) !important;
           overflow: hidden;
@@ -312,30 +263,9 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         @media (max-width: 900px){
           section[data-testid="stSidebar"]{ width: 100% !important; }
         }
-
         @media (prefers-reduced-motion: reduce){
           section[data-testid="stSidebar"]{ transition: none !important; }
-          *{ scroll-behavior: auto !important; }
         }
-
-        /* Tipografia fluida */
-        .fu-title{ font-size: clamp(1.15rem, 1.6vw, 1.55rem) !important; }
-        .fu-sub{ font-size: clamp(.90rem, 1.1vw, .98rem) !important; }
-
-        /* Paddings elásticos */
-        .fu-hero{ padding: clamp(14px, 2vw, 22px) !important; }
-        .fu-mini{ padding: clamp(10px, 1.6vw, 14px) !important; }
-
-        /* Colunas empilháveis */
-        @media (max-width: 900px){
-          div[data-testid="column"]{
-            width: 100% !important;
-            flex: 1 1 100% !important;
-          }
-        }
-
-        /* Botões: não quebrar texto */
-        .stButton button{ white-space: nowrap !important; }
 
         /* Conta: botões full-width e alinhados */
         section[data-testid="stSidebar"] [data-testid="stExpander"] .stButton > button{
@@ -346,10 +276,6 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           justify-content: flex-start !important;
           font-size: 0.95rem !important;
         }
-        section[data-testid="stSidebar"] [data-testid="stExpander"] .stButton > button:hover{
-          transform: translateY(-1px);
-        }
-
 
         /* ====== COLLAPSED CSS INJECT ====== */
         __FU_COLLAPSED_CSS__
@@ -358,9 +284,6 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
     ).replace("__FU_COLLAPSED_CSS__", collapsed_css)
 
     st.markdown(style, unsafe_allow_html=True)
-
-# Aplica CSS global (inclui modo colapsado/expandido da sidebar)
-_fu_inject_global_css(bool(st.session_state.get("fu_sidebar_hidden", False)))
 
 def _jwt_claim_exp(token: str):
     """Extrai 'exp' (epoch seconds) do JWT sem validar assinatura."""
@@ -806,49 +729,54 @@ def _fu_glyph(icon_key: str) -> str:
 
 
 def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin: bool) -> None:
-    """Sidebar compacta (ícones monocromáticos): branco sólido / hover vermelho / ativo vermelho."""
-    # (icon_key, page_id, tooltip)
+    """Sidebar compacta robusta (SEM HTML/SVG): usa st.button com glyphs monocromáticos.
+    - Padrão: ícone branco
+    - Hover: vermelho
+    - Ativo: fundo vermelho cheio + ícone branco
+    """
+
     items: list[tuple[str, str, str]] = [
-        ("home", "home", "Início"),
-        ("dashboard", "dashboard", "Dashboard"),
-        ("bell", "alerts", "Alertas"),
-        ("search", "orders_search", "Consultar pedidos"),
-        ("user", "profile", "Meu perfil"),
-        ("receipt", "material_sheet", "Ficha de material"),
-        ("cart", "orders_manage", "Gestão de pedidos"),
-        ("map", "map", "Mapa"),
-        ("whatsapp", "reports_whatsapp", "Relatórios WhatsApp"),
-        ("chart", "reports_gerenciais", "Relatórios Gerenciais"),
+        ("⌂", "home", "Início"),
+        ("▦", "dashboard", "Dashboard"),
+        ("◎", "alerts", "Alertas"),
+        ("⌕", "orders_search", "Consultar pedidos"),
+        ("◉", "profile", "Meu perfil"),
+        ("≣", "material_sheet", "Ficha de material"),
+        ("▤", "orders_manage", "Gestão de pedidos"),
+        ("⌖", "map", "Mapa"),
+        ("◌", "reports_whatsapp", "Relatórios WhatsApp"),
+        ("▧", "reports_gerenciais", "Relatórios Gerenciais"),
     ]
+
     if is_admin:
         items += [
-            ("users", "users", "Gestão de usuários"),
-            ("database", "backup", "Backup"),
+            ("◍", "users", "Gestão de usuários"),
+            ("▣", "backup", "Backup"),
         ]
         if is_superadmin:
-            items += [("puzzle", "saas_admin", "Admin do SaaS")]
+            items += [("⬚", "saas_admin", "Admin do SaaS")]
 
     current = st.session_state.get("current_page") or "home"
 
-    # Preserva query params existentes (fu_mobile, etc) ao navegar
-    try:
-        base_params = dict(st.query_params)
-    except Exception:
-        base_params = {}
-
     st.markdown('<div class="fu-compact-nav">', unsafe_allow_html=True)
 
-    for icon_key, page_id, tip in items:
-        active_cls = "fu-ico--active" if page_id == current else ""
-        params = dict(base_params)
-        params["nav"] = page_id
-        href = "?" + urlencode(params, doseq=True)
+    for glyph, page_id, tip in items:
+        active = (page_id == current)
 
-        glyph = _fu_glyph(icon_key)
-        st.markdown(
-            f'<div class="fu-compact-row"><a class="fu-ico {active_cls}" title="{tip}" href="{href}">{glyph}</a></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="fu-compact-row">', unsafe_allow_html=True)
+        if active:
+            st.markdown('<div class="fu-compact-active">', unsafe_allow_html=True)
+
+        if st.button(glyph, help=tip, key=f"fu_nav_btn_{page_id}"):
+            if page_id != st.session_state.get("current_page"):
+                st.session_state.current_page = page_id
+                st.session_state["_force_menu_sync"] = True
+                st.rerun()
+
+        if active:
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
