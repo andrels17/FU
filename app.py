@@ -508,13 +508,13 @@ def _industrial_sidebar_css() -> None:
                 --fu-border: rgba(255,255,255,0.10);
                 --fu-text: rgba(255,255,255,0.92);
                 --fu-muted: rgba(255,255,255,0.72);
-                --fu-accent: #f59e0b;      /* industrial amber */
-                --fu-accent2: #fb923c;     /* orange */
+                --fu-accent: #ef4444;      /* red */
+                --fu-accent2: #dc2626;     /* deep red */
             }
 
             section[data-testid="stSidebar"] {
                 background:
-                    radial-gradient(1100px 420px at 15% 0%, rgba(245,158,11,0.12), transparent 55%),
+                    radial-gradient(1100px 420px at 15% 0%, rgba(239,68,68,0.10), transparent 55%),
                     radial-gradient(900px 380px at 80% 18%, rgba(59,130,246,0.10), transparent 55%),
                     var(--fu-bg);
             }
@@ -580,17 +580,17 @@ def _industrial_sidebar_css() -> None:
             div[role="radiogroup"] label:hover {
                 background-color: rgba(255,255,255,0.06);
                 transform: translateX(2px);
-                border: 1px solid rgba(245,158,11,0.22);
+                border: 1px solid rgba(239,68,68,0.14);
             }
 
             /* Item ativo: barra laranja + glow SaaS */
             div[role="radiogroup"] input:checked + div {
-                background: linear-gradient(135deg, rgba(245,158,11,0.22), rgba(255,255,255,0.04));
+                background: linear-gradient(135deg, rgba(239,68,68,0.18), rgba(255,255,255,0.04));
                 border-radius: 12px;
                 box-shadow:
                   inset 4px 0 0 var(--fu-accent),
-                  0 0 0 1px rgba(245,158,11,0.18),
-                  0 10px 26px rgba(245,158,11,0.12);
+                  0 0 0 1px rgba(239,68,68,0.16),
+                  0 10px 26px rgba(239,68,68,0.10);
             }
 
             /* Expanders */
@@ -605,8 +605,8 @@ def _industrial_sidebar_css() -> None:
 
             /* Destaque do grupo ativo (wrapper dentro do expander) */
             .fu-expander-active {
-                border: 1px solid rgba(245,158,11,0.35);
-                background: linear-gradient(135deg, rgba(245,158,11,0.07), rgba(255,255,255,0.02));
+                border: 1px solid rgba(239,68,68,0.22);
+                background: linear-gradient(135deg, rgba(239,68,68,0.06), rgba(255,255,255,0.02));
                 border-radius: 14px;
                 padding: 6px 6px 2px 6px;
                 margin-top: 6px;
@@ -660,8 +660,8 @@ def _industrial_sidebar_css() -> None:
             }
             .fu-nav .fu-nav-dot--active{
                 height: 22px;
-                background: rgba(245,158,11,0.95);
-                box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
+                background: rgba(239,68,68,0.95);
+                box-shadow: 0 0 0 1px rgba(239,68,68,0.18);
             }
 
             /* Botões do menu (somente dentro da fu-nav) */
@@ -677,10 +677,10 @@ def _industrial_sidebar_css() -> None:
                 transition: transform 90ms ease, border-color 120ms ease, background 120ms ease !important;
             }
             .fu-nav .stButton > button:hover{
-                transform: translateY(-1px);
-                border-color: rgba(245,158,11,0.28) !important;
-                background: linear-gradient(180deg, rgba(245,158,11,0.10), rgba(255,255,255,0.03)) !important;
-            }
+    transform: translateY(-1px);
+    border-color: rgba(239,68,68,0.22) !important;
+    background: rgba(239,68,68,0.06) !important;
+}
 
             
             /* Item (alinhado) */
@@ -694,9 +694,9 @@ def _industrial_sidebar_css() -> None:
             .fu-nav .fu-nav-item--active{
                 border-radius: 16px;
                 padding: 4px;
-                background: rgba(245,158,11,0.10);
-                border: 1px solid rgba(245,158,11,0.25);
-                box-shadow: 0 10px 22px rgba(245,158,11,0.10);
+                background: rgba(0,0,0,0);
+                border: 1px solid rgba(239,68,68,0.14);
+                box-shadow: 0 10px 22px rgba(239,68,68,0.08);
             }
             .fu-nav .fu-nav-item--active::before{
                 content: "";
@@ -706,17 +706,34 @@ def _industrial_sidebar_css() -> None:
                 width: 4px;
                 height: 22px;
                 border-radius: 999px;
-                background: rgba(245,158,11,0.95);
-                box-shadow: 0 0 0 1px rgba(245,158,11,0.22);
+                background: rgba(239,68,68,0.95);
+                box-shadow: 0 0 0 1px rgba(239,68,68,0.18);
             }
 
-/* Wrapper do ativo */
+
+/* Wrapper do ativo — Minimalista (Notion) */
             .fu-nav .fu-nav-active{
-                border-radius: 16px;
+                position: relative;
+                border-radius: 14px;
                 padding: 4px;
-                background: rgba(245,158,11,0.10);
-                border: 1px solid rgba(245,158,11,0.25);
-                box-shadow: 0 10px 22px rgba(245,158,11,0.10);
+                background: rgba(0,0,0,0);
+                border: 1px solid rgba(239,68,68,0.14);
+                box-shadow: none;
+                transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
+            }
+            .fu-nav .fu-nav-active::before{
+                content: "";
+                position: absolute;
+                left: -6px;
+                top: 10px;
+                width: 3px;
+                height: calc(100% - 20px);
+                border-radius: 999px;
+                background: linear-gradient(180deg, rgba(239,68,68,1), rgba(220,38,38,1));
+                transition: height 140ms ease, top 140ms ease, opacity 140ms ease;
+            }
+            .fu-nav .fu-nav-active .stButton > button{
+                font-weight: 800 !important;
             }
 
 /* Nav: otimização mobile (mais espaço e menos travamento) */
@@ -773,8 +790,8 @@ def _industrial_sidebar_css() -> None:
     overflow: hidden;
 }
 .fu-group--active{
-    border-color: rgba(245,158,11,0.22);
-    box-shadow: 0 12px 24px rgba(245,158,11,0.10);
+    border-color: rgba(239,68,68,0.18);
+    box-shadow: 0 12px 24px rgba(239,68,68,0.08);
 }
 .fu-group-h{
     position: sticky;
@@ -795,6 +812,26 @@ def _industrial_sidebar_css() -> None:
     gap: 8px;
 }
 
+
+
+/* ===== Identidade Vermelha global (minimalista) ===== */
+button[kind="primary"]{
+    background: rgba(239,68,68,0.92) !important;
+    border: 1px solid rgba(239,68,68,0.55) !important;
+    color: #fff !important;
+    box-shadow: none !important;
+}
+button[kind="primary"]:hover{
+    background: rgba(239,68,68,1) !important;
+    border-color: rgba(239,68,68,0.75) !important;
+}
+button[kind="secondary"]:hover{
+    border-color: rgba(239,68,68,0.25) !important;
+    background: rgba(239,68,68,0.05) !important;
+}
+/* Links */
+a, a:visited{ color: rgba(239,68,68,0.82); }
+a:hover{ color: rgba(239,68,68,1); }
 </style>
         """),
         unsafe_allow_html=True,
