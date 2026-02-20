@@ -1028,10 +1028,31 @@ def exibir_ficha_material(_supabase):
                 with csel3:
                     only_pend = st.toggle("Só pendentes", value=False, key="fm_busca_only_pend")
 
+                # Para performance em bases grandes (você pode trocar para "Tudo")
+                periodo = st.selectbox("Período", ["12 meses", "6 meses", "3 meses", "Tudo"], index=0, key="fm_busca_periodo", label_visibility="collapsed")
+
                 # Junta pedidos com Catálogo (LEFT) para NÃO perder materiais sem cadastro
                 cat_small = dcat[["_cod_norm", "familia_descricao", "grupo_descricao", "_fam_norm", "_grp_norm"]].drop_duplicates("_cod_norm")
                 df_scope = df_pedidos.copy()
+                # Garante chave de junção consistente (pedidos.cod_material é texto; materiais.codigo_material é bigint)
+                if "_cod_norm" not in df_scope.columns:
+                    if "cod_material" in df_scope.columns:
+                        df_scope["_cod_norm"] = df_scope["cod_material"].apply(_norm_code)
+                    else:
+                        df_scope["_cod_norm"] = ""
+                df_scope["_cod_norm"] = df_scope["_cod_norm"].fillna("").astype(str)
+                cat_small["_cod_norm"] = cat_small["_cod_norm"].fillna("").astype(str)
                 df_scope = df_scope.merge(cat_small, on="_cod_norm", how="left", suffixes=("", "_cat"))
+
+                # Coalesce caso o merge tenha gerado colunas duplicadas
+                if "familia_descricao_cat" in df_scope.columns and "familia_descricao" in df_scope.columns:
+                    df_scope["familia_descricao"] = df_scope["familia_descricao"].fillna(df_scope["familia_descricao_cat"])
+                elif "familia_descricao_cat" in df_scope.columns and "familia_descricao" not in df_scope.columns:
+                    df_scope["familia_descricao"] = df_scope["familia_descricao_cat"]
+                if "grupo_descricao_cat" in df_scope.columns and "grupo_descricao" in df_scope.columns:
+                    df_scope["grupo_descricao"] = df_scope["grupo_descricao"].fillna(df_scope["grupo_descricao_cat"])
+                elif "grupo_descricao_cat" in df_scope.columns and "grupo_descricao" not in df_scope.columns:
+                    df_scope["grupo_descricao"] = df_scope["grupo_descricao_cat"]
 
                 # Normaliza campos pós-merge (evita 'nan' textual e melhora match)
                 df_scope["familia_descricao"] = df_scope.get("familia_descricao", pd.Series([], dtype="object")).fillna("").astype(str)
@@ -1044,6 +1065,14 @@ def exibir_ficha_material(_supabase):
                     df_scope = df_scope[df_scope["_fam_norm"] == _norm_txt(fam_sel)]
                 if grp_sel != "(Todos)":
                     df_scope = df_scope[df_scope["_grp_norm"] == _norm_txt(grp_sel)]
+
+                # Filtro de período (performance)
+                if col_data and col_data in df_scope.columns and periodo != "Tudo":
+                    dt = _safe_datetime_series(df_scope[col_data])
+                    df_scope["_data_oc_tmp"] = dt
+                    months = {"12 meses": 12, "6 meses": 6, "3 meses": 3}.get(periodo, 12)
+                    cutoff = (pd.Timestamp.now().normalize() - pd.DateOffset(months=months))
+                    df_scope = df_scope[df_scope["_data_oc_tmp"].isna() | (df_scope["_data_oc_tmp"] >= cutoff)]
 
                                 # Flags e datas para KPIs / ranking
                 hoje = pd.Timestamp.now().normalize()
@@ -1110,9 +1139,9 @@ def exibir_ficha_material(_supabase):
                     .reset_index()
                 )
 
-                df_rank = df_rank.merge(cat_small, on="_cod_norm", how="left")
-                df_rank["familia_descricao"] = df_rank.get("familia_descricao", "").fillna("").astype(str)
-                df_rank["grupo_descricao"] = df_rank.get("grupo_descricao", "").fillna("").astype(str)
+                df_rank = df_rank.merge(cat_small[["_cod_norm","familia_descricao","grupo_descricao"]].drop_duplicates("_cod_norm"), on="_cod_norm", how="left")
+                df_rank["familia_descricao"] = df_rank.get("familia_descricao", pd.Series([], dtype="object")).fillna("").astype(str)
+                df_rank["grupo_descricao"] = df_rank.get("grupo_descricao", pd.Series([], dtype="object")).fillna("").astype(str)
 
                 total_val = float(df_rank["valor"].sum()) if "valor" in df_rank.columns else 0.0
                 total_comp = float(df_rank["compras"].sum()) if "compras" in df_rank.columns else 0.0
