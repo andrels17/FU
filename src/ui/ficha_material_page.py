@@ -1176,13 +1176,17 @@ def exibir_ficha_material(_supabase):
             nivel = "🟢 SAUDÁVEL"
 
         # KPI bar (ERP)
-        k1, k2, k3, k4, k5 = st.columns(5)
+        # - Valor total: soma de todos os pedidos no escopo (família/grupo/material)
+        # - Valor pendente: soma apenas dos itens ainda pendentes
+        valor_total_escopo = float(df_mat["_valor_total"].sum())
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.metric("📦 Pedidos", int(len(df_mat)))
         k2.metric("⏳ Pendentes", int(df_mat["_pendente"].sum()))
         k3.metric("🔴 Atrasados", qtd_atrasados)
-        k4.metric("💰 Valor pendente", formatar_moeda_br(valor_pendente))
+        k4.metric("💳 Valor total", formatar_moeda_br(valor_total_escopo))
+        k5.metric("💰 Valor pendente", formatar_moeda_br(valor_pendente))
         mais_antigo = df_mat.loc[df_mat["_pendente"], "_dias_aberto"].max()
-        k5.metric("🧭 Mais antigo (dias)", f"{int(mais_antigo)}" if pd.notna(mais_antigo) else "—")
+        k6.metric("🧭 Mais antigo (dias)", f"{int(mais_antigo)}" if pd.notna(mais_antigo) else "—")
 
         st.caption(f"Criticidade do follow-up: **{nivel}** • Regra de atraso: previsão > prazo > OC + 30 dias")
 
@@ -1659,3 +1663,4 @@ def exibir_ficha_material(_supabase):
         if st.button("← Voltar para Consulta", use_container_width=True):
             st.session_state.pagina = "Consultar Pedidos"
             st.rerun()
+            
