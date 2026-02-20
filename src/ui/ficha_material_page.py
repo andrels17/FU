@@ -1029,7 +1029,7 @@ def exibir_ficha_material(_supabase):
                     only_pend = st.toggle("Só pendentes", value=False, key="fm_busca_only_pend")
 
                 # Para performance em bases grandes (você pode trocar para "Tudo")
-                periodo = st.selectbox("Período", ["12 meses", "6 meses", "3 meses", "Tudo"], index=0, key="fm_busca_periodo", label_visibility="collapsed")
+                periodo = st.selectbox("Período", ["12 meses", "6 meses", "3 meses", "Tudo"], index=3, key="fm_busca_periodo", help="Controle de desempenho: em bases grandes, prefira 3–12 meses.")
 
                 # Junta pedidos com Catálogo (LEFT) para NÃO perder materiais sem cadastro
                 cat_small = dcat[["_cod_norm", "familia_descricao", "grupo_descricao", "_fam_norm", "_grp_norm"]].drop_duplicates("_cod_norm")
