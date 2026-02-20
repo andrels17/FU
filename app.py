@@ -60,6 +60,72 @@ section[data-testid="stSidebar"] hr{
   opacity: 0.35;
 }
 
+/* ===== Compact icons: força tamanho uniforme (inclusive container do botão) ===== */
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton{
+  width: 64px !important;
+}
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton > button{
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 18px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+
+  font-size: 26px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+
+  /* fontes que renderizam glyphs com tamanho consistente */
+  font-family: ui-sans-serif, system-ui, "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", "Noto Sans Symbols", sans-serif !important;
+
+  color: rgba(255,255,255,0.92) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  background: rgba(255,255,255,0.03) !important;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease !important;
+}
+
+/* Hover vermelho */
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton > button:hover{
+  transform: translateY(-1px);
+  border-color: rgba(239,68,68,0.35) !important;
+  background: rgba(239,68,68,0.10) !important;
+  color: rgba(239,68,68,0.95) !important;
+}
+
+/* Ativo vermelho cheio */
+section[data-testid="stSidebar"] .fu-compact-active div.stButton > button{
+  border-color: rgba(239,68,68,0.55) !important;
+  background: rgba(239,68,68,0.95) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(239,68,68,0.18) !important;
+}
+section[data-testid="stSidebar"] .fu-compact-active div.stButton > button:hover{
+  transform: translateY(-1px);
+  color: #ffffff !important;
+  background: rgba(239,68,68,0.95) !important;
+}
+
+/* ===== Compact layout: reduz "vazio" visual ===== */
+/* remove padding extra no topo da sidebar quando colapsada */
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
+  padding-top: 4px !important;
+}
+/* menu mais denso */
+.fu-compact-nav{
+  gap: 10px !important;
+  padding-top: 4px !important;
+}
+/* Toggle (hambúrguer/fechar) no mesmo tamanho dos ícones */
+section[data-testid="stSidebar"] .fu-sidebar-toggle div.stButton > button{
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 18px !important;
+  padding: 0 !important;
+  font-size: 22px !important;
+}
 </style>
 
 """, unsafe_allow_html=True)
