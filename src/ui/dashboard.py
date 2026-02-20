@@ -351,9 +351,9 @@ def exibir_dashboard(_supabase):
 
             if not grp.empty:
                 fig = go.Figure()
-                fig.add_trace(go.Scatter(x=grp["_week"], y=grp["atrasados"], mode="lines+markers", name="Atrasados"))
-                fig.add_trace(go.Scatter(x=grp["_week"], y=grp["vencendo"], mode="lines+markers", name="Vencendo (<=3d)"))
-                fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Semana", yaxis_title="Qtd")
+                fig.add_trace(go.Scatter(x=grp["_week"], y=grp["atrasados"], mode="lines+markers+text", name="Atrasados", text=grp["atrasados"], textposition="top center"))
+                fig.add_trace(go.Scatter(x=grp["_week"], y=grp["vencendo"], mode="lines+markers+text", name="Vencendo (<=3d)", text=grp["vencendo"], textposition="bottom center"))
+                fig.update_layout(height=320, margin=dict(l=10, r=40, t=10, b=10), xaxis_title="Semana", yaxis_title="Qtd")
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.caption("Sem dados suficientes para tendência.")
@@ -380,7 +380,8 @@ def exibir_dashboard(_supabase):
                                  .sort_values(ascending=False)
                                  .head(10))
                             fig_f = px.bar(x=r.values, y=r.index, orientation="h")
-                            fig_f.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10),
+                            fig_f.update_traces(text=r.values, texttemplate="%{text}", textposition="outside", cliponaxis=False)
+                            fig_f.update_layout(height=360, margin=dict(l=10, r=40, t=10, b=10),
                                                 xaxis_title="Valor", yaxis_title="")
                             st.plotly_chart(fig_f, use_container_width=True)
                         else:
@@ -397,7 +398,8 @@ def exibir_dashboard(_supabase):
                                  .replace("", pd.NA).dropna()
                                  .value_counts().head(10))
                             fig_d = px.bar(x=d.values, y=d.index, orientation="h")
-                            fig_d.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10),
+                            fig_d.update_traces(text=d.values, texttemplate="%{text}", textposition="outside", cliponaxis=False)
+                            fig_d.update_layout(height=360, margin=dict(l=10, r=40, t=10, b=10),
                                                 xaxis_title="Quantidade", yaxis_title="")
                             st.plotly_chart(fig_d, use_container_width=True)
                         else:
@@ -416,7 +418,8 @@ def exibir_dashboard(_supabase):
                     labels = ["0–7", "8–15", "16–30", "31–60", "60+"]
                     aging = pd.cut(dias_atraso, bins=bins, labels=labels).value_counts().reindex(labels).fillna(0).astype(int)
                     fig_a = px.bar(x=aging.index, y=aging.values)
-                    fig_a.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10),
+                    fig_a.update_traces(text=aging.values, texttemplate="%{text}", textposition="outside", cliponaxis=False)
+                    fig_a.update_layout(height=320, margin=dict(l=10, r=40, t=10, b=10),
                                         xaxis_title="Dias em atraso", yaxis_title="Quantidade")
                     st.plotly_chart(fig_a, use_container_width=True)
                 else:
