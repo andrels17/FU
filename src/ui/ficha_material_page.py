@@ -116,6 +116,21 @@ def _norm_code(x) -> str:
     return carregar_pedidos(_supabase, st.session_state.get("tenant_id"))
 
 
+
+def _coalesce_merge_suffix(df: pd.DataFrame, base: str) -> pd.DataFrame:
+    """Após merge, garante que exista a coluna `base` mesmo quando houver sufixos (_x/_y).
+    Mantém preferência pelo lado direito (_y).
+    """
+    if base in df.columns:
+        return df
+    by = f"{base}_y"
+    bx = f"{base}_x"
+    if by in df.columns:
+        df[base] = df[by]
+    elif bx in df.columns:
+        df[base] = df[bx]
+    return df
+
 def _pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
     """Retorna a primeira coluna existente no df dentre as candidatas."""
     for c in candidates:
@@ -906,6 +921,10 @@ def exibir_ficha_material(_supabase):
                     on="_cod_norm",
                     how="left",
                 )
+                # Alguns fluxos podem já ter colunas de família/grupo no df_pedidos; após merge, normalize nomes
+                dfp = _coalesce_merge_suffix(dfp, 'familia_descricao')
+                dfp = _coalesce_merge_suffix(dfp, 'grupo_descricao')
+
 
                 fam_opts = sorted([x for x in df_mat.get("familia_descricao", pd.Series([], dtype=str)).dropna().astype(str).unique().tolist() if str(x).strip()])
                 grp_opts_all = sorted([x for x in df_mat.get("grupo_descricao", pd.Series([], dtype=str)).dropna().astype(str).unique().tolist() if str(x).strip()])
@@ -985,7 +1004,18 @@ def exibir_ficha_material(_supabase):
                         cA, cB, cC = st.columns([3.8, 1.2, 1.2])
                         with cA:
                             st.markdown(f"**{codn} — {desc}**")
-                            st.caption(f"Família: {str(fam_sel) if fam_sel!='(Todas)' else (df_scope[df_scope['_cod_norm']==codn]['familia_descricao'].dropna().astype(str).head(1).tolist() or ['—'])[0]}  •  Grupo: {str(grp_sel) if grp_sel!='(Todos)' else (df_scope[df_scope['_cod_norm']==codn]['grupo_descricao'].dropna().astype(str).head(1).tolist() or ['—'])[0]}")
+                            # Labels seguros (evita KeyError quando merge gera sufixos ou catálogo incompleto)
+                            fam_col = 'familia_descricao' if 'familia_descricao' in df_scope.columns else ('familia_descricao_y' if 'familia_descricao_y' in df_scope.columns else ('familia_descricao_x' if 'familia_descricao_x' in df_scope.columns else None))
+                            grp_col = 'grupo_descricao' if 'grupo_descricao' in df_scope.columns else ('grupo_descricao_y' if 'grupo_descricao_y' in df_scope.columns else ('grupo_descricao_x' if 'grupo_descricao_x' in df_scope.columns else None))
+                            if fam_sel != '(Todas)':
+                                fam_lbl = str(fam_sel)
+                            else:
+                                fam_lbl = (df_scope.loc[df_scope['_cod_norm'] == codn, fam_col].dropna().astype(str).head(1).tolist()[0] if fam_col else '—')
+                            if grp_sel != '(Todos)':
+                                grp_lbl = str(grp_sel)
+                            else:
+                                grp_lbl = (df_scope.loc[df_scope['_cod_norm'] == codn, grp_col].dropna().astype(str).head(1).tolist()[0] if grp_col else '—')
+                            st.caption(f"Família: {fam_lbl}  •  Grupo: {grp_lbl}")
                         with cB:
                             st.metric("Compras", compras)
                         with cC:
@@ -1414,3 +1444,4 @@ def exibir_ficha_material(_supabase):
         if st.button("← Voltar para Consulta", use_container_width=True):
             st.session_state.pagina = "Consultar Pedidos"
             st.rerun()
+            
