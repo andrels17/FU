@@ -1010,11 +1010,11 @@ def exibir_ficha_material(_supabase):
                             if fam_sel != '(Todas)':
                                 fam_lbl = str(fam_sel)
                             else:
-                                fam_lbl = (df_scope.loc[df_scope['_cod_norm'] == codn, fam_col].dropna().astype(str).head(1).tolist()[0] if fam_col else '—')
+                                fam_lbl = ((df_scope.loc[df_scope['_cod_norm'] == codn, fam_col].dropna().astype(str).head(1).tolist() or ['—'])[0] if fam_col else '—')
                             if grp_sel != '(Todos)':
                                 grp_lbl = str(grp_sel)
                             else:
-                                grp_lbl = (df_scope.loc[df_scope['_cod_norm'] == codn, grp_col].dropna().astype(str).head(1).tolist()[0] if grp_col else '—')
+                                grp_lbl = ((df_scope.loc[df_scope['_cod_norm'] == codn, grp_col].dropna().astype(str).head(1).tolist() or ['—'])[0] if grp_col else '—')
                             st.caption(f"Família: {fam_lbl}  •  Grupo: {grp_lbl}")
                         with cB:
                             st.metric("Compras", compras)
@@ -1444,4 +1444,3 @@ def exibir_ficha_material(_supabase):
         if st.button("← Voltar para Consulta", use_container_width=True):
             st.session_state.pagina = "Consultar Pedidos"
             st.rerun()
-            
