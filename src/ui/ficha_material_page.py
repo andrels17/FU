@@ -1045,193 +1045,173 @@ def exibir_ficha_material(_supabase):
                 if grp_sel != "(Todos)":
                     df_scope = df_scope[df_scope["_grp_norm"] == _norm_txt(grp_sel)]
 
+                                # Flags e datas para KPIs / ranking
+                hoje = pd.Timestamp.now().normalize()
+
+                if col_data and col_data in df_scope.columns:
+                    df_scope["_data_oc"] = _safe_datetime_series(df_scope[col_data])
+                else:
+                    df_scope["_data_oc"] = pd.NaT
+
+                df_scope["_prev"] = _safe_datetime_series(df_scope[col_prev]) if col_prev and col_prev in df_scope.columns else pd.NaT
+                df_scope["_prazo"] = _safe_datetime_series(df_scope[col_prazo]) if col_prazo and col_prazo in df_scope.columns else pd.NaT
+
+                df_scope["_due"] = df_scope["_prev"]
+                df_scope.loc[df_scope["_due"].isna(), "_due"] = df_scope.loc[df_scope["_due"].isna(), "_prazo"]
+                df_scope.loc[df_scope["_due"].isna(), "_due"] = df_scope.loc[df_scope["_due"].isna(), "_data_oc"] + pd.Timedelta(days=30)
+
+                pendente_flag = pd.Series([True] * len(df_scope), index=df_scope.index)
+                if col_entregue and col_entregue in df_scope.columns:
+                    pendente_flag = df_scope[col_entregue] != True
+                if col_qtd_pend and col_qtd_pend in df_scope.columns:
+                    qtd_p = pd.to_numeric(df_scope[col_qtd_pend], errors="coerce").fillna(0)
+                    pendente_flag = pendente_flag | (qtd_p > 0)
+
+                df_scope["_pendente"] = pendente_flag
+                df_scope["_atrasado"] = df_scope["_pendente"] & df_scope["_due"].notna() & (df_scope["_due"] < hoje)
+
+                if col_total and col_total in df_scope.columns:
+                    df_scope["_valor_total"] = pd.to_numeric(df_scope[col_total], errors="coerce").fillna(0.0)
+                else:
+                    df_scope["_valor_total"] = 0.0
+
                 # Filtro opcional: só pendentes
                 if only_pend:
-                    if "qtde_pendente" in df_scope.columns:
-                        df_scope = df_scope[pd.to_numeric(df_scope["qtde_pendente"], errors="coerce").fillna(0) > 0]
-                    elif "entregue" in df_scope.columns:
-                        df_scope = df_scope[df_scope["entregue"].fillna(False) == False]
-                    if df_scope.empty:
-                        st.warning("Nenhum pedido encontrado para a família/grupo selecionados.")
-                    else:
-                        cat_small = dcat[["_cod_norm", "familia_descricao", "grupo_descricao"]].drop_duplicates("_cod_norm")
-                        df_scope = df_scope.merge(cat_small, on="_cod_norm", how="left", suffixes=("", "_cat"))
+                    df_scope = df_scope[df_scope["_pendente"]]
 
-                        if "familia_descricao" not in df_scope.columns:
-                            for c in ("familia_descricao_cat", "familia_descricao_x", "familia_descricao_y"):
-                                if c in df_scope.columns:
-                                    df_scope["familia_descricao"] = df_scope[c]
-                                    break
-                        if "grupo_descricao" not in df_scope.columns:
-                            for c in ("grupo_descricao_cat", "grupo_descricao_x", "grupo_descricao_y"):
-                                if c in df_scope.columns:
-                                    df_scope["grupo_descricao"] = df_scope[c]
-                                    break
+                if df_scope.empty:
+                    st.warning("Nenhum pedido encontrado para a família/grupo selecionados.")
+                    st.stop()
 
-                        df_scope["familia_descricao"] = df_scope.get("familia_descricao", "").fillna("").astype(str)
-                        df_scope["grupo_descricao"] = df_scope.get("grupo_descricao", "").fillna("").astype(str)
+                k1, k2, k3, k4 = st.columns(4)
+                k1.metric("📦 Pedidos", int(len(df_scope)))
+                k2.metric("🧾 Materiais", int(df_scope["_cod_norm"].nunique()))
+                k3.metric("⏳ Pendentes", int(df_scope["_pendente"].sum()) if "_pendente" in df_scope.columns else 0)
+                k4.metric("💳 Valor total", formatar_moeda_br(float(df_scope["_valor_total"].sum())))
 
-                        hoje = pd.Timestamp.now().normalize()
+                st.markdown("#### Materiais mais recorrentes (no escopo)")
+                c_r1, c_r2, c_r3 = st.columns([1.4, 1.2, 1.2])
+                ordenar = c_r1.selectbox("Ordenar por", ["Valor", "Compras"], index=0, key="fm_busca_ord")
+                limite = c_r2.slider("Mostrar", min_value=5, max_value=50, value=15, step=1, key="fm_busca_lim")
+                mostrar_pedidos = c_r3.toggle("Ver pedidos detalhados", value=False, key="fm_busca_det")
 
-                        if col_data and col_data in df_scope.columns:
-                            df_scope["_data_oc"] = _safe_datetime_series(df_scope[col_data])
-                        else:
-                            df_scope["_data_oc"] = pd.NaT
+                gcols = ["_cod_norm"]
+                if "cod_material" in df_scope.columns:
+                    gcols.append("cod_material")
+                if "descricao" in df_scope.columns:
+                    gcols.append("descricao")
 
-                        df_scope["_prev"] = _safe_datetime_series(df_scope[col_prev]) if col_prev and col_prev in df_scope.columns else pd.NaT
-                        df_scope["_prazo"] = _safe_datetime_series(df_scope[col_prazo]) if col_prazo and col_prazo in df_scope.columns else pd.NaT
+                df_rank = (
+                    df_scope.groupby(gcols, dropna=False)
+                    .agg(
+                        compras=("id", "count") if "id" in df_scope.columns else ("_cod_norm", "size"),
+                        valor=("_valor_total", "sum"),
+                    )
+                    .reset_index()
+                )
 
-                        df_scope["_due"] = df_scope["_prev"]
-                        df_scope.loc[df_scope["_due"].isna(), "_due"] = df_scope.loc[df_scope["_due"].isna(), "_prazo"]
-                        df_scope.loc[df_scope["_due"].isna(), "_due"] = df_scope.loc[df_scope["_due"].isna(), "_data_oc"] + pd.Timedelta(days=30)
+                df_rank = df_rank.merge(cat_small, on="_cod_norm", how="left")
+                df_rank["familia_descricao"] = df_rank.get("familia_descricao", "").fillna("").astype(str)
+                df_rank["grupo_descricao"] = df_rank.get("grupo_descricao", "").fillna("").astype(str)
 
-                        pendente_flag = pd.Series([True] * len(df_scope), index=df_scope.index)
-                        if col_entregue and col_entregue in df_scope.columns:
-                            pendente_flag = df_scope[col_entregue] != True
-                        if col_qtd_pend and col_qtd_pend in df_scope.columns:
-                            qtd_p = pd.to_numeric(df_scope[col_qtd_pend], errors="coerce").fillna(0)
-                            pendente_flag = pendente_flag | (qtd_p > 0)
+                total_val = float(df_rank["valor"].sum()) if "valor" in df_rank.columns else 0.0
+                total_comp = float(df_rank["compras"].sum()) if "compras" in df_rank.columns else 0.0
+                df_rank["pct_valor"] = (df_rank["valor"] / total_val * 100.0).fillna(0.0) if total_val else 0.0
+                df_rank["pct_comp"] = (df_rank["compras"] / total_comp * 100.0).fillna(0.0) if total_comp else 0.0
 
-                        df_scope["_pendente"] = pendente_flag
-                        df_scope["_atrasado"] = df_scope["_pendente"] & df_scope["_due"].notna() & (df_scope["_due"] < hoje)
+                if ordenar == "Valor":
+                    df_rank = df_rank.sort_values(["valor", "compras"], ascending=[False, False])
+                else:
+                    df_rank = df_rank.sort_values(["compras", "valor"], ascending=[False, False])
 
-                        if col_total and col_total in df_scope.columns:
-                            df_scope["_valor_total"] = pd.to_numeric(df_scope[col_total], errors="coerce").fillna(0.0)
-                        else:
-                            df_scope["_valor_total"] = 0.0
+                for i, row in df_rank.head(int(limite)).iterrows():
+                    cod = row.get("cod_material") or row.get("_cod_norm") or ""
+                    desc = row.get("descricao") or ""
+                    fam_lbl = row.get("familia_descricao") or "—"
+                    grp_lbl = row.get("grupo_descricao") or "—"
+                    fam_lbl = fam_lbl.strip() if isinstance(fam_lbl, str) else str(fam_lbl)
+                    grp_lbl = grp_lbl.strip() if isinstance(grp_lbl, str) else str(grp_lbl)
+                    if not fam_lbl or fam_lbl.lower() == "nan":
+                        fam_lbl = "—"
+                    if not grp_lbl or grp_lbl.lower() == "nan":
+                        grp_lbl = "—"
 
-                        if only_pend:
-                            df_scope = df_scope[df_scope["_pendente"]]
+                    card = f"""
+                    <div class="fm-card">
+                      <div class="fm-title">{cod} — {desc}</div>
+                      <div class="fm-sub">Família: {fam_lbl} • Grupo: {grp_lbl}</div>
+                      <div class="fm-kpis">
+                        <div class="fm-kpi">Compras<b>{int(row.get("compras", 0))}</b></div>
+                        <div class="fm-kpi">% Compras<b>{float(row.get("pct_comp", 0.0)):.1f}%</b></div>
+                        <div class="fm-kpi">Valor<b>{formatar_moeda_br(float(row.get("valor", 0.0)))}</b></div>
+                        <div class="fm-kpi">% Valor<b>{float(row.get("pct_valor", 0.0)):.1f}%</b></div>
+                      </div>
+                    </div>
+                    """
+                    cL, cB = st.columns([6, 1])
+                    with cL:
+                        st.markdown(card, unsafe_allow_html=True)
+                    with cB:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("Ver Ficha", key=f"fg_rank_{i}"):
+                            st.session_state["material_fixo"] = {"cod": cod, "desc": desc}
+                            st.session_state["tipo_busca_ficha"] = "familia_grupo"
+                            st.session_state["equipamento_ctx"] = ""
+                            st.session_state["departamento_ctx"] = ""
+                            st.session_state["modo_ficha_material"] = True
+                            st.rerun()
 
-                        k1, k2, k3, k4 = st.columns(4)
-                        k1.metric("📦 Pedidos", int(len(df_scope)))
-                        k2.metric("🧾 Materiais", int(df_scope["_cod_norm"].nunique()))
-                        k3.metric("⏳ Pendentes", int(df_scope["_pendente"].sum()) if "_pendente" in df_scope.columns else 0)
-                        k4.metric("💳 Valor total", formatar_moeda_br(float(df_scope["_valor_total"].sum())))
+                    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-                        st.markdown("#### Materiais mais recorrentes (no escopo)")
-                        c_r1, c_r2, c_r3 = st.columns([1.4, 1.2, 1.2])
-                        ordenar = c_r1.selectbox("Ordenar por", ["Valor", "Compras"], index=0, key="fm_busca_ord")
-                        limite = c_r2.slider("Mostrar", min_value=5, max_value=50, value=15, step=1, key="fm_busca_lim")
-                        mostrar_pedidos = c_r3.toggle("Ver pedidos detalhados", value=False, key="fm_busca_det")
-
-                        gcols = ["_cod_norm"]
-                        if "cod_material" in df_scope.columns:
-                            gcols.append("cod_material")
-                        if "descricao" in df_scope.columns:
-                            gcols.append("descricao")
-
-                        df_rank = (
-                            df_scope.groupby(gcols, dropna=False)
-                            .agg(
-                                compras=("id", "count") if "id" in df_scope.columns else ("_cod_norm", "size"),
-                                valor=("_valor_total", "sum"),
-                            )
+                with st.expander("📊 Consolidado do escopo (Família/Grupo)", expanded=False):
+                    if fam_sel == "(Todas)":
+                        df_cons = (
+                            df_scope.groupby("familia_descricao", dropna=False)
+                            .agg(Pedidos=("_cod_norm", "size"), Materiais=("_cod_norm", "nunique"), Valor=("_valor_total", "sum"))
                             .reset_index()
+                            .rename(columns={"familia_descricao": "Família"})
+                            .sort_values("Valor", ascending=False)
+                        )
+                    elif grp_sel == "(Todos)":
+                        df_cons = (
+                            df_scope.groupby("grupo_descricao", dropna=False)
+                            .agg(Pedidos=("_cod_norm", "size"), Materiais=("_cod_norm", "nunique"), Valor=("_valor_total", "sum"))
+                            .reset_index()
+                            .rename(columns={"grupo_descricao": "Grupo"})
+                            .sort_values("Valor", ascending=False)
+                        )
+                    else:
+                        df_cons = (
+                            df_scope.groupby(["familia_descricao", "grupo_descricao"], dropna=False)
+                            .agg(Pedidos=("_cod_norm", "size"), Materiais=("_cod_norm", "nunique"), Valor=("_valor_total", "sum"))
+                            .reset_index()
+                            .rename(columns={"familia_descricao": "Família", "grupo_descricao": "Grupo"})
+                            .sort_values("Valor", ascending=False)
                         )
 
-                        df_rank = df_rank.merge(cat_small, on="_cod_norm", how="left")
-                        df_rank["familia_descricao"] = df_rank.get("familia_descricao", "").fillna("").astype(str)
-                        df_rank["grupo_descricao"] = df_rank.get("grupo_descricao", "").fillna("").astype(str)
+                    st.dataframe(
+                        df_cons,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={"Valor": st.column_config.NumberColumn(format="R$ %.2f")},
+                    )
 
-                        total_val = float(df_rank["valor"].sum()) if "valor" in df_rank.columns else 0.0
-                        total_comp = float(df_rank["compras"].sum()) if "compras" in df_rank.columns else 0.0
-                        df_rank["pct_valor"] = (df_rank["valor"] / total_val * 100.0).fillna(0.0) if total_val else 0.0
-                        df_rank["pct_comp"] = (df_rank["compras"] / total_comp * 100.0).fillna(0.0) if total_comp else 0.0
-
-                        if ordenar == "Valor":
-                            df_rank = df_rank.sort_values(["valor", "compras"], ascending=[False, False])
-                        else:
-                            df_rank = df_rank.sort_values(["compras", "valor"], ascending=[False, False])
-
-                        for i, row in df_rank.head(int(limite)).iterrows():
-                            cod = row.get("cod_material") or row.get("_cod_norm") or ""
-                            desc = row.get("descricao") or ""
-                            fam_lbl = row.get("familia_descricao") or "—"
-                            grp_lbl = row.get("grupo_descricao") or "—"
-                            fam_lbl = fam_lbl.strip() if isinstance(fam_lbl, str) else str(fam_lbl)
-                            grp_lbl = grp_lbl.strip() if isinstance(grp_lbl, str) else str(grp_lbl)
-                            if not fam_lbl or fam_lbl.lower() == "nan":
-                                fam_lbl = "—"
-                            if not grp_lbl or grp_lbl.lower() == "nan":
-                                grp_lbl = "—"
-
-                            card = f"""
-                            <div class="fm-card">
-                              <div class="fm-title">{cod} — {desc}</div>
-                              <div class="fm-sub">Família: {fam_lbl} • Grupo: {grp_lbl}</div>
-                              <div class="fm-kpis">
-                                <div class="fm-kpi">Compras<b>{int(row.get("compras", 0))}</b></div>
-                                <div class="fm-kpi">% Compras<b>{float(row.get("pct_comp", 0.0)):.1f}%</b></div>
-                                <div class="fm-kpi">Valor<b>{formatar_moeda_br(float(row.get("valor", 0.0)))}</b></div>
-                                <div class="fm-kpi">% Valor<b>{float(row.get("pct_valor", 0.0)):.1f}%</b></div>
-                              </div>
-                            </div>
-                            """
-                            cL, cB = st.columns([6, 1])
-                            with cL:
-                                st.markdown(card, unsafe_allow_html=True)
-                            with cB:
-                                st.markdown("<br>", unsafe_allow_html=True)
-                                if st.button("Ver Ficha", key=f"fg_rank_{i}"):
-                                    st.session_state["material_fixo"] = {"cod": cod, "desc": desc}
-                                    st.session_state["tipo_busca_ficha"] = "familia_grupo"
-                                    st.session_state["equipamento_ctx"] = ""
-                                    st.session_state["departamento_ctx"] = ""
-                                    st.session_state["modo_ficha_material"] = True
-                                    st.rerun()
-
-                            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-
-                        with st.expander("📊 Consolidado do escopo (Família/Grupo)", expanded=False):
-                            if fam_sel == "(Todas)":
-                                df_cons = (
-                                    df_scope.groupby("familia_descricao", dropna=False)
-                                    .agg(Pedidos=("_cod_norm", "size"), Materiais=("_cod_norm", "nunique"), Valor=("_valor_total", "sum"))
-                                    .reset_index()
-                                    .rename(columns={"familia_descricao": "Família"})
-                                    .sort_values("Valor", ascending=False)
-                                )
-                            elif grp_sel == "(Todos)":
-                                df_cons = (
-                                    df_scope.groupby("grupo_descricao", dropna=False)
-                                    .agg(Pedidos=("_cod_norm", "size"), Materiais=("_cod_norm", "nunique"), Valor=("_valor_total", "sum"))
-                                    .reset_index()
-                                    .rename(columns={"grupo_descricao": "Grupo"})
-                                    .sort_values("Valor", ascending=False)
-                                )
-                            else:
-                                df_cons = (
-                                    df_scope.groupby(["familia_descricao", "grupo_descricao"], dropna=False)
-                                    .agg(Pedidos=("_cod_norm", "size"), Materiais=("_cod_norm", "nunique"), Valor=("_valor_total", "sum"))
-                                    .reset_index()
-                                    .rename(columns={"familia_descricao": "Família", "grupo_descricao": "Grupo"})
-                                    .sort_values("Valor", ascending=False)
-                                )
-
-                            st.dataframe(
-                                df_cons,
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={"Valor": st.column_config.NumberColumn(format="R$ %.2f")},
-                            )
-
-                        if mostrar_pedidos:
-                            st.markdown("#### Pedidos no escopo (detalhado)")
-                            cols = []
-                            for c in [col_data, col_oc, col_solic, col_fornecedor, col_status, col_total]:
-                                if c and c in df_scope.columns:
-                                    cols.append(c)
-                            df_det = df_scope.sort_values("_data_oc", ascending=False)
-                            st.dataframe(
-                                df_det[cols],
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    col_data: st.column_config.DateColumn("Data OC", format="DD/MM/YYYY") if col_data else None,
-                                    col_total: st.column_config.NumberColumn("Valor Total", format="R$ %.2f") if col_total else None,
-                                },
-                            )
+                if mostrar_pedidos:
+                    st.markdown("#### Pedidos no escopo (detalhado)")
+                    cols = []
+                    for c in [col_data, col_oc, col_solic, col_fornecedor, col_status, col_total]:
+                        if c and c in df_scope.columns:
+                            cols.append(c)
+                    df_det = df_scope.sort_values("_data_oc", ascending=False)
+                    st.dataframe(
+                        df_det[cols],
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            col_data: st.column_config.DateColumn("Data OC", format="DD/MM/YYYY") if col_data else None,
+                            col_total: st.column_config.NumberColumn("Valor Total", format="R$ %.2f") if col_total else None,
+                        },
+                    )
 
 
 # ============================================================
