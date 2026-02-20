@@ -53,79 +53,11 @@ def _call_insights_automaticos(historico: pd.DataFrame, material_atual: dict) ->
 
 
 @st.cache_data(ttl=300)
-def _carregar_pedidos_cache(_supabase, tenant_id: str | None) -> pd.DataFrame:
-    """Carrega pedidos do tenant com paginação para evitar retornos parciais.
+def _carregar_pedidos_cache(_supabase):
+    # Cache simples para deixar a página mais rápida e reduzir chamadas ao banco
+    return carregar_pedidos(_supabase, st.session_state.get("tenant_id"))
 
-    Observação: alguns helpers/repositórios aplicam LIMIT (ou filtros de período) por performance.
-    Aqui garantimos que a aba "Buscar por Família & Grupo" opere sobre o conjunto completo (até um teto seguro).
-    """
-    # 0) Resolve tenant_id de forma robusta
-    if not tenant_id:
-        tenant_id = (
-            st.session_state.get("tenant_id")
-            or (st.session_state.get("usuario") or {}).get("tenant_id")
-            or st.session_state.get("tenant")
-            or st.session_state.get("tenant_uuid")
-        )
 
-    df_try: pd.DataFrame | None = None
-
-    # 1) Tenta usar o repositório existente (pode ter filtros/limit)
-    try:
-        df_try = carregar_pedidos(_supabase, tenant_id)
-        if isinstance(df_try, pd.DataFrame) and len(df_try) >= 50:
-            return df_try
-    except Exception:
-        df_try = None
-
-    # 2) Paginação direta no Supabase/PostgREST (tenta range; se falhar, tenta offset/limit)
-    max_rows = 20000
-    page_size = 1000
-    rows: list[dict] = []
-
-    def _base_query():
-        q = _supabase.table("pedidos").select("*")
-        if tenant_id:
-            q = q.eq("tenant_id", tenant_id)
-        return q
-
-    # 2a) Tenta com range()
-    try:
-        qbase = _base_query()
-        offset = 0
-        while offset < max_rows:
-            res = qbase.range(offset, offset + page_size - 1).execute()
-            batch = (getattr(res, "data", None) or [])
-            if not batch:
-                break
-            rows.extend(batch)
-            if len(batch) < page_size:
-                break
-            offset += page_size
-    except Exception:
-        # 2b) fallback: offset/limit (compatibilidade com versões diferentes do client)
-        try:
-            qbase = _base_query()
-            offset = 0
-            while offset < max_rows:
-                res = qbase.limit(page_size).offset(offset).execute()
-                batch = (getattr(res, "data", None) or [])
-                if not batch:
-                    break
-                rows.extend(batch)
-                if len(batch) < page_size:
-                    break
-                offset += page_size
-        except Exception:
-            rows = []
-
-    if rows:
-        return pd.DataFrame(rows)
-
-    # 3) Último fallback: devolve o que conseguir do helper (mesmo parcial)
-    if isinstance(df_try, pd.DataFrame):
-        return df_try
-    return pd.DataFrame()
 @st.cache_data(ttl=300)
 def _carregar_catalogo_materiais_cache(_supabase, tenant_id: str | None) -> pd.DataFrame:
     """Carrega catálogo `materiais` do Supabase (por tenant) para enriquecer a ficha e permitir análise por família/grupo.
@@ -324,7 +256,7 @@ def exibir_ficha_material(_supabase):
     modo_ficha = bool(st.session_state.get("modo_ficha_material", False))
 
 
-    df_pedidos = _carregar_pedidos_cache(_supabase, st.session_state.get('tenant_id'))
+    df_pedidos = _carregar_pedidos_cache(_supabase)
 
     # Catálogo (dimensão) para enriquecer a ficha e permitir análises por Família/Grupo
     tenant_id = st.session_state.get("tenant_id")
@@ -1096,19 +1028,29 @@ def exibir_ficha_material(_supabase):
                 with csel3:
                     only_pend = st.toggle("Só pendentes", value=False, key="fm_busca_only_pend")
 
-                scope = dcat
+                # Junta pedidos com Catálogo (LEFT) para NÃO perder materiais sem cadastro
+                cat_small = dcat[["_cod_norm", "familia_descricao", "grupo_descricao", "_fam_norm", "_grp_norm"]].drop_duplicates("_cod_norm")
+                df_scope = df_pedidos.copy()
+                df_scope = df_scope.merge(cat_small, on="_cod_norm", how="left", suffixes=("", "_cat"))
+
+                # Normaliza campos pós-merge (evita 'nan' textual e melhora match)
+                df_scope["familia_descricao"] = df_scope.get("familia_descricao", pd.Series([], dtype="object")).fillna("").astype(str)
+                df_scope["grupo_descricao"] = df_scope.get("grupo_descricao", pd.Series([], dtype="object")).fillna("").astype(str)
+                df_scope["_fam_norm"] = df_scope["familia_descricao"].apply(_norm_txt)
+                df_scope["_grp_norm"] = df_scope["grupo_descricao"].apply(_norm_txt)
+
+                # Filtros por família/grupo (quando selecionados)
                 if fam_sel != "(Todas)":
-                    scope = scope[scope["_fam_norm"] == _norm_txt(fam_sel)]
+                    df_scope = df_scope[df_scope["_fam_norm"] == _norm_txt(fam_sel)]
                 if grp_sel != "(Todos)":
-                    scope = scope[scope["_grp_norm"] == _norm_txt(grp_sel)]
+                    df_scope = df_scope[df_scope["_grp_norm"] == _norm_txt(grp_sel)]
 
-                codes = [c for c in scope.get("_cod_norm", pd.Series([], dtype=str)).astype(str).tolist() if c]
-                codes = sorted(set(codes))
-                if not codes:
-                    st.warning("Nenhum material encontrado no catálogo para os filtros selecionados.")
-                else:
-                    df_scope = df_pedidos[df_pedidos.get("_cod_norm", pd.Series([], dtype=str)).isin(codes)].copy()
-
+                # Filtro opcional: só pendentes
+                if only_pend:
+                    if "qtde_pendente" in df_scope.columns:
+                        df_scope = df_scope[pd.to_numeric(df_scope["qtde_pendente"], errors="coerce").fillna(0) > 0]
+                    elif "entregue" in df_scope.columns:
+                        df_scope = df_scope[df_scope["entregue"].fillna(False) == False]
                     if df_scope.empty:
                         st.warning("Nenhum pedido encontrado para a família/grupo selecionados.")
                     else:
