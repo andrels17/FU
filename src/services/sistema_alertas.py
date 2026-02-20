@@ -1099,50 +1099,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     st.markdown("---")
 
 
-    # ============================
-    # Filtros Globais (aplicam em todas as abas)
-    # ============================
-    pedidos_all = (
-        list(alertas.get("pedidos_atrasados", []))
-        + list(alertas.get("pedidos_vencendo", []))
-        + list(alertas.get("pedidos_criticos", []))
-    )
-
-    deps_all = sorted(list({safe_text(p.get("departamento", "N/A")) for p in pedidos_all if p is not None}))
-    ufs_all = sorted(list({str((p.get("uf") or p.get("fornecedor_uf") or "")).strip().upper() for p in pedidos_all if p is not None and str((p.get("uf") or p.get("fornecedor_uf") or "")).strip()}))
-    # incluir fornecedores da aba de performance também
-    forns_perf = sorted(list({safe_text(p.get("fornecedor", "N/A")) for p in alertas.get("fornecedores_baixa_performance", [])}))
-    forns_all = sorted(list(set(forns_all + forns_perf)))
-
-    vals = [float(p.get("valor", 0) or 0) for p in pedidos_all if p is not None]
-    vmin = float(min(vals)) if vals else 0.0
-    vmax = float(max(vals)) if vals else 0.0
-
-    def _apply_global_pedidos(lista):
-        if not lista:
-            return []
-        out = lista
-
-        if dept_global:
-            out = [p for p in out if safe_text(p.get("departamento", "N/A")) in dept_global]
-
-        if uf_global:
-            out = [p for p in out if str((p.get("uf") or p.get("fornecedor_uf") or "")).strip().upper() in uf_global]
-
-        if vmax > 0:
-            lo, hi = faixa_valor
-            out = [p for p in out if lo <= float(p.get("valor", 0) or 0) <= hi]
-
-        return out
-
-    def _apply_global_fornecedores(lista):
-        if not lista:
-            return []
-        out = lista
-        if uf_global:
-            out = [f for f in out if str((f.get("uf") or "")).strip().upper() in uf_global]
-        return out
-
+    
 
     # Tabs
     tab1, tab2, tab3, tab4 = st.tabs(
@@ -1322,7 +1279,6 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 def _hit(p):
                     return (b in str(p.get('nr_oc','')).lower() or b in str(p.get('descricao','')).lower() or b in str(p.get('fornecedor','')).lower())
                 pedidos_filtrados = [p for p in pedidos_filtrados if _hit(p)]
-                pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get("fornecedor", "N/A")) in fornecedor_venc_filtro]
 
             st.caption(f"Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos vencendo")
 
@@ -1427,7 +1383,6 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 def _hit(p):
                     return (b in str(p.get('nr_oc','')).lower() or b in str(p.get('descricao','')).lower() or b in str(p.get('fornecedor','')).lower())
                 pedidos_filtrados = [p for p in pedidos_filtrados if _hit(p)]
-                pedidos_filtrados = [p for p in pedidos_filtrados if safe_text(p.get('fornecedor', 'N/A')) in fornecedor_crit_filtro]
             
             # Mostrar contador
             st.caption(f"Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos críticos")
@@ -1580,4 +1535,3 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 st.info("Nenhum fornecedor corresponde aos filtros selecionados")
         else:
             st.success("Todos os fornecedores com boa performance!")
-
