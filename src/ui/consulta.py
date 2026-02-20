@@ -620,230 +620,154 @@ def exibir_consulta_pedidos(_supabase):
     # TAB: LISTA (principal)
     # =========================
     if tab_choice == "Lista":
-        # Barra superior: busca + filtros em popover (responsivo / clean)
-        c1, c2, c3 = st.columns([3.2, 1.1, 1.1])
+                # Barra superior: busca + filtros (executivo / clean)
+        st.text_input(
+            "Buscar",
+            key="c_q",
+            placeholder="OC, solicitação, descrição, fornecedor, código material/equipamento…",
+            label_visibility="collapsed",
+        )
 
-        with c1:
-            st.text_input(
-                "Buscar",
-                key="c_q",
-                placeholder="OC, solicitação, descrição, fornecedor, código material/equipamento…",
-                label_visibility="collapsed",
+        # Filtros completos ficam na sidebar (evita poluir a tela)
+        with st.sidebar.expander("🎛️ Filtros", expanded=False):
+            # Departamento
+            if "departamento" in df.columns:
+                dept_opts = sorted(df["departamento"].dropna().astype(str).unique().tolist())
+                st.multiselect("Departamento", dept_opts, key="c_deptos", placeholder="Todos")
+            else:
+                st.multiselect("Departamento", [], key="c_deptos", placeholder="Todos")
+
+            # Status
+            if "status" in df.columns:
+                status_opts = sorted(df["status"].dropna().astype(str).unique().tolist())
+                st.session_state["consulta_status_opts"] = status_opts
+                # Normaliza valores atuais para evitar erro se preset tiver valor inválido
+                current_status = st.session_state.get("c_status_list", []) or []
+                st.session_state["c_status_list"] = [s for s in current_status if s in status_opts]
+                st.multiselect("Status", status_opts, key="c_status_list", placeholder="Todos")
+            else:
+                current_status = st.session_state.get("c_status_list", []) or []
+                st.session_state["c_status_list"] = [s for s in current_status if s in STATUS_VALIDOS]
+                st.session_state["consulta_status_opts"] = STATUS_VALIDOS
+                st.multiselect("Status", STATUS_VALIDOS, key="c_status_list", placeholder="Todos")
+
+            st.divider()
+            st.markdown("**Códigos (somente números)**")
+
+            c_eq = _numeric_autocomplete(
+                "Cód. equipamento",
+                df["cod_equipamento"] if "cod_equipamento" in df.columns else pd.Series([], dtype=str),
+                "f_cod_equip",
+            )
+            c_mat = _numeric_autocomplete(
+                "Cód. material",
+                df["cod_material"] if "cod_material" in df.columns else pd.Series([], dtype=str),
+                "f_cod_mat",
             )
 
-        with c2:
-            with st.sidebar.expander("🎛️ Filtros", expanded=False):
-                # Departamento
-                if "departamento" in df.columns:
-                    dept_opts = sorted(df["departamento"].dropna().astype(str).unique().tolist())
-                    st.multiselect("Departamento", dept_opts, key="c_deptos", placeholder="Todos")
-                else:
-                    st.multiselect("Departamento", [], key="c_deptos", placeholder="Todos")
-                # Status
-                if "status" in df.columns:
-                    status_opts = sorted(df["status"].dropna().astype(str).unique().tolist())
-                    st.session_state["consulta_status_opts"] = status_opts
-                    # Normaliza valores atuais para evitar erro se preset tiver valor inválido
-                    current_status = st.session_state.get("c_status_list", []) or []
-                    st.session_state["c_status_list"] = [s for s in current_status if s in status_opts]
-                    st.multiselect("Status", status_opts, key="c_status_list", placeholder="Todos")
-                else:
-                    # Normaliza valores atuais para evitar erro se preset tiver valor inválido
-                    current_status = st.session_state.get("c_status_list", []) or []
-                    st.session_state["c_status_list"] = [s for s in current_status if s in STATUS_VALIDOS]
-                    st.session_state["consulta_status_opts"] = STATUS_VALIDOS
-                    st.multiselect("Status", STATUS_VALIDOS, key="c_status_list", placeholder="Todos")
-
-                st.divider()
-                st.markdown("**Códigos (somente números)**")
-
-                c_eq = _numeric_autocomplete(
-                    "Cód. equipamento",
-                    df["cod_equipamento"] if "cod_equipamento" in df.columns else pd.Series([], dtype=str),
-                    "f_cod_equip",
-                )
-                c_mat = _numeric_autocomplete(
-                    "Cód. material",
-                    df["cod_material"] if "cod_material" in df.columns else pd.Series([], dtype=str),
-                    "f_cod_mat",
-                )
-
-                # Persistir no estado (aplica ao clicar em Aplicar)
-                st.session_state["_tmp_cod_equip"] = c_eq
-                st.session_state["_tmp_cod_mat"] = c_mat
-
-                st.checkbox("Somente atrasados", key="c_atraso")
-                st.selectbox("Itens por página", [25, 50, 100, 200, 500], key="c_pp")
-
-                aF1, aF2 = st.columns(2)
-                if aF1.button("Aplicar", use_container_width=True):
-                    st.session_state["c_cod_equip"] = st.session_state.get("_tmp_cod_equip", "")
-                    st.session_state["c_cod_mat"] = st.session_state.get("_tmp_cod_mat", "")
-                    st.session_state["c_pag"] = 1
-                    st.rerun()
-                if aF2.button("Limpar", use_container_width=True):
-                    for k in ["c_q", "c_deptos", "c_status_list", "c_cod_equip", "c_cod_mat", "_tmp_cod_equip", "_tmp_cod_mat", "c_atraso", "c_pp", "c_pag", "consulta_selected_pid", "consulta_auto_opened_pid", "go_key"]:
-                        st.session_state.pop(k, None)
-                    st.rerun()
-
-
-
-        with c3:
-
-            # Atalho único (chips/tabs) — remove redundância (sem selectbox)
-
-            status_opts_atual = st.session_state.get("consulta_status_opts") or []
-
-
-            def _can_use(label: str) -> bool:
-
-                if label == "Todos":
-
-                    return True
-
-                if label == "Atrasados":
-
-                    return True
-
-                if label == "Sem OC":
-
-                    return "Sem OC" in status_opts_atual
-
-                if label == "Transporte":
-
-                    return "Em Transporte" in status_opts_atual
-
-                if label == "Entregues":
-
-                    return "Entregue" in status_opts_atual
-
-                return False
-
-
-            # Opções dinâmicas (só mostra o que existe no dataset)
-
-            quick_opts = ["Todos", "Atrasados"]
-
-            if _can_use("Sem OC"):
-
-                quick_opts.append("Sem OC")
-
-            if _can_use("Transporte"):
-
-                quick_opts.append("Transporte")
-
-            if _can_use("Entregues"):
-
-                quick_opts.append("Entregues")
-
-
-            st.session_state.setdefault("consulta_quick", "Todos")
-
-            if st.session_state.get("consulta_quick") not in quick_opts:
-
-                st.session_state["consulta_quick"] = "Todos"
-
-
-            # CSS minimalista: “chips” com destaque vermelho
-
-            st.markdown(
-
-                """
-
-                <style>
-
-                  .fu-quick [role="radiogroup"]{
-
-                    display:flex;
-
-                    gap:8px;
-
-                    flex-wrap:wrap;
-
-                  }
-
-                  .fu-quick [role="radiogroup"] > label{ margin:0 !important; }
-
-                  .fu-quick [role="radiogroup"] label{
-
-                    padding: 6px 10px !important;
-
-                    border-radius: 999px !important;
-
-                    border: 1px solid rgba(255,255,255,0.10) !important;
-
-                    background: rgba(255,255,255,0.03) !important;
-
-                    transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
-
-                    user-select:none;
-
-                  }
-
-                  .fu-quick [role="radiogroup"] label:hover{
-
-                    transform: translateY(-1px);
-
-                    border-color: rgba(239,68,68,0.28) !important;
-
-                    background: rgba(239,68,68,0.08) !important;
-
-                  }
-
-                  .fu-quick [role="radiogroup"] input:checked + div{
-
-                    border-radius: 999px !important;
-
-                    box-shadow: inset 0 0 0 1px rgba(239,68,68,0.35) !important;
-
-                    background: rgba(239,68,68,0.14) !important;
-
-                  }
-
-                  .fu-quick [role="radiogroup"] label div{
-
-                    font-weight: 800 !important;
-
-                    font-size: 0.86rem !important;
-
-                    padding: 0 !important;
-
-                  }
-
-                </style>
-
-                """,
-
-                unsafe_allow_html=True,
-
-            )
-
-
-            def _apply_quick_from_control():
-
-                val = st.session_state.get("consulta_quick") or "Todos"
-
-                _apply_preset(val, status_opts=status_opts_atual)
-
-
-            st.markdown('<div class="fu-quick">', unsafe_allow_html=True)
-
+            st.session_state["_tmp_cod_equip"] = c_eq
+            st.session_state["_tmp_cod_mat"] = c_mat
+
+            st.checkbox("Somente atrasados", key="c_atraso")
+            st.selectbox("Itens por página", [25, 50, 100, 200, 500], key="c_pp")
+
+            aF1, aF2 = st.columns(2)
+            if aF1.button("Aplicar", use_container_width=True):
+                st.session_state["c_cod_equip"] = st.session_state.get("_tmp_cod_equip", "")
+                st.session_state["c_cod_mat"] = st.session_state.get("_tmp_cod_mat", "")
+                st.session_state["c_pag"] = 1
+                st.rerun()
+            if aF2.button("Limpar", use_container_width=True):
+                for k in ["c_q", "c_deptos", "c_status_list", "c_cod_equip", "c_cod_mat", "_tmp_cod_equip", "_tmp_cod_mat", "c_atraso", "c_pp", "c_pag", "consulta_selected_pid", "consulta_auto_opened_pid", "go_key"]:
+                    st.session_state.pop(k, None)
+                st.rerun()
+
+        # Segment control (chips) abaixo do título — UX executiva
+        status_opts_atual = st.session_state.get("consulta_status_opts") or []
+
+        def _can_use(label: str) -> bool:
+            if label in ("Todos", "Atrasados"):
+                return True
+            if label == "Sem OC":
+                return "Sem OC" in status_opts_atual
+            if label == "Transporte":
+                return "Em Transporte" in status_opts_atual
+            if label == "Entregues":
+                return "Entregue" in status_opts_atual
+            return False
+
+        quick_opts = ["Todos", "Atrasados"]
+        if _can_use("Sem OC"):
+            quick_opts.append("Sem OC")
+        if _can_use("Transporte"):
+            quick_opts.append("Transporte")
+        if _can_use("Entregues"):
+            quick_opts.append("Entregues")
+
+        st.session_state.setdefault("consulta_quick", "Todos")
+        if st.session_state.get("consulta_quick") not in quick_opts:
+            st.session_state["consulta_quick"] = "Todos"
+
+        def _apply_quick_from_control():
+            val = st.session_state.get("consulta_quick") or "Todos"
+            _apply_preset(val, status_opts=status_opts_atual)
+
+        st.markdown(
+            '''
+            <style>
+              /* Segmented control minimalista vermelho (Notion-like) */
+              .fu-seg { margin: 6px 0 2px 0; display:flex; justify-content:center; }
+              .fu-seg [role="radiogroup"]{
+                display:inline-flex;
+                gap: 0;
+                padding: 4px;
+                border-radius: 14px;
+                border: 1px solid rgba(255,255,255,0.10);
+                background: rgba(255,255,255,0.03);
+                overflow: hidden;
+              }
+              .fu-seg [role="radiogroup"] > label{ margin:0 !important; }
+              .fu-seg [role="radiogroup"] label{
+                padding: 6px 12px !important;
+                border-radius: 10px !important;
+                border: 1px solid transparent !important;
+                background: transparent !important;
+                transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+                user-select:none;
+                white-space: nowrap;
+              }
+              .fu-seg [role="radiogroup"] label:hover{
+                border-color: rgba(239,68,68,0.22) !important;
+                background: rgba(239,68,68,0.08) !important;
+              }
+              .fu-seg [role="radiogroup"] input:checked + div{
+                border-radius: 10px !important;
+                background: rgba(239,68,68,0.16) !important;
+                box-shadow: inset 0 0 0 1px rgba(239,68,68,0.35) !important;
+              }
+              .fu-seg [role="radiogroup"] label div{
+                font-weight: 850 !important;
+                font-size: 0.86rem !important;
+                padding: 0 !important;
+              }
+              /* Esconde bolinha do radio (fica estilo tabs) */
+              .fu-seg [role="radiogroup"] label span:first-child{ display:none !important; }
+            </style>
+            ''',
+            unsafe_allow_html=True,
+        )
+
+        cseg1, cseg2, cseg3 = st.columns([1, 2, 1])
+        with cseg2:
+            st.markdown('<div class="fu-seg">', unsafe_allow_html=True)
             st.radio(
-
-                "Atalhos",
-
+                "Filtro rápido",
                 options=quick_opts,
-
                 horizontal=True,
-
                 key="consulta_quick",
-
                 label_visibility="collapsed",
-
                 on_change=_apply_quick_from_control,
-
             )
-
             st.markdown("</div>", unsafe_allow_html=True)
 
         # Aplicar filtros (sem “fake rerun”)
