@@ -462,8 +462,7 @@ def _inject_consulta_css():
 h1, h2, h3 { letter-spacing: .2px; }
 [data-testid="stMetric"] { padding: .6rem .75rem; border-radius: 14px; }
 [data-testid="stMetric"] > div { gap: .1rem; }
-div.stButton > button { border-radius: 12px; height: 2.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-div[data-testid="stButton"]{ min-width: 0 !important; }
+div.stButton > button { border-radius: 12px; height: 2.6rem; }
 div[data-testid="stHorizontalBlock"] { align-items: center; }
 /* Fixar colunas principais no Data Editor (ERP-like v2) */
 [data-testid="stDataEditor"] [role="columnheader"],
@@ -567,13 +566,18 @@ def exibir_consulta_pedidos(_supabase):
 
         desired_by_preset = {
             "Sem OC": ["Sem OC"],
+            "Transporte": ["Em Transporte"],
             "Em Transporte": ["Em Transporte"],
             "Entregues": ["Entregue"],
         }
 
         st.session_state["c_pag"] = 1
 
-        if preset in ("—", ""):
+        if preset in ("—", "", "Todos"):
+            # "Todos" volta ao estado neutro
+            if preset == "Todos":
+                st.session_state["c_atraso"] = False
+                st.session_state["c_status_list"] = []
             return
 
         if preset == "Limpar":
@@ -682,84 +686,165 @@ def exibir_consulta_pedidos(_supabase):
                         st.session_state.pop(k, None)
                     st.rerun()
 
+
+
         with c3:
-            # Atalhos (chips) + select (dinâmico) — layout responsivo
+
+            # Atalho único (chips/tabs) — remove redundância (sem selectbox)
+
             status_opts_atual = st.session_state.get("consulta_status_opts") or []
 
+
             def _can_use(label: str) -> bool:
+
+                if label == "Todos":
+
+                    return True
+
                 if label == "Atrasados":
+
                     return True
+
                 if label == "Sem OC":
+
                     return "Sem OC" in status_opts_atual
-                if label == "Em Transporte":
+
+                if label == "Transporte":
+
                     return "Em Transporte" in status_opts_atual
+
                 if label == "Entregues":
+
                     return "Entregue" in status_opts_atual
-                if label == "Limpar":
-                    return True
+
                 return False
 
-            # Presets válidos conforme o que existe no dataset
-            presets = ["—", "Atrasados"]
+
+            # Opções dinâmicas (só mostra o que existe no dataset)
+
+            quick_opts = ["Todos", "Atrasados"]
+
             if _can_use("Sem OC"):
-                presets.append("Sem OC")
-            if _can_use("Em Transporte"):
-                presets.append("Em Transporte")
+
+                quick_opts.append("Sem OC")
+
+            if _can_use("Transporte"):
+
+                quick_opts.append("Transporte")
+
             if _can_use("Entregues"):
-                presets.append("Entregues")
-            presets.append("Limpar")
 
-            # Se o valor atual do select não existir mais, volta para neutro
-            cur_preset = st.session_state.get("consulta_preset") or "—"
-            if cur_preset not in presets:
-                st.session_state["consulta_preset"] = "—"
+                quick_opts.append("Entregues")
 
-            st.caption("Atalhos rápidos")
 
-            # Chips em 2 linhas (fica bom no desktop e não espreme no mobile)
-            r1 = st.columns(3)
-            r2 = st.columns(2)
+            st.session_state.setdefault("consulta_quick", "Todos")
 
-            chip_defs_1 = [
-                ("⏰ Atrasados", "Atrasados"),
-                ("🧾 Sem OC", "Sem OC"),
-                ("🚚 Transporte", "Em Transporte"),
-            ]
-            chip_defs_2 = [
-                ("✅ Entregues", "Entregues"),
-                ("🧹 Limpar", "Limpar"),
-            ]
+            if st.session_state.get("consulta_quick") not in quick_opts:
 
-            for col, (lbl, pid) in zip(r1, chip_defs_1):
-                with col:
-                    st.button(
-                        lbl,
-                        use_container_width=True,
-                        key=f"consulta_chip_{pid}",
-                        disabled=not _can_use(pid),
-                        on_click=_apply_preset,
-                        args=(pid, status_opts_atual),
-                    )
+                st.session_state["consulta_quick"] = "Todos"
 
-            for col, (lbl, pid) in zip(r2, chip_defs_2):
-                with col:
-                    st.button(
-                        lbl,
-                        use_container_width=True,
-                        key=f"consulta_chip_{pid}",
-                        disabled=not _can_use(pid),
-                        on_click=_apply_preset,
-                        args=(pid, status_opts_atual),
-                    )
 
-            # Select (opcional) — útil para manter "selecionado" visível
-            st.selectbox(
-                "Atalho",
-                presets,
-                key="consulta_preset",
-                label_visibility="collapsed",
-                on_change=_apply_preset_from_selectbox,
+            # CSS minimalista: “chips” com destaque vermelho
+
+            st.markdown(
+
+                """
+
+                <style>
+
+                  .fu-quick [role="radiogroup"]{
+
+                    display:flex;
+
+                    gap:8px;
+
+                    flex-wrap:wrap;
+
+                  }
+
+                  .fu-quick [role="radiogroup"] > label{ margin:0 !important; }
+
+                  .fu-quick [role="radiogroup"] label{
+
+                    padding: 6px 10px !important;
+
+                    border-radius: 999px !important;
+
+                    border: 1px solid rgba(255,255,255,0.10) !important;
+
+                    background: rgba(255,255,255,0.03) !important;
+
+                    transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+
+                    user-select:none;
+
+                  }
+
+                  .fu-quick [role="radiogroup"] label:hover{
+
+                    transform: translateY(-1px);
+
+                    border-color: rgba(239,68,68,0.28) !important;
+
+                    background: rgba(239,68,68,0.08) !important;
+
+                  }
+
+                  .fu-quick [role="radiogroup"] input:checked + div{
+
+                    border-radius: 999px !important;
+
+                    box-shadow: inset 0 0 0 1px rgba(239,68,68,0.35) !important;
+
+                    background: rgba(239,68,68,0.14) !important;
+
+                  }
+
+                  .fu-quick [role="radiogroup"] label div{
+
+                    font-weight: 800 !important;
+
+                    font-size: 0.86rem !important;
+
+                    padding: 0 !important;
+
+                  }
+
+                </style>
+
+                """,
+
+                unsafe_allow_html=True,
+
             )
+
+
+            def _apply_quick_from_control():
+
+                val = st.session_state.get("consulta_quick") or "Todos"
+
+                _apply_preset(val, status_opts=status_opts_atual)
+
+
+            st.markdown('<div class="fu-quick">', unsafe_allow_html=True)
+
+            st.radio(
+
+                "Atalhos",
+
+                options=quick_opts,
+
+                horizontal=True,
+
+                key="consulta_quick",
+
+                label_visibility="collapsed",
+
+                on_change=_apply_quick_from_control,
+
+            )
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
         # Aplicar filtros (sem “fake rerun”)
         df_f = _apply_filters(
