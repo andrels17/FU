@@ -235,6 +235,32 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
 
     df.drop(columns=["_fornecedor_nome_base"], inplace=True, errors="ignore")
 
+    # ============================
+    # UF do fornecedor (para filtros por estado)
+    # Preferência: coluna já vinda da view (ex.: fornecedor_uf).
+    # ============================
+    if "fornecedor_uf" in df.columns:
+        df["fornecedor_uf"] = (
+            df["fornecedor_uf"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace({"NAN": "", "NONE": "", "NULL": ""})
+        )
+    elif "uf" in df.columns:
+        df["fornecedor_uf"] = (
+            df["uf"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace({"NAN": "", "NONE": "", "NULL": ""})
+        )
+    else:
+        df["fornecedor_uf"] = ""
+
+
     df_atrasados = df[df["_atrasado"]].copy()
     if not df_atrasados.empty:
         for i, (_, pedido) in enumerate(df_atrasados.iterrows()):
@@ -247,6 +273,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
                 "cod_material": pedido.get("cod_material"),
                 "descricao": pedido.get("descricao", ""),
                 "fornecedor": pedido.get("fornecedor_nome", "N/A"),
+                "uf": pedido.get("fornecedor_uf", ""),
                 "dias_atraso": dias_atraso,
                 "valor": float(pedido.get("_valor_total", 0.0)),
                 "departamento": pedido.get("departamento", "N/A"),
@@ -270,6 +297,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
                 "cod_material": pedido.get("cod_material"),
                 "descricao": pedido.get("descricao", ""),
                 "fornecedor": pedido.get("fornecedor_nome", "N/A"),
+                "uf": pedido.get("fornecedor_uf", ""),
                 "dias_restantes": dias_restantes,
                 "valor": float(pedido.get("_valor_total", 0.0)),
                 "previsao": pedido.get("previsao_entrega") or pedido.get("prazo_entrega"),
@@ -288,6 +316,23 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
             entregues_tarde=("_entregue_tarde", "sum"),
         ).reset_index()
 
+        # UF (mais frequente) por fornecedor (se disponível)
+        if "fornecedor_uf" in df.columns:
+            try:
+                uf_map = (
+                    df.groupby("fornecedor_nome", dropna=False)["fornecedor_uf"]
+                    .agg(lambda s: (s.dropna().astype(str).str.strip().str.upper().replace({"NAN":"","NONE":"","NULL":""})
+                                   .loc[lambda x: x != ""]
+                                   .mode().iloc[0] if len(s.dropna()) else ""))
+                    .to_dict()
+                )
+            except Exception:
+                uf_map = {}
+        else:
+            uf_map = {}
+
+        grp["uf"] = grp["fornecedor_nome"].map(uf_map).fillna("")
+
         # Atraso total: pendentes vencidos + entregues após o prazo (se houver data_entrega)
         grp["atrasos_total"] = (grp["atrasados_pendentes"] + grp["entregues_tarde"]).fillna(0)
         grp["taxa_sucesso"] = (100 - (grp["atrasos_total"] / grp["total_pedidos"] * 100)).clip(lower=0, upper=100).fillna(0)
@@ -298,6 +343,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
         for _, f in baixa.iterrows():
             alertas["fornecedores_baixa_performance"].append({
                 "fornecedor": f["fornecedor_nome"],
+                "uf": str(f.get("uf","") or ""),
                 "taxa_sucesso": float(f["taxa_sucesso"]),
                 "total_pedidos": int(f["total_pedidos"]),
                 "atrasados": int(f["atrasos_total"]),
@@ -325,6 +371,7 @@ def calcular_alertas(df_pedidos: pd.DataFrame, df_fornecedores: pd.DataFrame | N
                 "descricao": pedido.get("descricao", ""),
                 "valor": float(pedido.get("_valor_total", 0.0)),
                 "fornecedor": pedido.get("fornecedor_nome", "N/A"),
+                "uf": pedido.get("fornecedor_uf", ""),
                 "previsao": pedido.get("previsao_entrega") or pedido.get("prazo_entrega"),
                 "departamento": pedido.get("departamento", "N/A"),
             })
@@ -613,7 +660,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         st.session_state["__clear_global_filters"] = False
         # Reset multiselects
         st.session_state["alertas_global_dept"] = []
-        st.session_state["alertas_global_forn"] = []
+        st.session_state["alertas_global_uf_labels"] = []
         # Reset slider para range total (se possível)
         try:
             # 'valores' será calculado mais abaixo; então usamos um fallback neutro aqui.
@@ -847,13 +894,18 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     departamentos_opts = sorted(
         {safe_text(p.get("departamento", "N/A")) for p in pedidos_todos if p.get("departamento") is not None}
     )
-    fornecedores_opts = sorted(
-        {
-            safe_text(x.get("fornecedor", "N/A"))
-            for x in (pedidos_todos + list(alertas.get("fornecedores_baixa_performance", [])))
-            if x is not None
-        }
-    )
+    # Opções de Estados (UF) para filtro global (inclui performance de fornecedores quando houver UF)
+    ufs_raw = []
+    for x in (pedidos_todos + list(alertas.get("fornecedores_baixa_performance", []))):
+        if x is None:
+            continue
+        ufv = x.get("uf") or x.get("fornecedor_uf") or ""
+        ufv = str(ufv).strip().upper()
+        if ufv and ufv.lower() not in ["nan", "none", "null"]:
+            ufs_raw.append(ufv)
+
+    contagem_uf = pd.Series(ufs_raw).value_counts() if ufs_raw else pd.Series(dtype=int)
+    ufs_opts = [f"{uf} ({int(qtd)})" for uf, qtd in contagem_uf.items()]
 
     # Faixa de valor (somente para pedidos)
     valores = [float(p.get("valor", 0.0) or 0.0) for p in pedidos_todos]
@@ -877,15 +929,16 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             placeholder="Todos",
         )
     with colg2:
-        st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;'>Fornecedores</div>", unsafe_allow_html=True)
-        forn_global = st.multiselect(
-            "Fornecedor",
-            options=fornecedores_opts,
+        st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;'>Estados (UF)</div>", unsafe_allow_html=True)
+        uf_global_labels = st.multiselect(
+            "Estado (UF)",
+            options=ufs_opts,
             default=[],
-            key="alertas_global_forn",
+            key="alertas_global_uf_labels",
             label_visibility="collapsed",
             placeholder="Todos",
         )
+        uf_global = [str(x).split(" ")[0].strip().upper() for x in (uf_global_labels or [])]
     with colg3:
         st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;'>Filtro por Valores</div>", unsafe_allow_html=True)
         if vmax > 0:
@@ -951,25 +1004,25 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             if dept_global:
                 dept_ok = safe_text(p.get("departamento", "N/A")) in dept_global
 
-            forn_ok = True
-            if forn_global:
-                forn_ok = safe_text(p.get("fornecedor", "N/A")) in forn_global
+            uf_ok = True
+            if uf_global:
+                uf_ok = str(p.get("uf") or p.get("fornecedor_uf") or "").strip().upper() in uf_global
 
             val = float(p.get("valor", 0.0) or 0.0)
             val_ok = True
             if vmax > 0:
                 val_ok = faixa_valor[0] <= val <= faixa_valor[1]
 
-            if dept_ok and forn_ok and val_ok:
+            if dept_ok and uf_ok and val_ok:
                 out.append(p)
         return out
 
     def _filtrar_fornecedores(lista: list[dict]) -> list[dict]:
         if not lista:
             return []
-        if not forn_global:
+        if not uf_global:
             return lista
-        return [f for f in lista if safe_text(f.get("fornecedor", "N/A")) in forn_global]
+        return [f for f in lista if str(f.get("uf") or "").strip().upper() in uf_global]
 
     # Aplicar filtros globais
     alertas = {
@@ -1056,7 +1109,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     )
 
     deps_all = sorted(list({safe_text(p.get("departamento", "N/A")) for p in pedidos_all if p is not None}))
-    forns_all = sorted(list({safe_text(p.get("fornecedor", "N/A")) for p in pedidos_all if p is not None}))
+    ufs_all = sorted(list({str((p.get("uf") or p.get("fornecedor_uf") or "")).strip().upper() for p in pedidos_all if p is not None and str((p.get("uf") or p.get("fornecedor_uf") or "")).strip()}))
     # incluir fornecedores da aba de performance também
     forns_perf = sorted(list({safe_text(p.get("fornecedor", "N/A")) for p in alertas.get("fornecedores_baixa_performance", [])}))
     forns_all = sorted(list(set(forns_all + forns_perf)))
@@ -1073,8 +1126,8 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         if dept_global:
             out = [p for p in out if safe_text(p.get("departamento", "N/A")) in dept_global]
 
-        if forn_global:
-            out = [p for p in out if safe_text(p.get("fornecedor", "N/A")) in forn_global]
+        if uf_global:
+            out = [p for p in out if str((p.get("uf") or p.get("fornecedor_uf") or "")).strip().upper() in uf_global]
 
         if vmax > 0:
             lo, hi = faixa_valor
@@ -1086,8 +1139,8 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         if not lista:
             return []
         out = lista
-        if forn_global:
-            out = [f for f in out if safe_text(f.get("fornecedor", "N/A")) in forn_global]
+        if uf_global:
+            out = [f for f in out if str((f.get("uf") or "")).strip().upper() in uf_global]
         return out
 
 
@@ -1527,3 +1580,4 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 st.info("Nenhum fornecedor corresponde aos filtros selecionados")
         else:
             st.success("Todos os fornecedores com boa performance!")
+
