@@ -60,9 +60,11 @@ def _carregar_pedidos_cache(_supabase):
 
 @st.cache_data(ttl=300)
 def _carregar_catalogo_materiais_cache(_supabase, tenant_id: str | None) -> pd.DataFrame:
-    """Carrega catálogo `materiais` do Supabase (por tenant) para enriquecer a ficha e permitir análise por família/grupo."""
-    # Em alguns fluxos (ex.: superadmin / navegação direta) o tenant_id pode não estar populado.
-    # Tentamos recuperar de outros campos conhecidos antes de desistir.
+    """Carrega catálogo `materiais` do Supabase (por tenant) para enriquecer a ficha e permitir análise por família/grupo.
+
+    Observação: em alguns bancos a coluna do código pode variar (ex.: codigo_material, cod_material, codigo).
+    Aqui carregamos * e normalizamos para 'codigo_material' internamente.
+    """
     if not tenant_id:
         tenant_id = (
             st.session_state.get("tenant_id")
@@ -71,18 +73,25 @@ def _carregar_catalogo_materiais_cache(_supabase, tenant_id: str | None) -> pd.D
             or st.session_state.get("tenant_uuid")
         )
     try:
-        q = (
-            _supabase.table("materiais")
-            .select("codigo_material,descricao,unidade,almoxarifado,familia_descricao,grupo_descricao,tipo_material,origem")
-            .limit(20000)
-        )
-        # Se tivermos tenant_id, filtramos. Se não, trazemos o máximo permitido pela RLS do usuário.
+        q = _supabase.table("materiais").select("*").limit(20000)
         if tenant_id:
             q = q.eq("tenant_id", tenant_id)
         res = q.execute()
-        return pd.DataFrame(res.data or [])
+        df = pd.DataFrame(res.data or [])
+
+        # Normaliza coluna do código (pode variar entre projetos)
+        code_col = None
+        for c in ("codigo_material", "cod_material", "codigo"):
+            if c in df.columns:
+                code_col = c
+                break
+        if code_col and code_col != "codigo_material":
+            df = df.rename(columns={code_col: "codigo_material"})
+
+        return df
     except Exception:
         return pd.DataFrame()
+
 
 
 def _norm_code(x) -> str:
