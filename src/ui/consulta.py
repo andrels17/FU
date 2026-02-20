@@ -543,6 +543,15 @@ def exibir_consulta_pedidos(_supabase):
         return
 
     df = _prepare_search(_make_stamp(df_raw), df_raw)
+    # Status disponíveis no dataset (para filtro rápido executivo)
+    try:
+        if "status" in df.columns:
+            st.session_state["consulta_status_opts"] = sorted(df["status"].dropna().astype(str).unique().tolist())
+        else:
+            st.session_state.setdefault("consulta_status_opts", [])
+    except Exception:
+        st.session_state.setdefault("consulta_status_opts", [])
+
 
     # -------------------- Estado padrão (filtros + seleção)
     st.session_state.setdefault("c_q", "")
@@ -601,21 +610,112 @@ def exibir_consulta_pedidos(_supabase):
         status_opts_atual = st.session_state.get("consulta_status_opts") or None
         _apply_preset(preset, status_opts=status_opts_atual)
 
+# =========================
     # -------------------- Tabs para reduzir poluição
     st.session_state.setdefault("consulta_tab", "Lista")
     st.session_state.setdefault("consulta_tab_target", None)
 
+    # Top controls (executivo): Navegação + Filtro rápido na mesma linha
+    # =========================
+    st.markdown(
+        '''
+        <style>
+          /* Top controls: duas "segment bars" minimalistas (vermelho) */
+          .fu-top-controls{ margin: 6px 0 6px 0; }
+          .fu-top-controls .fu-segbar{ display:flex; align-items:center; }
+          .fu-top-controls .fu-segbar [role="radiogroup"]{
+            display:inline-flex !important;
+            gap: 0 !important;
+            padding: 4px !important;
+            border-radius: 14px !important;
+            border: 1px solid rgba(255,255,255,0.10) !important;
+            background: rgba(255,255,255,0.03) !important;
+            overflow: hidden !important;
+          }
+          .fu-top-controls .fu-segbar [role="radiogroup"] > label{ margin:0 !important; }
+          .fu-top-controls .fu-segbar [role="radiogroup"] label{
+            padding: 6px 12px !important;
+            border-radius: 10px !important;
+            border: 1px solid transparent !important;
+            background: transparent !important;
+            transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+            user-select:none;
+            white-space: nowrap;
+          }
+          .fu-top-controls .fu-segbar [role="radiogroup"] label:hover{
+            border-color: rgba(239,68,68,0.22) !important;
+            background: rgba(239,68,68,0.08) !important;
+          }
+          .fu-top-controls .fu-segbar [role="radiogroup"] input:checked + div{
+            border-radius: 10px !important;
+            background: rgba(239,68,68,0.16) !important;
+            box-shadow: inset 0 0 0 1px rgba(239,68,68,0.35) !important;
+          }
+          .fu-top-controls .fu-segbar [role="radiogroup"] label div{
+            font-weight: 850 !important;
+            font-size: 0.86rem !important;
+            padding: 0 !important;
+          }
+          /* Esconde bolinha do radio (fica estilo tabs) */
+          .fu-top-controls .fu-segbar [role="radiogroup"] label span:first-child{ display:none !important; }
+
+          /* Alinhamento e responsividade */
+          .fu-top-controls .fu-top-nav{ justify-content:flex-start; }
+          .fu-top-controls .fu-top-quick{ justify-content:flex-end; }
+          @media (max-width: 980px){
+            .fu-top-controls .fu-top-nav{ justify-content:center; margin-bottom: 6px; }
+            .fu-top-controls .fu-top-quick{ justify-content:center; }
+          }
+        </style>
+        ''',
+        unsafe_allow_html=True,
+    )
+
+    nav_col, quick_col = st.columns([1.3, 2.0])
+    with nav_col:
+        st.markdown('<div class="fu-top-controls"><div class="fu-segbar fu-top-nav">', unsafe_allow_html=True)
+        tab_choice = st.radio(
+            "",
+            ["Lista", "Visão", "Ações"],
+            horizontal=True,
+            key="consulta_tab",
+            label_visibility="collapsed",
+        )
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
+    with quick_col:
+        # Segment control (filtro rápido) — usa status disponíveis no dataset
+        status_opts_atual = st.session_state.get("consulta_status_opts") or []
+
+        quick_opts = ["Todos", "Atrasados"]
+        if "Sem OC" in status_opts_atual:
+            quick_opts.append("Sem OC")
+        if "Em Transporte" in status_opts_atual:
+            quick_opts.append("Transporte")
+        if "Entregue" in status_opts_atual:
+            quick_opts.append("Entregues")
+
+        st.session_state.setdefault("consulta_quick", "Todos")
+        if st.session_state.get("consulta_quick") not in quick_opts:
+            st.session_state["consulta_quick"] = "Todos"
+
+        def _apply_quick_from_control():
+            val = st.session_state.get("consulta_quick") or "Todos"
+            _apply_preset(val, status_opts=status_opts_atual)
+
+        st.markdown('<div class="fu-top-controls"><div class="fu-segbar fu-top-quick">', unsafe_allow_html=True)
+        st.radio(
+            "",
+            options=quick_opts,
+            horizontal=True,
+            key="consulta_quick",
+            label_visibility="collapsed",
+            on_change=_apply_quick_from_control,
+        )
+        st.markdown("</div></div>", unsafe_allow_html=True)
     if st.session_state.get("consulta_tab_target"):
         st.session_state["consulta_tab"] = st.session_state.get("consulta_tab_target")
         st.session_state["consulta_tab_target"] = None
-
-    tab_choice = st.radio(
-        "Navegação",
-        ["Lista", "Visão", "Ações"],
-        horizontal=True,
-        key="consulta_tab",
-        label_visibility="collapsed",
-    )
     # =========================
     # TAB: LISTA (principal)
     # =========================
@@ -681,94 +781,6 @@ def exibir_consulta_pedidos(_supabase):
                 for k in ["c_q", "c_deptos", "c_status_list", "c_cod_equip", "c_cod_mat", "_tmp_cod_equip", "_tmp_cod_mat", "c_atraso", "c_pp", "c_pag", "consulta_selected_pid", "consulta_auto_opened_pid", "go_key"]:
                     st.session_state.pop(k, None)
                 st.rerun()
-
-        # Segment control (chips) abaixo do título — UX executiva
-        status_opts_atual = st.session_state.get("consulta_status_opts") or []
-
-        def _can_use(label: str) -> bool:
-            if label in ("Todos", "Atrasados"):
-                return True
-            if label == "Sem OC":
-                return "Sem OC" in status_opts_atual
-            if label == "Transporte":
-                return "Em Transporte" in status_opts_atual
-            if label == "Entregues":
-                return "Entregue" in status_opts_atual
-            return False
-
-        quick_opts = ["Todos", "Atrasados"]
-        if _can_use("Sem OC"):
-            quick_opts.append("Sem OC")
-        if _can_use("Transporte"):
-            quick_opts.append("Transporte")
-        if _can_use("Entregues"):
-            quick_opts.append("Entregues")
-
-        st.session_state.setdefault("consulta_quick", "Todos")
-        if st.session_state.get("consulta_quick") not in quick_opts:
-            st.session_state["consulta_quick"] = "Todos"
-
-        def _apply_quick_from_control():
-            val = st.session_state.get("consulta_quick") or "Todos"
-            _apply_preset(val, status_opts=status_opts_atual)
-
-        st.markdown(
-            '''
-            <style>
-              /* Segmented control minimalista vermelho (Notion-like) */
-              .fu-seg { margin: 6px 0 2px 0; display:flex; justify-content:center; }
-              .fu-seg [role="radiogroup"]{
-                display:inline-flex;
-                gap: 0;
-                padding: 4px;
-                border-radius: 14px;
-                border: 1px solid rgba(255,255,255,0.10);
-                background: rgba(255,255,255,0.03);
-                overflow: hidden;
-              }
-              .fu-seg [role="radiogroup"] > label{ margin:0 !important; }
-              .fu-seg [role="radiogroup"] label{
-                padding: 6px 12px !important;
-                border-radius: 10px !important;
-                border: 1px solid transparent !important;
-                background: transparent !important;
-                transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
-                user-select:none;
-                white-space: nowrap;
-              }
-              .fu-seg [role="radiogroup"] label:hover{
-                border-color: rgba(239,68,68,0.22) !important;
-                background: rgba(239,68,68,0.08) !important;
-              }
-              .fu-seg [role="radiogroup"] input:checked + div{
-                border-radius: 10px !important;
-                background: rgba(239,68,68,0.16) !important;
-                box-shadow: inset 0 0 0 1px rgba(239,68,68,0.35) !important;
-              }
-              .fu-seg [role="radiogroup"] label div{
-                font-weight: 850 !important;
-                font-size: 0.86rem !important;
-                padding: 0 !important;
-              }
-              /* Esconde bolinha do radio (fica estilo tabs) */
-              .fu-seg [role="radiogroup"] label span:first-child{ display:none !important; }
-            </style>
-            ''',
-            unsafe_allow_html=True,
-        )
-
-        cseg1, cseg2, cseg3 = st.columns([1, 2, 1])
-        with cseg2:
-            st.markdown('<div class="fu-seg">', unsafe_allow_html=True)
-            st.radio(
-                "Filtro rápido",
-                options=quick_opts,
-                horizontal=True,
-                key="consulta_quick",
-                label_visibility="collapsed",
-                on_change=_apply_quick_from_control,
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
 
         # Aplicar filtros (sem “fake rerun”)
         df_f = _apply_filters(
