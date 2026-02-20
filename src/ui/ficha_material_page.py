@@ -112,6 +112,15 @@ def _norm_code(x) -> str:
     s = s.lstrip("0")
     return s or "0"
 
+def _norm_txt(x) -> str:
+    """Normaliza textos (família/grupo) para comparação resiliente."""
+    s = "" if x is None else str(x)
+    s = s.replace("\u00a0", " ")
+    s = re.sub(r"\s+", " ", s).strip().upper()
+    return s
+
+
+
 
     return carregar_pedidos(_supabase, st.session_state.get("tenant_id"))
 
@@ -924,17 +933,30 @@ def exibir_ficha_material(_supabase):
                 # Alguns fluxos podem já ter colunas de família/grupo no df_pedidos; após merge, normalize nomes
                 dfp = _coalesce_merge_suffix(dfp, 'familia_descricao')
                 dfp = _coalesce_merge_suffix(dfp, 'grupo_descricao')
+                # Normaliza textos (para evitar mismatch por espaços/capitalização)
+                for _col in ["familia_descricao", "grupo_descricao"]:
+                    if _col in df_mat.columns:
+                        df_mat[_col] = df_mat[_col].astype(str).str.replace("\u00a0", " ").str.strip()
+                    if _col in dfp.columns:
+                        dfp[_col] = dfp[_col].astype(str).str.replace("\u00a0", " ").str.strip()
+
+                df_mat["_fam_norm"] = df_mat.get("familia_descricao", pd.Series([], dtype=str)).apply(_norm_txt)
+                df_mat["_grp_norm"] = df_mat.get("grupo_descricao", pd.Series([], dtype=str)).apply(_norm_txt)
+                dfp["_fam_norm"] = dfp.get("familia_descricao", pd.Series([], dtype=str)).apply(_norm_txt)
+                dfp["_grp_norm"] = dfp.get("grupo_descricao", pd.Series([], dtype=str)).apply(_norm_txt)
 
 
-                fam_opts = sorted([x for x in df_mat.get("familia_descricao", pd.Series([], dtype=str)).dropna().astype(str).unique().tolist() if str(x).strip()])
-                grp_opts_all = sorted([x for x in df_mat.get("grupo_descricao", pd.Series([], dtype=str)).dropna().astype(str).unique().tolist() if str(x).strip()])
+
+                fam_opts = sorted([x for x in df_mat.get("familia_descricao", pd.Series([], dtype=str)).dropna().astype(str).str.strip().unique().tolist() if str(x).strip()])
+                grp_opts_all = sorted([x for x in df_mat.get("grupo_descricao", pd.Series([], dtype=str)).dropna().astype(str).str.strip().unique().tolist() if str(x).strip()])
 
                 c1, c2, c3 = st.columns([2.2, 2.2, 1.2])
                 with c1:
                     fam_sel = st.selectbox("Família", ["(Todas)"] + fam_opts, key="busca_fam_sel")
                 with c2:
                     if fam_sel and fam_sel != "(Todas)":
-                        df_tmp = df_mat[df_mat["familia_descricao"].astype(str) == str(fam_sel)]
+                        fam_norm_sel = _norm_txt(fam_sel)
+                        df_tmp = df_mat[df_mat["_fam_norm"] == fam_norm_sel]
                         grp_opts = sorted([x for x in df_tmp.get("grupo_descricao", pd.Series([], dtype=str)).dropna().astype(str).unique().tolist() if str(x).strip()])
                     else:
                         grp_opts = grp_opts_all
@@ -944,9 +966,11 @@ def exibir_ficha_material(_supabase):
 
                 df_scope = dfp.copy()
                 if fam_sel and fam_sel != "(Todas)":
-                    df_scope = df_scope[df_scope["familia_descricao"].fillna("").astype(str) == str(fam_sel)]
+                    fam_norm_sel = _norm_txt(fam_sel)
+                    df_scope = df_scope[df_scope["_fam_norm"] == fam_norm_sel]
                 if grp_sel and grp_sel != "(Todos)":
-                    df_scope = df_scope[df_scope["grupo_descricao"].fillna("").astype(str) == str(grp_sel)]
+                    grp_norm_sel = _norm_txt(grp_sel)
+                    df_scope = df_scope[df_scope["_grp_norm"] == grp_norm_sel]
 
                 # Pendentes: heurística - não entregue OU qtde_pendente > 0
                 if somente_pend:
@@ -1031,8 +1055,52 @@ def exibir_ficha_material(_supabase):
                         st.divider()
 
                     with st.expander("Ver pedidos detalhados do escopo", expanded=False):
-                        cols_show = [c for c in ["_cod_norm","descricao", col_oc, col_solic, col_status, col_qtd, col_qtd_pend, col_total, col_data] if c and c in df_scope.columns]
-                        st.dataframe(df_scope[cols_show].copy(), use_container_width=True, hide_index=True)
+                        # Lista estilo "ERP" (sem modal)
+                        df_det = df_scope.copy()
+                        if col_data and col_data in df_det.columns:
+                            df_det["_dt"] = _safe_datetime_series(df_det[col_data])
+                            df_det = df_det.sort_values("_dt", ascending=False).drop(columns=["_dt"], errors="ignore")
+
+                        max_rows = st.slider("Linhas", 20, 300, 80, 20, key="busca_famgrp_det_rows")
+                        df_det = df_det.head(int(max_rows))
+
+                        # Header
+                        h1, h2, h3, h4, h5, h6 = st.columns([1.1, 1.0, 1.0, 1.0, 1.0, 1.8])
+                        h1.caption("Data")
+                        h2.caption("OC")
+                        h3.caption("Solic.")
+                        h4.caption("Status")
+                        h5.caption("Pend.")
+                        h6.caption("Descrição / Valor")
+
+                        for i, row in df_det.iterrows():
+                            c1, c2, c3, c4, c5, c6 = st.columns([1.1, 1.0, 1.0, 1.0, 1.0, 1.8])
+                            dtx = row.get(col_data) if col_data and col_data in df_det.columns else ""
+                            ocx = row.get(col_oc) if col_oc and col_oc in df_det.columns else ""
+                            solx = row.get(col_solic) if col_solic and col_solic in df_det.columns else ""
+                            stx = row.get(col_status) if col_status and col_status in df_det.columns else ""
+                            pendx = row.get(col_qtd_pend) if col_qtd_pend and col_qtd_pend in df_det.columns else ""
+                            descx = row.get("descricao") if "descricao" in df_det.columns else row.get("_cod_norm","")
+                            descx = str(descx) if descx is not None else ""
+                            if len(descx) > 65:
+                                descx = descx[:62] + "…"
+                            vtx = row.get(col_total) if col_total and col_total in df_det.columns else None
+
+                            c1.write(str(dtx)[:10] if dtx else "—")
+                            c2.write(str(ocx) if ocx else "—")
+                            c3.write(str(solx) if solx else "—")
+                            c4.write(str(stx) if stx else "—")
+                            c5.write(str(pendx) if str(pendx) != "" else "—")
+                            if vtx is not None and col_total and col_total in df_det.columns:
+                                try:
+                                    vnum = float(pd.to_numeric(vtx, errors="coerce"))
+                                except Exception:
+                                    vnum = 0.0
+                                c6.write(f"{descx}  •  {formatar_moeda_br(vnum)}")
+                            else:
+                                c6.write(descx)
+
+                            st.divider()
 
 
     # ============================================================
