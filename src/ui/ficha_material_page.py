@@ -113,10 +113,25 @@ def _norm_code(x) -> str:
     return s or "0"
 
 def _norm_txt(x) -> str:
-    """Normaliza textos (família/grupo) para comparação resiliente."""
+    """Normaliza textos (família/grupo) para comparação resiliente.
+    - remove NBSP e espaços duplicados
+    - remove acentos
+    - trata pontuação como separador (/, &, -, vírgulas, pontos)
+    - UPPER
+    """
     s = "" if x is None else str(x)
-    s = s.replace("\u00a0", " ")
-    s = re.sub(r"\s+", " ", s).strip().upper()
+    s = s.replace("\u00a0", " ").strip()
+    # remove acentos (ex.: ELÉTRICOS -> ELETRICOS)
+    try:
+        import unicodedata
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    except Exception:
+        pass
+    s = s.upper()
+    # pontuação -> espaço (ex.: "BATERIAS,PILHAS" -> "BATERIAS PILHAS")
+    s = re.sub(r"[\/,&;\-_.()\[\]{}]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
     return s
 
 
@@ -971,6 +986,18 @@ def exibir_ficha_material(_supabase):
                 if grp_sel and grp_sel != "(Todos)":
                     grp_norm_sel = _norm_txt(grp_sel)
                     df_scope = df_scope[df_scope["_grp_norm"] == grp_norm_sel]
+
+# Fallback: se não encontrou nada com match exato (muito comum por variações de pontuação),
+# tenta um match "contém" usando o texto normalizado.
+if df_scope.empty and (fam_sel != "(Todas)" or grp_sel != "(Todos)"):
+    df_scope = dfp.copy()
+    if fam_sel and fam_sel != "(Todas)":
+        fam_norm_sel = _norm_txt(fam_sel)
+        df_scope = df_scope[df_scope["_fam_norm"].str.contains(re.escape(fam_norm_sel), na=False)]
+    if grp_sel and grp_sel != "(Todos)":
+        grp_norm_sel = _norm_txt(grp_sel)
+        df_scope = df_scope[df_scope["_grp_norm"].str.contains(re.escape(grp_norm_sel), na=False)]
+
 
                 # Pendentes: heurística - não entregue OU qtde_pendente > 0
                 if somente_pend:
