@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import re
+
 import pandas as pd
 import streamlit as st
 from src.services import ficha_material as fm
@@ -55,86 +57,63 @@ def _call_insights_automaticos(historico: pd.DataFrame, material_atual: dict) ->
 @st.cache_data(ttl=300)
 def _carregar_pedidos_cache(_supabase):
     # Cache simples para deixar a página mais rápida e reduzir chamadas ao banco
+
     return carregar_pedidos(_supabase, st.session_state.get("tenant_id"))
 
-
-@st.cache_data(ttl=300)
-def _carregar_catalogo_materiais_cache(_supabase, tenant_id: str | None) -> pd.DataFrame:
-    """Carrega catálogo `materiais` do Supabase (por tenant) para enriquecer a ficha e permitir análise por família/grupo.
-
-    Observação: em alguns bancos a coluna do código pode variar (ex.: codigo_material, cod_material, codigo).
-    Aqui carregamos * e normalizamos para 'codigo_material' internamente.
-    """
+@st.cache_data(ttl=600)
+def _carregar_materiais_cache(_supabase):
+    """Carrega catálogo de materiais (família/grupo) do tenant atual."""
+    tenant_id = st.session_state.get("tenant_id")
     if not tenant_id:
-        tenant_id = (
-            st.session_state.get("tenant_id")
-            or (st.session_state.get("usuario") or {}).get("tenant_id")
-            or st.session_state.get("tenant")
-            or st.session_state.get("tenant_uuid")
-        )
+        return pd.DataFrame()
+
     try:
-        q = _supabase.table("materiais").select("*").limit(20000)
-        if tenant_id:
-            q = q.eq("tenant_id", tenant_id)
-        res = q.execute()
-        df = pd.DataFrame(res.data or [])
-
-        # Normaliza coluna do código (pode variar entre projetos)
-        code_col = None
-        for c in ("codigo_material", "cod_material", "codigo"):
-            if c in df.columns:
-                code_col = c
-                break
-        if code_col and code_col != "codigo_material":
-            df = df.rename(columns={code_col: "codigo_material"})
-
+        resp = (
+            _supabase.table("materiais")
+            .select("codigo_material,familia_descricao,grupo_descricao")
+            .eq("tenant_id", tenant_id)
+            .execute()
+        )
+        data = getattr(resp, "data", None) if resp is not None else None
+        if not data:
+            return pd.DataFrame()
+        df = pd.DataFrame(data)
         return df
     except Exception:
         return pd.DataFrame()
 
 
-
 def _norm_code(x) -> str:
-    """Normaliza código para string numérica para casar pedidos <-> catálogo.
-
-    Regras:
-    - Converte numéricos (int/float) de forma segura (857.0 -> "857")
-    - Para strings, remove não-dígitos e **remove zeros à esquerda** (000857 -> "857")
-    - Evita o bug clássico: "857.0" virar "8570"
+    """Normaliza códigos para casar pedidos(cod_material texto) com materiais(codigo_material bigint).
+    - 857.0 / '857.0' / '857,0' -> '857'
+    - remove não-dígitos
+    - remove zeros à esquerda
     """
-    import re
-
     if x is None:
         return ""
-
-    # Trata numéricos
+    # número (int/float)
     try:
-        if isinstance(x, int):
-            return str(int(x))
-        if isinstance(x, float):
-            if pd.notna(x) and float(x).is_integer():
-                return str(int(x))
+        if isinstance(x, (int,)):
+            s = str(x)
+        elif isinstance(x, float):
+            if pd.isna(x):
+                return ""
+            s = str(int(x))
+        else:
+            s = str(x).strip()
+            # trata '857.0' / '857,0'
+            m = re.fullmatch(r"\s*(\d+)[\.,]0+\s*", s)
+            if m:
+                s = m.group(1)
     except Exception:
-        pass
+        s = str(x).strip()
 
-    s = str(x).strip()
-    if not s or s.lower() in ("nan", "none"):
-        return ""
+    s = re.sub(r"\D+", "", s)
+    s = s.lstrip("0")
+    return s or "0"
 
-    # Strings tipo "857.0" ou "857,0" → "857"
-    s2 = s.replace(",", ".")
-    if re.fullmatch(r"\d+\.0+", s2):
-        s = s2.split(".")[0]
 
-    digits = re.sub(r"\D+", "", s)
-    if not digits:
-        return ""
-
-    # Remove zeros à esquerda (ex.: "000857" -> "857")
-    try:
-        return str(int(digits))
-    except Exception:
-        return digits.lstrip("0") or "0"
+    return carregar_pedidos(_supabase, st.session_state.get("tenant_id"))
 
 
 def _pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -144,61 +123,6 @@ def _pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
             return c
     return None
 
-
-
-def _get_material_catalog_row(_supabase, tenant_id: str | None, cod_norm: str, df_cat: pd.DataFrame) -> dict | None:
-    """Obtém a linha do catálogo (tabela materiais) para o código informado.
-
-    Estratégia (robusta):
-    1) tenta via df_cat (cache) comparando _cod_norm
-    2) se não achar, tenta query direta no Supabase usando (tenant_id, codigo_material bigint)
-    3) fallback: tenta query direta sem tenant_id (para diagnosticar mismatch de tenant)
-    """
-    if not cod_norm:
-        return None
-
-    # 1) cache
-    try:
-        if df_cat is not None and not df_cat.empty and "_cod_norm" in df_cat.columns:
-            hit = df_cat[df_cat["_cod_norm"] == cod_norm]
-            if not hit.empty:
-                return hit.iloc[0].to_dict()
-    except Exception:
-        pass
-
-    # 2) query direta por PK (tenant_id, codigo_material)
-    try:
-        cod_int = int(str(cod_norm).strip())
-    except Exception:
-        cod_int = None
-
-    if cod_int is not None:
-        try:
-            q = _supabase.table("materiais").select("*")
-            if tenant_id:
-                q = q.eq("tenant_id", tenant_id)
-            q = q.eq("codigo_material", cod_int).limit(1)
-            res = q.execute()
-            data = (res.data or [])
-            if data:
-                return dict(data[0])
-        except Exception:
-            pass
-
-    # 3) fallback sem tenant (diagnóstico)
-    if cod_int is not None:
-        try:
-            res = _supabase.table("materiais").select("*").eq("codigo_material", cod_int).limit(1).execute()
-            data = (res.data or [])
-            if data:
-                # Retorna mesmo assim (melhor UX), mas sinaliza mismatch em outro ponto
-                row = dict(data[0])
-                row["_tenant_mismatch"] = True
-                return row
-        except Exception:
-            pass
-
-    return None
 
 def _safe_datetime_series(s: pd.Series) -> pd.Series:
     return pd.to_datetime(s, errors="coerce", dayfirst=True)
@@ -233,16 +157,6 @@ def exibir_ficha_material(_supabase):
 
     df_pedidos = _carregar_pedidos_cache(_supabase)
 
-    # Catálogo (dimensão) para enriquecer a ficha e permitir análises por Família/Grupo
-    tenant_id = st.session_state.get("tenant_id")
-    df_cat = _carregar_catalogo_materiais_cache(_supabase, tenant_id)
-    if not df_cat.empty and "codigo_material" in df_cat.columns:
-        df_cat = df_cat.copy()
-        df_cat["_cod_norm"] = df_cat["codigo_material"].apply(_norm_code)
-    else:
-        df_cat = pd.DataFrame()
-
-
     if df_pedidos.empty:
         st.info("📭 Nenhum pedido cadastrado ainda")
         return
@@ -250,8 +164,6 @@ def exibir_ficha_material(_supabase):
     # Normalizações leves (evitam bugs em filtros e cálculos)
     if "cod_material" in df_pedidos.columns:
         df_pedidos["cod_material"] = df_pedidos["cod_material"].astype(str).str.strip()
-
-    df_pedidos["_cod_norm"] = df_pedidos["cod_material"].apply(_norm_code)
 
     if "descricao" in df_pedidos.columns:
         df_pedidos["descricao"] = df_pedidos["descricao"].astype(str).str.strip()
@@ -278,8 +190,8 @@ def exibir_ficha_material(_supabase):
         # ============================================================
         # SISTEMA DE ABAS PARA BUSCA
         # ============================================================
-        tab1, tab2, tab3 = st.tabs(
-            ["🔍 Buscar Material", "🔧 Buscar por Equipamento", "🏢 Buscar por Departamento"]
+        tab1, tab2, tab3, tab4 = st.tabs(
+            ["🔍 Buscar Material", "🔧 Buscar por Equipamento", "🏢 Buscar por Departamento", "🧩 Buscar por Família & Grupo"]
         )
 
         # Estado/Contexto (não deixar variável "sumir" fora das tabs)
@@ -964,6 +876,135 @@ def exibir_ficha_material(_supabase):
 
 
 
+        # ============================================================
+        # TAB 4: BUSCA POR FAMÍLIA & GRUPO (CATÁLOGO -> PEDIDOS)
+        # ============================================================
+        with tab4:
+            st.markdown("### 🧩 Buscar por Família & Grupo")
+            st.caption("Selecione uma **família** e/ou **grupo** do Catálogo para ver todos os pedidos relacionados.")
+
+            df_mat = _carregar_materiais_cache(_supabase)
+            if df_mat is None or df_mat.empty:
+                st.warning("⚠️ Catálogo de materiais vazio para este tenant. Importe o Catálogo para habilitar Família/Grupo.")
+            else:
+                # Normalização de chave
+                if "codigo_material" in df_mat.columns:
+                    df_mat["_cod_norm"] = df_mat["codigo_material"].apply(_norm_code)
+                else:
+                    st.warning("⚠️ Coluna 'codigo_material' não encontrada na tabela materiais.")
+                    df_mat["_cod_norm"] = ""
+
+                dfp = df_pedidos.copy()
+                if "cod_material" in dfp.columns:
+                    dfp["_cod_norm"] = dfp["cod_material"].apply(_norm_code)
+                else:
+                    dfp["_cod_norm"] = ""
+
+                # Enriquecer pedidos com família/grupo do catálogo
+                dfp = dfp.merge(
+                    df_mat[["_cod_norm", "familia_descricao", "grupo_descricao"]].drop_duplicates("_cod_norm"),
+                    on="_cod_norm",
+                    how="left",
+                )
+
+                fam_opts = sorted([x for x in df_mat.get("familia_descricao", pd.Series([], dtype=str)).dropna().astype(str).unique().tolist() if str(x).strip()])
+                grp_opts_all = sorted([x for x in df_mat.get("grupo_descricao", pd.Series([], dtype=str)).dropna().astype(str).unique().tolist() if str(x).strip()])
+
+                c1, c2, c3 = st.columns([2.2, 2.2, 1.2])
+                with c1:
+                    fam_sel = st.selectbox("Família", ["(Todas)"] + fam_opts, key="busca_fam_sel")
+                with c2:
+                    if fam_sel and fam_sel != "(Todas)":
+                        df_tmp = df_mat[df_mat["familia_descricao"].astype(str) == str(fam_sel)]
+                        grp_opts = sorted([x for x in df_tmp.get("grupo_descricao", pd.Series([], dtype=str)).dropna().astype(str).unique().tolist() if str(x).strip()])
+                    else:
+                        grp_opts = grp_opts_all
+                    grp_sel = st.selectbox("Grupo", ["(Todos)"] + grp_opts, key="busca_grp_sel")
+                with c3:
+                    somente_pend = st.checkbox("Só pendentes", value=False, key="busca_famgrp_pend")
+
+                df_scope = dfp.copy()
+                if fam_sel and fam_sel != "(Todas)":
+                    df_scope = df_scope[df_scope["familia_descricao"].fillna("").astype(str) == str(fam_sel)]
+                if grp_sel and grp_sel != "(Todos)":
+                    df_scope = df_scope[df_scope["grupo_descricao"].fillna("").astype(str) == str(grp_sel)]
+
+                # Pendentes: heurística - não entregue OU qtde_pendente > 0
+                if somente_pend:
+                    if col_entregue and col_entregue in df_scope.columns:
+                        mask = df_scope[col_entregue].fillna(False) == False
+                        df_scope = df_scope[mask]
+                    elif col_status and col_status in df_scope.columns:
+                        df_scope = df_scope[df_scope[col_status].fillna("").astype(str).str.lower() != "entregue"]
+                    elif col_qtd_pend and col_qtd_pend in df_scope.columns:
+                        df_scope = df_scope[pd.to_numeric(df_scope[col_qtd_pend], errors="coerce").fillna(0) > 0]
+
+                if df_scope.empty:
+                    st.info("Nenhum pedido encontrado para a combinação selecionada.")
+                else:
+                    # KPIs
+                    total_ped = int(len(df_scope))
+                    mats = int(df_scope["_cod_norm"].nunique()) if "_cod_norm" in df_scope.columns else 0
+                    v_total = float(pd.to_numeric(df_scope[col_total], errors="coerce").fillna(0).sum()) if col_total and col_total in df_scope.columns else 0.0
+                    pend = 0
+                    if col_qtd_pend and col_qtd_pend in df_scope.columns:
+                        pend = int(pd.to_numeric(df_scope[col_qtd_pend], errors="coerce").fillna(0).gt(0).sum())
+                    elif col_status and col_status in df_scope.columns:
+                        pend = int(df_scope[col_status].fillna("").astype(str).str.lower().ne("entregue").sum())
+
+                    k1, k2, k3, k4 = st.columns(4)
+                    k1.metric("Pedidos", f"{total_ped}")
+                    k2.metric("Materiais", f"{mats}")
+                    k3.metric("Pendentes", f"{pend}")
+                    k4.metric("Valor total", formatar_moeda_br(v_total))
+
+                    st.markdown("#### Materiais mais recorrentes (no escopo)")
+                    # Consolidado por material
+                    grp = df_scope.groupby(["_cod_norm"], dropna=False).agg(
+                        descricao=("descricao", "first") if "descricao" in df_scope.columns else ("_cod_norm", "first"),
+                        compras=("id", "count") if "id" in df_scope.columns else ("_cod_norm", "count"),
+                        valor_total=(col_total, "sum") if col_total and col_total in df_scope.columns else ("_cod_norm", "count"),
+                    ).reset_index()
+
+                    # Ajuste de valor_total quando não há col_total
+                    if not (col_total and col_total in df_scope.columns):
+                        grp.rename(columns={"valor_total": "compras"}, inplace=True)
+
+                    grp = grp.sort_values("compras", ascending=False)
+
+                    # Cards (executivo)
+                    show_n = st.slider("Mostrar", 5, 50, 15, 5, key="busca_famgrp_show")
+                    for _, r in grp.head(show_n).iterrows():
+                        codn = r.get("_cod_norm") or ""
+                        desc = r.get("descricao") or ""
+                        compras = int(r.get("compras") or 0)
+                        vt = r.get("valor_total")
+                        vt = float(vt) if isinstance(vt, (int, float)) else pd.to_numeric(vt, errors="coerce")
+                        vt = float(vt) if pd.notna(vt) else 0.0
+
+                        cA, cB, cC = st.columns([3.8, 1.2, 1.2])
+                        with cA:
+                            st.markdown(f"**{codn} — {desc}**")
+                            st.caption(f"Família: {str(fam_sel) if fam_sel!='(Todas)' else (df_scope[df_scope['_cod_norm']==codn]['familia_descricao'].dropna().astype(str).head(1).tolist() or ['—'])[0]}  •  Grupo: {str(grp_sel) if grp_sel!='(Todos)' else (df_scope[df_scope['_cod_norm']==codn]['grupo_descricao'].dropna().astype(str).head(1).tolist() or ['—'])[0]}")
+                        with cB:
+                            st.metric("Compras", compras)
+                        with cC:
+                            if col_total and col_total in df_scope.columns:
+                                st.metric("Valor", formatar_moeda_br(vt))
+                            if st.button("Ver Ficha", key=f"famgrp_ver_{codn}"):
+                                st.session_state["material_fixo"] = {"cod": codn, "desc": desc}
+                                st.session_state["tipo_busca_ficha"] = "familia_grupo"
+                                st.session_state["equipamento_ctx"] = ""
+                                st.session_state["departamento_ctx"] = ""
+                                st.session_state["modo_ficha_material"] = True
+                                st.rerun()
+                        st.divider()
+
+                    with st.expander("Ver pedidos detalhados do escopo", expanded=False):
+                        cols_show = [c for c in ["_cod_norm","descricao", col_oc, col_solic, col_status, col_qtd, col_qtd_pend, col_total, col_data] if c and c in df_scope.columns]
+                        st.dataframe(df_scope[cols_show].copy(), use_container_width=True, hide_index=True)
+
+
     # ============================================================
     # EXIBIR FICHA DO MATERIAL SELECIONADO (COM ABAS)
     # ============================================================
@@ -986,27 +1027,13 @@ def exibir_ficha_material(_supabase):
     equipamento_ctx = st.session_state.get("equipamento_ctx", "")
     departamento_ctx = st.session_state.get("departamento_ctx", "")
 
-        # Montar histórico (normalizando tipos para não “perder” matches)
-    historico_material = pd.DataFrame()
+    # Montar histórico (preferir cod_material quando existir)
+    if material_selecionado_cod and "cod_material" in df_pedidos.columns:
+        historico_material = df_pedidos[df_pedidos["cod_material"] == str(material_selecionado_cod)].copy()
+    elif material_selecionado_desc and "descricao" in df_pedidos.columns:
+        historico_material = df_pedidos[df_pedidos["descricao"] == str(material_selecionado_desc)].copy()
 
-    if (material_selecionado_cod is not None) and ("cod_material" in df_pedidos.columns):
-        cod_norm = _norm_code(material_selecionado_cod)
-        _ser_norm = df_pedidos["cod_material"].fillna("").astype(str).apply(_norm_code)
-        historico_material = df_pedidos[_ser_norm == cod_norm].copy()
-
-    elif material_selecionado_desc and ("descricao" in df_pedidos.columns):
-        desc_key = str(material_selecionado_desc).strip()
-        _ser_desc = df_pedidos["descricao"].fillna("").astype(str).str.strip()
-        historico_material = df_pedidos[_ser_desc == desc_key].copy()
-
-        # fallback: contains (para pequenas diferenças de espaçamento/case)
-        if historico_material.empty and desc_key:
-            historico_material = df_pedidos[
-                df_pedidos["descricao"].fillna("").astype(str).str.contains(re.escape(desc_key), case=False, na=False)
-            ].copy()
-
-    # A ficha deve abrir mesmo que o histórico esteja vazio (ex.: material novo no catálogo)
-    if (material_selecionado_desc or material_selecionado_cod):
+    if not historico_material.empty and (material_selecionado_desc or material_selecionado_cod):
         # Pedido mais recente para "material atual"
         if col_data and col_data in historico_material.columns:
             historico_material["_dt"] = _safe_datetime_series(historico_material[col_data])
@@ -1035,19 +1062,15 @@ def exibir_ficha_material(_supabase):
             icon="ℹ️",
         )
 
-        if historico_material is None or historico_material.empty:
-            st.warning("Não encontrei pedidos para este material na base atual. Vou mostrar os dados do catálogo e, na aba **Família & Grupo**, os pedidos do mesmo agrupamento (quando existirem).")
-
         # Header com informações básicas
         cod_show = material_atual.get("cod_material", material_selecionado_cod) if "cod_material" in material_atual else material_selecionado_cod
         dep_show = material_atual.get(col_dep, "N/A") if col_dep else material_atual.get("departamento", "N/A")
         equip_show = material_atual.get(col_equip, "N/A") if col_equip else material_atual.get("cod_equipamento", "N/A")
         desc_show = material_selecionado_desc or material_atual.get("descricao", "Material")
 
-        
         st.markdown(
             f"""
-            <div style='background: linear-gradient(135deg, #450a0a 0%, #b91c1c 100%);
+            <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                         padding: 25px; border-radius: 15px; color: white; margin-bottom: 20px;'>
                 <h2 style='margin: 0; font-size: 28px;'>📦 {desc_show}</h2>
                 <p style='margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;'>
@@ -1060,50 +1083,15 @@ def exibir_ficha_material(_supabase):
             unsafe_allow_html=True,
         )
 
-
-        # Enriquecimento pelo Catálogo (se disponível)
-        cod_norm = _norm_code(cod_show)
-        cat_row = _get_material_catalog_row(_supabase, tenant_id, cod_norm, df_cat)
-        # KPIs executivos (usando o histórico bruto do material)
-        _dt_hist = _safe_datetime_series(historico_material[col_data]) if (col_data and col_data in historico_material.columns) else pd.Series([pd.NaT] * len(historico_material), index=historico_material.index)
-        first_dt = _dt_hist.min()
-        last_dt = _dt_hist.max()
-
-        # Preço unitário médio (quando existir coluna unit)
-        preco_unit_medio = None
-        if col_unit and col_unit in historico_material.columns:
-            pu = pd.to_numeric(historico_material[col_unit], errors="coerce")
-            if pu.notna().any():
-                preco_unit_medio = float(pu.mean())
-
-        a1, a2, a3, a4, a5, a6 = st.columns([1.2, 1.2, 1.2, 1.4, 1.4, 1.2])
-        a1.metric("🧾 Código", cod_show if cod_show else "—")
-        a2.metric("📅 1ª compra", first_dt.strftime("%d/%m/%Y") if pd.notna(first_dt) else "—")
-        a3.metric("📅 Última", last_dt.strftime("%d/%m/%Y") if pd.notna(last_dt) else "—")
-        a4.metric("💳 Preço unit. médio", formatar_moeda_br(preco_unit_medio) if preco_unit_medio is not None else "—")
-        a5.metric("🏷️ Família", (cat_row or {}).get("familia_descricao") or "—")
-        a6.metric("🧩 Grupo", (cat_row or {}).get("grupo_descricao") or "—")
-
-        with st.expander("📚 Dados do Catálogo (dimensões do material)", expanded=False):
-            if cat_row:
-                c1, c2, c3 = st.columns(3)
-                c1.write(f"**Unidade:** {(cat_row.get('unidade') or '—')}")
-                c1.write(f"**Almoxarifado:** {(cat_row.get('almoxarifado') or '—')}")
-                c2.write(f"**Tipo Material:** {(cat_row.get('tipo_material') or '—')}")
-                c2.write(f"**Origem:** {(cat_row.get('origem') or '—')}")
-                c3.write(f"**Descrição catálogo:** {(cat_row.get('descricao') or '—')}")
-            else:
-                st.info("Sem correspondência no catálogo para este código (ou catálogo não importado).")
-
-# ============================================================
+        # ============================================================
         # ABAS: FICHA TÉCNICA vs HISTÓRICO DETALHADO
         # ============================================================
 
         # ============================================================
         # ABAS (ERP FOLLOW-UP): Acompanhamento / Histórico / Fornecedores / Entregas / Preço
         # ============================================================
-        tab_acomp, tab_hist, tab_forn, tab_ent, tab_famgrp, tab_preco = st.tabs(
-            ["📌 Acompanhamento", "📦 Histórico", "🏷️ Fornecedores", "🚚 Entregas (SLA)", "🧩 Família & Grupo", "📈 Preço & Insights"]
+        tab_acomp, tab_hist, tab_forn, tab_ent, tab_preco = st.tabs(
+            ["📌 Acompanhamento", "📦 Histórico", "🏷️ Fornecedores", "🚚 Entregas (SLA)", "📈 Preço & Insights"]
         )
 
         # Preparar dados para cálculos de follow-up
@@ -1176,17 +1164,13 @@ def exibir_ficha_material(_supabase):
             nivel = "🟢 SAUDÁVEL"
 
         # KPI bar (ERP)
-        # - Valor total: soma de todos os pedidos no escopo (família/grupo/material)
-        # - Valor pendente: soma apenas dos itens ainda pendentes
-        valor_total_escopo = float(df_mat["_valor_total"].sum())
-        k1, k2, k3, k4, k5, k6 = st.columns(6)
+        k1, k2, k3, k4, k5 = st.columns(5)
         k1.metric("📦 Pedidos", int(len(df_mat)))
         k2.metric("⏳ Pendentes", int(df_mat["_pendente"].sum()))
         k3.metric("🔴 Atrasados", qtd_atrasados)
-        k4.metric("💳 Valor total", formatar_moeda_br(valor_total_escopo))
-        k5.metric("💰 Valor pendente", formatar_moeda_br(valor_pendente))
+        k4.metric("💰 Valor pendente", formatar_moeda_br(valor_pendente))
         mais_antigo = df_mat.loc[df_mat["_pendente"], "_dias_aberto"].max()
-        k6.metric("🧭 Mais antigo (dias)", f"{int(mais_antigo)}" if pd.notna(mais_antigo) else "—")
+        k5.metric("🧭 Mais antigo (dias)", f"{int(mais_antigo)}" if pd.notna(mais_antigo) else "—")
 
         st.caption(f"Criticidade do follow-up: **{nivel}** • Regra de atraso: previsão > prazo > OC + 30 dias")
 
@@ -1400,239 +1384,6 @@ def exibir_ficha_material(_supabase):
                     },
                 )
 
-        
-        with tab_famgrp:
-            st.markdown("### 🧩 Pedidos por Família / Grupo")
-            st.caption("Visão consolidada para analisar o consumo e follow-up do *cluster* do material (família/grupo) usando o Catálogo.")
-
-            if df_cat.empty:
-                st.info("Importe o **Catálogo de Materiais** para habilitar Família/Grupo nesta tela.")
-            elif not cat_row:
-                st.info("Este material não foi encontrado no catálogo (ou o código não está padronizado).")
-            
-            else:
-                if cat_row.get("_tenant_mismatch"):
-                    st.warning("Encontrei o material no catálogo, mas em OUTRO tenant_id. Verifique se o material foi importado no tenant correto.")
-                fam = (cat_row.get("familia_descricao") or "").strip()
-                grp = (cat_row.get("grupo_descricao") or "").strip()
-
-                ctop1, ctop2 = st.columns([2, 3])
-                with ctop1:
-                    scope = st.radio(
-                        "Escopo",
-                        ["Família", "Grupo", "Família + Grupo"],
-                        horizontal=True,
-                        key="fm_scope_famgrp",
-                    )
-                with ctop2:
-                    st.markdown(
-                        f"**Material atual:** Família: `{fam or '—'}`  ·  Grupo: `{grp or '—'}`"
-                    )
-
-                if scope == "Família":
-                    if not fam:
-                        st.warning("Este material está sem **Família** no catálogo.")
-                        st.stop()
-                    cat_scope = df_cat[df_cat.get("familia_descricao", "").astype(str).str.strip() == fam]
-                    titulo_scope = f"Família: {fam}"
-                elif scope == "Grupo":
-                    if not grp:
-                        st.warning("Este material está sem **Grupo** no catálogo.")
-                        st.stop()
-                    cat_scope = df_cat[df_cat.get("grupo_descricao", "").astype(str).str.strip() == grp]
-                    titulo_scope = f"Grupo: {grp}"
-                else:
-                    if not fam and not grp:
-                        st.warning("Este material está sem **Família** e **Grupo** no catálogo.")
-                        st.stop()
-                    cat_scope = df_cat.copy()
-                    if fam:
-                        cat_scope = cat_scope[cat_scope.get("familia_descricao", "").astype(str).str.strip() == fam]
-                    if grp:
-                        cat_scope = cat_scope[cat_scope.get("grupo_descricao", "").astype(str).str.strip() == grp]
-                    titulo_scope = f"Família: {fam or '—'} + Grupo: {grp or '—'}"
-
-                codes = set([c for c in cat_scope.get("_cod_norm", pd.Series([], dtype=str)).astype(str).tolist() if c])
-                if not codes:
-                    st.info("Nenhum material encontrado no catálogo para o escopo selecionado.")
-                    st.stop()
-
-                df_scope = df_pedidos[df_pedidos.get("_cod_norm", pd.Series([], dtype=str)).isin(codes)].copy()
-
-                st.markdown(f"#### {titulo_scope}")
-                st.caption(f"Materiais no escopo: **{len(codes)}**  ·  Pedidos no escopo: **{len(df_scope)}**")
-
-                if df_scope.empty:
-                    st.warning("Nenhum pedido encontrado para o escopo selecionado.")
-                    st.stop()
-
-                # ---- filtros executivos
-                f1, f2, f3, f4 = st.columns([1.2, 1.2, 1.4, 1.2])
-                only_pend = f1.toggle("Só pendentes", value=True, key="fm_fg_only_pend")
-                only_atras = f2.toggle("Só atrasados", value=False, key="fm_fg_only_atras")
-                janela = f3.selectbox("Período", ["Tudo", "Últimos 3 meses", "Últimos 6 meses", "Último ano"], index=0, key="fm_fg_janela")
-                limite = f4.selectbox("Mostrar", [20, 50, 100, 200, 500], index=1, key="fm_fg_lim")
-
-                # Datas
-                if col_data and col_data in df_scope.columns:
-                    df_scope["_data_oc"] = _safe_datetime_series(df_scope[col_data])
-                else:
-                    df_scope["_data_oc"] = pd.NaT
-
-                hoje2 = pd.Timestamp.now().normalize()
-
-                df_scope["_prev"] = _safe_datetime_series(df_scope[col_prev]) if col_prev and col_prev in df_scope.columns else pd.NaT
-                df_scope["_prazo"] = _safe_datetime_series(df_scope[col_prazo]) if col_prazo and col_prazo in df_scope.columns else pd.NaT
-                df_scope["_due"] = df_scope["_prev"]
-                df_scope.loc[df_scope["_due"].isna(), "_due"] = df_scope.loc[df_scope["_due"].isna(), "_prazo"]
-                df_scope.loc[df_scope["_due"].isna(), "_due"] = df_scope.loc[df_scope["_due"].isna(), "_data_oc"] + pd.Timedelta(days=30)
-
-                # Pendente
-                pend_flag = pd.Series([True] * len(df_scope), index=df_scope.index)
-                if col_entregue and col_entregue in df_scope.columns:
-                    pend_flag = df_scope[col_entregue] != True
-                if col_qtd_pend and col_qtd_pend in df_scope.columns:
-                    qtd_p = pd.to_numeric(df_scope[col_qtd_pend], errors="coerce").fillna(0)
-                    pend_flag = pend_flag | (qtd_p > 0)
-                df_scope["_pendente"] = pend_flag
-                df_scope["_atrasado"] = df_scope["_pendente"] & df_scope["_due"].notna() & (df_scope["_due"] < hoje2)
-
-                # Valor
-                if col_total and col_total in df_scope.columns:
-                    df_scope["_valor_total"] = pd.to_numeric(df_scope[col_total], errors="coerce").fillna(0.0)
-                else:
-                    df_scope["_valor_total"] = 0.0
-
-                # janela
-                if janela != "Tudo":
-                    if janela == "Últimos 3 meses":
-                        lim_dt = hoje2 - pd.DateOffset(months=3)
-                    elif janela == "Últimos 6 meses":
-                        lim_dt = hoje2 - pd.DateOffset(months=6)
-                    else:
-                        lim_dt = hoje2 - pd.DateOffset(years=1)
-                    df_scope = df_scope[df_scope["_data_oc"] >= lim_dt]
-
-                if only_pend:
-                    df_scope = df_scope[df_scope["_pendente"]]
-                if only_atras:
-                    df_scope = df_scope[df_scope["_atrasado"]]
-
-                # KPIs
-                kk1, kk2, kk3, kk4, kk5 = st.columns(5)
-                kk1.metric("📦 Pedidos", int(len(df_scope)))
-                kk2.metric("🧾 Materiais", int(df_scope["_cod_norm"].nunique()) if "_cod_norm" in df_scope.columns else 0)
-                kk3.metric("💰 Valor", formatar_moeda_br(float(df_scope["_valor_total"].sum())))
-                kk4.metric("⏳ Pendentes", int(df_scope["_pendente"].sum()) if "_pendente" in df_scope.columns else 0)
-                kk5.metric("🔴 Atrasados", int(df_scope["_atrasado"].sum()) if "_atrasado" in df_scope.columns else 0)
-
-                # Consolidado por material
-                group_cols = []
-                if "cod_material" in df_scope.columns:
-                    group_cols.append("cod_material")
-                if "descricao" in df_scope.columns:
-                    group_cols.append("descricao")
-                if not group_cols:
-                    group_cols = ["_cod_norm"]
-
-                agg = (
-                    df_scope.groupby(group_cols, dropna=False)
-                    .agg(
-                        Pedidos=("id", "count") if "id" in df_scope.columns else ("_valor_total", "size"),
-                        Valor=("_valor_total", "sum"),
-                        Pendentes=("_pendente", "sum"),
-                        Atrasados=("_atrasado", "sum"),
-                        Ultima=("_data_oc", "max"),
-                    )
-                    .reset_index()
-                    .sort_values(["Atrasados", "Pendentes", "Valor", "Pedidos"], ascending=[False, False, False, False])
-                )
-
-                st.markdown("#### 📊 Materiais mais relevantes (no escopo)")
-
-                view_fg = st.radio(
-                    "Visualização",
-                    ["Cards", "Tabela"],
-                    horizontal=True,
-                    key="fm_view_famgrp",
-                    label_visibility="collapsed",
-                )
-
-                topn = agg.head(int(limite)).copy()
-
-                if view_fg == "Tabela":
-                    st.dataframe(
-                        topn,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
-                            "Ultima": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                        },
-                    )
-                else:
-                    st.markdown(
-                        """<style>
-                          .fg-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-                          @media (max-width: 900px){ .fg-grid { grid-template-columns: 1fr; } }
-                          .fg-card{
-                            border: 1px solid rgba(255,255,255,.10);
-                            background: rgba(255,255,255,.03);
-                            border-radius: 16px;
-                            padding: 12px 14px;
-                          }
-                          .fg-title{ font-weight: 900; font-size: .95rem; margin-bottom: 4px; }
-                          .fg-sub{ opacity: .80; font-size: .82rem; margin-bottom: 10px; }
-                          .fg-kpis{ display:flex; gap: 10px; flex-wrap: wrap; }
-                          .fg-kpi{
-                            background: rgba(0,0,0,.18);
-                            border: 1px solid rgba(255,255,255,.08);
-                            border-radius: 12px;
-                            padding: 6px 10px;
-                            font-size: .80rem;
-                            line-height: 1.2;
-                          }
-                          .fg-kpi b{ display:block; font-size:.95rem; margin-top:2px; }
-                        </style>""",
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown('<div class="fg-grid">', unsafe_allow_html=True)
-                    for _i, _row in topn.reset_index(drop=True).iterrows():
-                        cod = str(_row.get("cod_material") or _row.get("_cod_norm") or "—")
-                        desc = str(_row.get("descricao") or "").strip()
-                        if len(desc) > 90:
-                            desc = desc[:89] + "…"
-                        pedidos = int(_row.get("Pedidos", 0) or 0)
-                        pend = int(_row.get("Pendentes", 0) or 0)
-                        atr = int(_row.get("Atrasados", 0) or 0)
-                        val = float(_row.get("Valor", 0.0) or 0.0)
-                        ultima = _row.get("Ultima")
-                        ultima_txt = ultima.strftime("%d/%m/%Y") if hasattr(ultima, "strftime") and pd.notna(ultima) else "—"
-
-                        sev = "rgba(239,68,68,.22)" if atr > 0 else ("rgba(245,158,11,.18)" if pend > 0 else "rgba(34,197,94,.16)")
-                        html = f"""<div class='fg-card' style='border-color:{sev}'>
-                  <div class='fg-title'>{cod}</div>
-                  <div class='fg-sub'>{desc or '—'}</div>
-                  <div class='fg-kpis'>
-                    <div class='fg-kpi'>Pedidos<b>{pedidos}</b></div>
-                    <div class='fg-kpi'>Pendentes<b>{pend}</b></div>
-                    <div class='fg-kpi'>Atrasados<b>{atr}</b></div>
-                    <div class='fg-kpi'>Valor<b>{formatar_moeda_br(val)}</b></div>
-                    <div class='fg-kpi'>Última<b>{ultima_txt}</b></div>
-                  </div>
-                </div>"""
-                        st.markdown(html, unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
-                csv_fg = agg.to_csv(index=False).encode("utf-8")
-                st.download_button("Baixar CSV (consolidado)", data=csv_fg, file_name="pedidos_por_familia_grupo.csv", mime="text/csv")
-
-                st.markdown("#### 🔎 Pedidos detalhados (no escopo)")
-                cols_det = [c for c in [col_data, col_oc, col_solic, "cod_material", "descricao", col_dep, col_equip, col_fornecedor, col_status, col_qtd, col_qtd_pend, col_total] if c and c in df_scope.columns]
-                df_det = df_scope.sort_values("_data_oc", ascending=False)
-                st.dataframe(df_det[cols_det].head(int(limite)), use_container_width=True, hide_index=True)
-
-
-
         with tab_preco:
             st.markdown("### 📈 Preço e Insights")
 
@@ -1663,4 +1414,3 @@ def exibir_ficha_material(_supabase):
         if st.button("← Voltar para Consulta", use_container_width=True):
             st.session_state.pagina = "Consultar Pedidos"
             st.rerun()
-            
