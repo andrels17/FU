@@ -1024,6 +1024,12 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             return lista
         return [f for f in lista if str(f.get("uf") or "").strip().upper() in uf_global]
 
+
+    # Aliases (compatibilidade): código abaixo ainda usa _apply_global_pedidos/_apply_global_fornecedores
+    # mas a lógica já está concentrada nos filtros globais acima.
+    _apply_global_pedidos = _filtrar_pedidos
+    _apply_global_fornecedores = _filtrar_fornecedores
+
     # Aplicar filtros globais
     alertas = {
         "pedidos_atrasados": _filtrar_pedidos(alertas.get("pedidos_atrasados", [])),
