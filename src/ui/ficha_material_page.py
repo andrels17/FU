@@ -136,6 +136,37 @@ def _norm_txt(x) -> str:
 
 
 
+def _clean_label(x) -> str:
+    """Converte valores para label exibível (sem 'nan')."""
+    try:
+        if x is None:
+            return "—"
+        import pandas as _pd
+        if _pd.isna(x):
+            return "—"
+    except Exception:
+        pass
+    s = str(x).strip()
+    if not s or s.lower() in ("nan", "none", "null"):
+        return "—"
+    return s
+
+
+
+def _first_val(df_scope: pd.DataFrame, codn: str, col: str | None) -> object:
+    """Primeiro valor não-vazio para um código no escopo."""
+    if not col or df_scope is None or df_scope.empty or col not in df_scope.columns:
+        return None
+    s = df_scope.loc[df_scope.get('_cod_norm','') == codn, col]
+    if s is None or len(s) == 0:
+        return None
+    # pega o primeiro e retorna (pode ser vazio)
+    try:
+        return s.iloc[0]
+    except Exception:
+        return None
+
+
 
     return carregar_pedidos(_supabase, st.session_state.get("tenant_id"))
 
@@ -951,9 +982,9 @@ def exibir_ficha_material(_supabase):
                 # Normaliza textos (para evitar mismatch por espaços/capitalização)
                 for _col in ["familia_descricao", "grupo_descricao"]:
                     if _col in df_mat.columns:
-                        df_mat[_col] = df_mat[_col].astype(str).str.replace("\u00a0", " ").str.strip()
+                        df_mat[_col] = df_mat[_col].fillna("").astype(str).str.replace("\u00a0", " ").str.strip()
                     if _col in dfp.columns:
-                        dfp[_col] = dfp[_col].astype(str).str.replace("\u00a0", " ").str.strip()
+                        dfp[_col] = dfp[_col].fillna("").astype(str).str.replace("\u00a0", " ").str.strip()
 
                 df_mat["_fam_norm"] = df_mat.get("familia_descricao", pd.Series([], dtype=str)).apply(_norm_txt)
                 df_mat["_grp_norm"] = df_mat.get("grupo_descricao", pd.Series([], dtype=str)).apply(_norm_txt)
@@ -1059,13 +1090,13 @@ def exibir_ficha_material(_supabase):
                             fam_col = 'familia_descricao' if 'familia_descricao' in df_scope.columns else ('familia_descricao_y' if 'familia_descricao_y' in df_scope.columns else ('familia_descricao_x' if 'familia_descricao_x' in df_scope.columns else None))
                             grp_col = 'grupo_descricao' if 'grupo_descricao' in df_scope.columns else ('grupo_descricao_y' if 'grupo_descricao_y' in df_scope.columns else ('grupo_descricao_x' if 'grupo_descricao_x' in df_scope.columns else None))
                             if fam_sel != '(Todas)':
-                                fam_lbl = str(fam_sel)
+                                fam_lbl = _clean_label(fam_sel)
                             else:
-                                fam_lbl = ((df_scope.loc[df_scope['_cod_norm'] == codn, fam_col].dropna().astype(str).head(1).tolist() or ['—'])[0] if fam_col else '—')
+                                fam_lbl = _clean_label(_first_val(df_scope, codn, fam_col))
                             if grp_sel != '(Todos)':
-                                grp_lbl = str(grp_sel)
+                                grp_lbl = _clean_label(grp_sel)
                             else:
-                                grp_lbl = ((df_scope.loc[df_scope['_cod_norm'] == codn, grp_col].dropna().astype(str).head(1).tolist() or ['—'])[0] if grp_col else '—')
+                                grp_lbl = _clean_label(_first_val(df_scope, codn, grp_col))
                             st.caption(f"Família: {fam_lbl}  •  Grupo: {grp_lbl}")
                         with cB:
                             st.metric("Compras", compras)
