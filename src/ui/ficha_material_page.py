@@ -53,12 +53,23 @@ def _call_insights_automaticos(historico: pd.DataFrame, material_atual: dict) ->
 
 
 @st.cache_data(ttl=300)
-def _carregar_pedidos_cache(_supabase, tenant_id: str | None):
+def _carregar_pedidos_cache(_supabase, tenant_id: str | None) -> pd.DataFrame:
     """Carrega pedidos do tenant com paginação para evitar retornos parciais.
 
-    Motivo: em alguns ambientes, helpers podem aplicar LIMIT/filtros de período.
-    Aqui buscamos o conjunto completo (até um teto seguro) para a busca por Família/Grupo.
+    Observação: alguns helpers/repositórios aplicam LIMIT (ou filtros de período) por performance.
+    Aqui garantimos que a aba "Buscar por Família & Grupo" opere sobre o conjunto completo (até um teto seguro).
     """
+    # 0) Resolve tenant_id de forma robusta
+    if not tenant_id:
+        tenant_id = (
+            st.session_state.get("tenant_id")
+            or (st.session_state.get("usuario") or {}).get("tenant_id")
+            or st.session_state.get("tenant")
+            or st.session_state.get("tenant_uuid")
+        )
+
+    df_try: pd.DataFrame | None = None
+
     # 1) Tenta usar o repositório existente (pode ter filtros/limit)
     try:
         df_try = carregar_pedidos(_supabase, tenant_id)
@@ -67,15 +78,20 @@ def _carregar_pedidos_cache(_supabase, tenant_id: str | None):
     except Exception:
         df_try = None
 
-    # 2) Fallback: paginação direta no Supabase
+    # 2) Paginação direta no Supabase/PostgREST (tenta range; se falhar, tenta offset/limit)
     max_rows = 20000
     page_size = 1000
-    rows = []
-    try:
-        qbase = _supabase.table("pedidos").select("*")
-        if tenant_id:
-            qbase = qbase.eq("tenant_id", tenant_id)
+    rows: list[dict] = []
 
+    def _base_query():
+        q = _supabase.table("pedidos").select("*")
+        if tenant_id:
+            q = q.eq("tenant_id", tenant_id)
+        return q
+
+    # 2a) Tenta com range()
+    try:
+        qbase = _base_query()
         offset = 0
         while offset < max_rows:
             res = qbase.range(offset, offset + page_size - 1).execute()
@@ -87,13 +103,29 @@ def _carregar_pedidos_cache(_supabase, tenant_id: str | None):
                 break
             offset += page_size
     except Exception:
-        # Se tudo falhar, devolve o que conseguir do helper (mesmo parcial)
-        if isinstance(df_try, pd.DataFrame):
-            return df_try
-        return pd.DataFrame()
+        # 2b) fallback: offset/limit (compatibilidade com versões diferentes do client)
+        try:
+            qbase = _base_query()
+            offset = 0
+            while offset < max_rows:
+                res = qbase.limit(page_size).offset(offset).execute()
+                batch = (getattr(res, "data", None) or [])
+                if not batch:
+                    break
+                rows.extend(batch)
+                if len(batch) < page_size:
+                    break
+                offset += page_size
+        except Exception:
+            rows = []
 
-    return pd.DataFrame(rows)
+    if rows:
+        return pd.DataFrame(rows)
 
+    # 3) Último fallback: devolve o que conseguir do helper (mesmo parcial)
+    if isinstance(df_try, pd.DataFrame):
+        return df_try
+    return pd.DataFrame()
 @st.cache_data(ttl=300)
 def _carregar_catalogo_materiais_cache(_supabase, tenant_id: str | None) -> pd.DataFrame:
     """Carrega catálogo `materiais` do Supabase (por tenant) para enriquecer a ficha e permitir análise por família/grupo.
