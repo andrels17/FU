@@ -53,10 +53,46 @@ def _call_insights_automaticos(historico: pd.DataFrame, material_atual: dict) ->
 
 
 @st.cache_data(ttl=300)
-def _carregar_pedidos_cache(_supabase):
-    # Cache simples para deixar a página mais rápida e reduzir chamadas ao banco
-    return carregar_pedidos(_supabase, st.session_state.get("tenant_id"))
+def _carregar_pedidos_cache(_supabase, tenant_id: str | None):
+    """Carrega pedidos do tenant com paginação para evitar retornos parciais.
 
+    Motivo: em alguns ambientes, helpers podem aplicar LIMIT/filtros de período.
+    Aqui buscamos o conjunto completo (até um teto seguro) para a busca por Família/Grupo.
+    """
+    # 1) Tenta usar o repositório existente (pode ter filtros/limit)
+    try:
+        df_try = carregar_pedidos(_supabase, tenant_id)
+        if isinstance(df_try, pd.DataFrame) and len(df_try) >= 50:
+            return df_try
+    except Exception:
+        df_try = None
+
+    # 2) Fallback: paginação direta no Supabase
+    max_rows = 20000
+    page_size = 1000
+    rows = []
+    try:
+        qbase = _supabase.table("pedidos").select("*")
+        if tenant_id:
+            qbase = qbase.eq("tenant_id", tenant_id)
+
+        offset = 0
+        while offset < max_rows:
+            res = qbase.range(offset, offset + page_size - 1).execute()
+            batch = (getattr(res, "data", None) or [])
+            if not batch:
+                break
+            rows.extend(batch)
+            if len(batch) < page_size:
+                break
+            offset += page_size
+    except Exception:
+        # Se tudo falhar, devolve o que conseguir do helper (mesmo parcial)
+        if isinstance(df_try, pd.DataFrame):
+            return df_try
+        return pd.DataFrame()
+
+    return pd.DataFrame(rows)
 
 @st.cache_data(ttl=300)
 def _carregar_catalogo_materiais_cache(_supabase, tenant_id: str | None) -> pd.DataFrame:
@@ -256,7 +292,7 @@ def exibir_ficha_material(_supabase):
     modo_ficha = bool(st.session_state.get("modo_ficha_material", False))
 
 
-    df_pedidos = _carregar_pedidos_cache(_supabase)
+    df_pedidos = _carregar_pedidos_cache(_supabase, st.session_state.get('tenant_id'))
 
     # Catálogo (dimensão) para enriquecer a ficha e permitir análises por Família/Grupo
     tenant_id = st.session_state.get("tenant_id")
