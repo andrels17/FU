@@ -881,13 +881,27 @@ def exibir_ficha_material(_supabase):
     equipamento_ctx = st.session_state.get("equipamento_ctx", "")
     departamento_ctx = st.session_state.get("departamento_ctx", "")
 
-    # Montar histórico (preferir cod_material quando existir)
-    if material_selecionado_cod and "cod_material" in df_pedidos.columns:
-        historico_material = df_pedidos[df_pedidos["cod_material"] == str(material_selecionado_cod)].copy()
-    elif material_selecionado_desc and "descricao" in df_pedidos.columns:
-        historico_material = df_pedidos[df_pedidos["descricao"] == str(material_selecionado_desc)].copy()
+        # Montar histórico (normalizando tipos para não “perder” matches)
+    historico_material = pd.DataFrame()
 
-    if not historico_material.empty and (material_selecionado_desc or material_selecionado_cod):
+    if (material_selecionado_cod is not None) and ("cod_material" in df_pedidos.columns):
+        cod_norm = _norm_code(material_selecionado_cod)
+        _ser_norm = df_pedidos["cod_material"].fillna("").astype(str).apply(_norm_code)
+        historico_material = df_pedidos[_ser_norm == cod_norm].copy()
+
+    elif material_selecionado_desc and ("descricao" in df_pedidos.columns):
+        desc_key = str(material_selecionado_desc).strip()
+        _ser_desc = df_pedidos["descricao"].fillna("").astype(str).str.strip()
+        historico_material = df_pedidos[_ser_desc == desc_key].copy()
+
+        # fallback: contains (para pequenas diferenças de espaçamento/case)
+        if historico_material.empty and desc_key:
+            historico_material = df_pedidos[
+                df_pedidos["descricao"].fillna("").astype(str).str.contains(re.escape(desc_key), case=False, na=False)
+            ].copy()
+
+    # A ficha deve abrir mesmo que o histórico esteja vazio (ex.: material novo no catálogo)
+    if (material_selecionado_desc or material_selecionado_cod):
         # Pedido mais recente para "material atual"
         if col_data and col_data in historico_material.columns:
             historico_material["_dt"] = _safe_datetime_series(historico_material[col_data])
@@ -915,6 +929,9 @@ def exibir_ficha_material(_supabase):
             f"📌 Exibindo ficha do material {contexto}{detalhes_txt}",
             icon="ℹ️",
         )
+
+        if historico_material is None or historico_material.empty:
+            st.warning("Não encontrei pedidos para este material na base atual. Vou mostrar os dados do catálogo e, na aba **Família & Grupo**, os pedidos do mesmo agrupamento (quando existirem).")
 
         # Header com informações básicas
         cod_show = material_atual.get("cod_material", material_selecionado_cod) if "cod_material" in material_atual else material_selecionado_cod
@@ -1425,16 +1442,80 @@ def exibir_ficha_material(_supabase):
                 )
 
                 st.markdown("#### 📊 Materiais mais relevantes (no escopo)")
-                st.dataframe(
-                    agg.head(int(limite)),
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Ultima": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                    },
+
+                view_fg = st.radio(
+                    "Visualização",
+                    ["Cards", "Tabela"],
+                    horizontal=True,
+                    key="fm_view_famgrp",
+                    label_visibility="collapsed",
                 )
 
+                topn = agg.head(int(limite)).copy()
+
+                if view_fg == "Tabela":
+                    st.dataframe(
+                        topn,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
+                            "Ultima": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                        },
+                    )
+                else:
+                    st.markdown(
+                        """<style>
+                          .fg-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+                          @media (max-width: 900px){ .fg-grid { grid-template-columns: 1fr; } }
+                          .fg-card{
+                            border: 1px solid rgba(255,255,255,.10);
+                            background: rgba(255,255,255,.03);
+                            border-radius: 16px;
+                            padding: 12px 14px;
+                          }
+                          .fg-title{ font-weight: 900; font-size: .95rem; margin-bottom: 4px; }
+                          .fg-sub{ opacity: .80; font-size: .82rem; margin-bottom: 10px; }
+                          .fg-kpis{ display:flex; gap: 10px; flex-wrap: wrap; }
+                          .fg-kpi{
+                            background: rgba(0,0,0,.18);
+                            border: 1px solid rgba(255,255,255,.08);
+                            border-radius: 12px;
+                            padding: 6px 10px;
+                            font-size: .80rem;
+                            line-height: 1.2;
+                          }
+                          .fg-kpi b{ display:block; font-size:.95rem; margin-top:2px; }
+                        </style>""",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown('<div class="fg-grid">', unsafe_allow_html=True)
+                    for _i, _row in topn.reset_index(drop=True).iterrows():
+                        cod = str(_row.get("cod_material") or _row.get("_cod_norm") or "—")
+                        desc = str(_row.get("descricao") or "").strip()
+                        if len(desc) > 90:
+                            desc = desc[:89] + "…"
+                        pedidos = int(_row.get("Pedidos", 0) or 0)
+                        pend = int(_row.get("Pendentes", 0) or 0)
+                        atr = int(_row.get("Atrasados", 0) or 0)
+                        val = float(_row.get("Valor", 0.0) or 0.0)
+                        ultima = _row.get("Ultima")
+                        ultima_txt = ultima.strftime("%d/%m/%Y") if hasattr(ultima, "strftime") and pd.notna(ultima) else "—"
+
+                        sev = "rgba(239,68,68,.22)" if atr > 0 else ("rgba(245,158,11,.18)" if pend > 0 else "rgba(34,197,94,.16)")
+                        html = f"""<div class='fg-card' style='border-color:{sev}'>
+                  <div class='fg-title'>{cod}</div>
+                  <div class='fg-sub'>{desc or '—'}</div>
+                  <div class='fg-kpis'>
+                    <div class='fg-kpi'>Pedidos<b>{pedidos}</b></div>
+                    <div class='fg-kpi'>Pendentes<b>{pend}</b></div>
+                    <div class='fg-kpi'>Atrasados<b>{atr}</b></div>
+                    <div class='fg-kpi'>Valor<b>{formatar_moeda_br(val)}</b></div>
+                    <div class='fg-kpi'>Última<b>{ultima_txt}</b></div>
+                  </div>
+                </div>"""
+                        st.markdown(html, unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
                 csv_fg = agg.to_csv(index=False).encode("utf-8")
                 st.download_button("Baixar CSV (consolidado)", data=csv_fg, file_name="pedidos_por_familia_grupo.csv", mime="text/csv")
 
