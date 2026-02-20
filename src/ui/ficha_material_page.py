@@ -145,6 +145,61 @@ def _pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
     return None
 
 
+
+def _get_material_catalog_row(_supabase, tenant_id: str | None, cod_norm: str, df_cat: pd.DataFrame) -> dict | None:
+    """Obtém a linha do catálogo (tabela materiais) para o código informado.
+
+    Estratégia (robusta):
+    1) tenta via df_cat (cache) comparando _cod_norm
+    2) se não achar, tenta query direta no Supabase usando (tenant_id, codigo_material bigint)
+    3) fallback: tenta query direta sem tenant_id (para diagnosticar mismatch de tenant)
+    """
+    if not cod_norm:
+        return None
+
+    # 1) cache
+    try:
+        if df_cat is not None and not df_cat.empty and "_cod_norm" in df_cat.columns:
+            hit = df_cat[df_cat["_cod_norm"] == cod_norm]
+            if not hit.empty:
+                return hit.iloc[0].to_dict()
+    except Exception:
+        pass
+
+    # 2) query direta por PK (tenant_id, codigo_material)
+    try:
+        cod_int = int(str(cod_norm).strip())
+    except Exception:
+        cod_int = None
+
+    if cod_int is not None:
+        try:
+            q = _supabase.table("materiais").select("*")
+            if tenant_id:
+                q = q.eq("tenant_id", tenant_id)
+            q = q.eq("codigo_material", cod_int).limit(1)
+            res = q.execute()
+            data = (res.data or [])
+            if data:
+                return dict(data[0])
+        except Exception:
+            pass
+
+    # 3) fallback sem tenant (diagnóstico)
+    if cod_int is not None:
+        try:
+            res = _supabase.table("materiais").select("*").eq("codigo_material", cod_int).limit(1).execute()
+            data = (res.data or [])
+            if data:
+                # Retorna mesmo assim (melhor UX), mas sinaliza mismatch em outro ponto
+                row = dict(data[0])
+                row["_tenant_mismatch"] = True
+                return row
+        except Exception:
+            pass
+
+    return None
+
 def _safe_datetime_series(s: pd.Series) -> pd.Series:
     return pd.to_datetime(s, errors="coerce", dayfirst=True)
 
@@ -1008,12 +1063,7 @@ def exibir_ficha_material(_supabase):
 
         # Enriquecimento pelo Catálogo (se disponível)
         cod_norm = _norm_code(cod_show)
-        cat_row = None
-        if not df_cat.empty and cod_norm:
-            _hit = df_cat[df_cat["_cod_norm"] == cod_norm]
-            if not _hit.empty:
-                cat_row = _hit.iloc[0].to_dict()
-
+        cat_row = _get_material_catalog_row(_supabase, tenant_id, cod_norm, df_cat)
         # KPIs executivos (usando o histórico bruto do material)
         _dt_hist = _safe_datetime_series(historico_material[col_data]) if (col_data and col_data in historico_material.columns) else pd.Series([pd.NaT] * len(historico_material), index=historico_material.index)
         first_dt = _dt_hist.min()
@@ -1355,7 +1405,10 @@ def exibir_ficha_material(_supabase):
                 st.info("Importe o **Catálogo de Materiais** para habilitar Família/Grupo nesta tela.")
             elif not cat_row:
                 st.info("Este material não foi encontrado no catálogo (ou o código não está padronizado).")
+            
             else:
+                if cat_row.get("_tenant_mismatch"):
+                    st.warning("Encontrei o material no catálogo, mas em OUTRO tenant_id. Verifique se o material foi importado no tenant correto.")
                 fam = (cat_row.get("familia_descricao") or "").strip()
                 grp = (cat_row.get("grupo_descricao") or "").strip()
 
