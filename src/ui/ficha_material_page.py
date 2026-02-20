@@ -95,9 +95,12 @@ def _carregar_catalogo_materiais_cache(_supabase, tenant_id: str | None) -> pd.D
 
 
 def _norm_code(x) -> str:
-    """Normaliza código para string numérica (remove não-dígitos) para casar pedidos <-> catálogo.
+    """Normaliza código para string numérica para casar pedidos <-> catálogo.
 
-    Importante: evita o bug clássico de float em string (ex.: 857.0 -> "8570").
+    Regras:
+    - Converte numéricos (int/float) de forma segura (857.0 -> "857")
+    - Para strings, remove não-dígitos e **remove zeros à esquerda** (000857 -> "857")
+    - Evita o bug clássico: "857.0" virar "8570"
     """
     import re
 
@@ -123,7 +126,15 @@ def _norm_code(x) -> str:
     if re.fullmatch(r"\d+\.0+", s2):
         s = s2.split(".")[0]
 
-    return re.sub(r"\D+", "", s)
+    digits = re.sub(r"\D+", "", s)
+    if not digits:
+        return ""
+
+    # Remove zeros à esquerda (ex.: "000857" -> "857")
+    try:
+        return str(int(digits))
+    except Exception:
+        return digits.lstrip("0") or "0"
 
 
 def _pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
