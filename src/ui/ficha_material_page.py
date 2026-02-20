@@ -248,6 +248,11 @@ def exibir_ficha_material(_supabase):
         .fm-kpi b{font-size:16px;display:block;margin-top:2px}
         .fm-chipwrap{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;}
         .fm-chip{font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.10);}
+
+        .fm-line{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;opacity:.95;margin:0 0 10px 0;}
+        .fm-line b{font-size:12px}
+        .fm-bar{height:6px;border-radius:999px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.10);overflow:hidden;}
+        .fm-bar-fill{height:100%;background:rgba(239,68,68,0.85);}
         </style>
         """,
         unsafe_allow_html=True,
@@ -1012,10 +1017,11 @@ def exibir_ficha_material(_supabase):
                 fam_opts = sorted([f for f in dcat["familia_descricao"].dropna().astype(str).unique().tolist() if str(f).strip()])
                 grp_all = sorted([g for g in dcat["grupo_descricao"].dropna().astype(str).unique().tolist() if str(g).strip()])
 
-                csel1, csel2, csel3 = st.columns([2.2, 2.2, 1.2])
-                with csel1:
+                                # Filtros compactos (estilo enterprise clean)
+                f1, f2, f3, f4 = st.columns([2.2, 2.2, 2.0, 1.1])
+                with f1:
                     fam_sel = st.selectbox("Família", options=["(Todas)"] + fam_opts, index=0, key="fm_busca_fam")
-                with csel2:
+                with f2:
                     if fam_sel != "(Todas)":
                         fam_n = _norm_txt(fam_sel)
                         grp_opts = sorted([
@@ -1025,11 +1031,18 @@ def exibir_ficha_material(_supabase):
                     else:
                         grp_opts = grp_all
                     grp_sel = st.selectbox("Grupo", options=["(Todos)"] + grp_opts, index=0, key="fm_busca_grp")
-                with csel3:
+                with f3:
+                    periodo = st.selectbox(
+                        "Período",
+                        ["Tudo", "12 meses", "6 meses", "3 meses"],
+                        index=0,
+                        key="fm_busca_periodo",
+                        help="Em bases grandes, prefira 3–12 meses para melhor desempenho.",
+                    )
+                with f4:
                     only_pend = st.toggle("Só pendentes", value=False, key="fm_busca_only_pend")
 
-                # Para performance em bases grandes (você pode trocar para "Tudo")
-                periodo = st.selectbox("Período", ["12 meses", "6 meses", "3 meses", "Tudo"], index=3, key="fm_busca_periodo", help="Controle de desempenho: em bases grandes, prefira 3–12 meses.")
+                st.markdown("---")
 
                 # Junta pedidos com Catálogo (LEFT) para NÃO perder materiais sem cadastro
                 cat_small = dcat[["_cod_norm", "familia_descricao", "grupo_descricao", "_fam_norm", "_grp_norm"]].drop_duplicates("_cod_norm")
@@ -1112,17 +1125,23 @@ def exibir_ficha_material(_supabase):
                     st.warning("Nenhum pedido encontrado para a família/grupo selecionados.")
                     st.stop()
 
-                k1, k2, k3, k4 = st.columns(4)
-                k1.metric("📦 Pedidos", int(len(df_scope)))
-                k2.metric("🧾 Materiais", int(df_scope["_cod_norm"].nunique()))
-                k3.metric("⏳ Pendentes", int(df_scope["_pendente"].sum()) if "_pendente" in df_scope.columns else 0)
-                k4.metric("💳 Valor total", formatar_moeda_br(float(df_scope["_valor_total"].sum())))
+                st.subheader("Resumo do cluster")
 
-                st.markdown("#### Materiais mais recorrentes (no escopo)")
-                c_r1, c_r2, c_r3 = st.columns([1.4, 1.2, 1.2])
-                ordenar = c_r1.selectbox("Ordenar por", ["Valor", "Compras"], index=0, key="fm_busca_ord")
-                limite = c_r2.slider("Mostrar", min_value=5, max_value=50, value=15, step=1, key="fm_busca_lim")
-                mostrar_pedidos = c_r3.toggle("Ver pedidos detalhados", value=False, key="fm_busca_det")
+                k1, k2, k3, k4 = st.columns([1, 1, 1, 1.4])
+                k1.metric("Pedidos", int(len(df_scope)))
+                k2.metric("Materiais", int(df_scope["_cod_norm"].nunique()))
+                k3.metric("Pendentes", int(df_scope["_pendente"].sum()) if "_pendente" in df_scope.columns else 0)
+                k4.metric("Valor total", formatar_moeda_br(float(df_scope["_valor_total"].sum())))
+
+                st.subheader("Materiais mais recorrentes")
+
+                r1, r2, r3 = st.columns([2.0, 1.0, 1.2])
+                with r1:
+                    ordenar = st.selectbox("Ordenar por", ["Valor", "Compras"], index=0, key="fm_busca_ord")
+                with r2:
+                    limite = st.selectbox("Mostrar", [5, 10, 15, 20, 30, 50], index=2, key="fm_busca_lim")
+                with r3:
+                    mostrar_pedidos = st.toggle("Detalhar pedidos", value=False, key="fm_busca_det")
 
                 gcols = ["_cod_norm"]
                 if "cod_material" in df_scope.columns:
@@ -1169,15 +1188,16 @@ def exibir_ficha_material(_supabase):
                     <div class="fm-card">
                       <div class="fm-title">{cod} — {desc}</div>
                       <div class="fm-sub">Família: {fam_lbl} • Grupo: {grp_lbl}</div>
-                      <div class="fm-kpis">
-                        <div class="fm-kpi">Compras<b>{int(row.get("compras", 0))}</b></div>
-                        <div class="fm-kpi">% Compras<b>{float(row.get("pct_comp", 0.0)):.1f}%</b></div>
-                        <div class="fm-kpi">Valor<b>{formatar_moeda_br(float(row.get("valor", 0.0)))}</b></div>
-                        <div class="fm-kpi">% Valor<b>{float(row.get("pct_valor", 0.0)):.1f}%</b></div>
+                      <div class="fm-line">
+                        <span>Compras: <b>{int(row.get("compras", 0))}</b></span>
+                        <span>Valor: <b>{formatar_moeda_br(float(row.get("valor", 0.0)))}</b></span>
+                        <span>Participação: <b>{float(row.get("pct_valor", 0.0)):.1f}%</b></span>
                       </div>
+                      <div class="fm-bar"><div class="fm-bar-fill" style="width:{min(100.0, max(0.0, float(row.get('pct_valor', 0.0)))):.1f}%;"></div></div>
                     </div>
                     """
                     cL, cB = st.columns([6, 1])
+
                     with cL:
                         st.markdown(card, unsafe_allow_html=True)
                     with cB:
