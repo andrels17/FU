@@ -976,6 +976,22 @@ def exibir_ficha_material(_supabase):
                     on="_cod_norm",
                     how="left",
                 )
+                # Coalesce: garante colunas finais sem sufixos (_x/_y) e evita "nan" em string
+                for base in ("familia_descricao", "grupo_descricao"):
+                    if base not in dfp.columns:
+                        # Se o merge criou sufixos
+                        bx = f"{base}_x" if f"{base}_x" in dfp.columns else None
+                        by = f"{base}_y" if f"{base}_y" in dfp.columns else None
+                        if by and bx:
+                            dfp[base] = dfp[by].combine_first(dfp[bx])
+                        elif by:
+                            dfp[base] = dfp[by]
+                        elif bx:
+                            dfp[base] = dfp[bx]
+                        else:
+                            dfp[base] = ""
+                    # Normaliza nulos para não virar string "nan"
+                    dfp[base] = dfp[base].fillna("").astype(str).replace({"nan": "", "None": ""})
                 # Alguns fluxos podem já ter colunas de família/grupo no df_pedidos; após merge, normalize nomes
                 dfp = _coalesce_merge_suffix(dfp, 'familia_descricao')
                 dfp = _coalesce_merge_suffix(dfp, 'grupo_descricao')
@@ -1059,50 +1075,109 @@ def exibir_ficha_material(_supabase):
                     k3.metric("Pendentes", f"{pend}")
                     k4.metric("Valor total", formatar_moeda_br(v_total))
 
+                    
                     st.markdown("#### Materiais mais recorrentes (no escopo)")
-                    # Consolidado por material
-                    grp = df_scope.groupby(["_cod_norm"], dropna=False).agg(
-                        descricao=("descricao", "first") if "descricao" in df_scope.columns else ("_cod_norm", "first"),
-                        compras=("id", "count") if "id" in df_scope.columns else ("_cod_norm", "count"),
-                        valor_total=(col_total, "sum") if col_total and col_total in df_scope.columns else ("_cod_norm", "count"),
-                    ).reset_index()
 
-                    # Ajuste de valor_total quando não há col_total
-                    if not (col_total and col_total in df_scope.columns):
-                        grp.rename(columns={"valor_total": "compras"}, inplace=True)
+                    # --- Quebras executivas (quando faz sentido)
+                    with st.expander("📊 Consumo consolidado (por Família/Grupo)", expanded=False):
+                        if "familia_descricao" in df_scope.columns:
+                            fam_tmp = df_scope.copy()
+                            fam_tmp["familia_descricao"] = fam_tmp["familia_descricao"].fillna("").astype(str)
+                            fam_tmp["grupo_descricao"] = fam_tmp.get("grupo_descricao", "").fillna("").astype(str)
+                            # Quando usuário não fixa uma família, vale mostrar por família
+                            if fam_sel == "(Todas)":
+                                g_fam = fam_tmp.groupby("familia_descricao", dropna=False).agg(
+                                    pedidos=("id", "count") if "id" in fam_tmp.columns else ("_cod_norm", "count"),
+                                    materiais=("_cod_norm", "nunique"),
+                                    valor_total=(col_total, "sum") if col_total and col_total in fam_tmp.columns else ("_cod_norm", "count"),
+                                ).reset_index().rename(columns={"familia_descricao": "Família"})
+                                g_fam["Família"] = g_fam["Família"].apply(_clean_label)
+                                g_fam = g_fam.sort_values("valor_total" if "valor_total" in g_fam.columns else "pedidos", ascending=False)
+                                st.dataframe(g_fam.head(30), use_container_width=True, hide_index=True)
+                            # Quando usuário fixa uma família mas não fixa grupo, vale mostrar por grupo
+                            if fam_sel != "(Todas)" and grp_sel == "(Todos)" and "grupo_descricao" in fam_tmp.columns:
+                                g_grp = fam_tmp.groupby("grupo_descricao", dropna=False).agg(
+                                    pedidos=("id", "count") if "id" in fam_tmp.columns else ("_cod_norm", "count"),
+                                    materiais=("_cod_norm", "nunique"),
+                                    valor_total=(col_total, "sum") if col_total and col_total in fam_tmp.columns else ("_cod_norm", "count"),
+                                ).reset_index().rename(columns={"grupo_descricao": "Grupo"})
+                                g_grp["Grupo"] = g_grp["Grupo"].apply(_clean_label)
+                                g_grp = g_grp.sort_values("valor_total" if "valor_total" in g_grp.columns else "pedidos", ascending=False)
+                                st.dataframe(g_grp.head(30), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("Sem dados de Família/Grupo no escopo atual.")
 
-                    grp = grp.sort_values("compras", ascending=False)
+                    # Consolidado por material (ranking)
+                    agg_cols = {
+                        "descricao": ("descricao", "first") if "descricao" in df_scope.columns else ("_cod_norm", "first"),
+                        "compras": ("id", "count") if "id" in df_scope.columns else ("_cod_norm", "count"),
+                    }
+                    if col_total and col_total in df_scope.columns:
+                        agg_cols["valor_total"] = (col_total, "sum")
+
+                    grp = df_scope.groupby(["_cod_norm"], dropna=False).agg(**agg_cols).reset_index()
+
+                    # Se não há coluna de valor_total, usa compras como proxy (mantém compat)
+                    if "valor_total" not in grp.columns:
+                        grp["valor_total"] = 0.0
+
+                    # Reanexa Família/Grupo a partir do Catálogo (mais confiável do que puxar do df_scope pós-groupby)
+                    if df_mat is not None and not df_mat.empty and "_cod_norm" in df_mat.columns:
+                        mats_lookup = df_mat[["_cod_norm", "familia_descricao", "grupo_descricao"]].drop_duplicates("_cod_norm")
+                        grp = grp.merge(mats_lookup, on="_cod_norm", how="left")
+                    else:
+                        # fallback: tenta a partir do próprio df_scope
+                        cols_fg = [c for c in ["familia_descricao", "grupo_descricao"] if c in df_scope.columns]
+                        if cols_fg:
+                            fg = df_scope[["_cod_norm"] + cols_fg].drop_duplicates("_cod_norm")
+                            grp = grp.merge(fg, on="_cod_norm", how="left")
+
+                    # Limpa labels (evita nan/None)
+                    grp["familia_descricao"] = grp.get("familia_descricao", "").fillna("").astype(str).replace({"nan": "", "None": ""})
+                    grp["grupo_descricao"] = grp.get("grupo_descricao", "").fillna("").astype(str).replace({"nan": "", "None": ""})
+
+                    # Shares (representatividade no escopo)
+                    total_itens_scope = float(grp["compras"].sum()) if "compras" in grp.columns else 0.0
+                    total_val_scope = float(grp["valor_total"].sum()) if "valor_total" in grp.columns else 0.0
+                    if total_itens_scope <= 0:
+                        total_itens_scope = 1.0
+                    if total_val_scope <= 0:
+                        total_val_scope = 1.0
+
+                    grp["share_itens"] = grp["compras"].astype(float) / total_itens_scope
+                    grp["share_valor"] = grp["valor_total"].astype(float) / total_val_scope
+
+                    # Controles do ranking
+                    ctrl1, ctrl2 = st.columns([1.2, 1.0])
+                    with ctrl1:
+                        ordenar_por = st.selectbox("Ordenar por", ["Valor", "Compras"], index=0, key="busca_famgrp_ord")
+                    with ctrl2:
+                        show_n = st.slider("Mostrar", 5, 50, 15, 5, key="busca_famgrp_show")
+
+                    sort_col = "valor_total" if ordenar_por == "Valor" else "compras"
+                    grp = grp.sort_values(sort_col, ascending=False)
 
                     # Cards (executivo)
-                    show_n = st.slider("Mostrar", 5, 50, 15, 5, key="busca_famgrp_show")
-                    for _, r in grp.head(show_n).iterrows():
+                    for _, r in grp.head(int(show_n)).iterrows():
                         codn = r.get("_cod_norm") or ""
                         desc = r.get("descricao") or ""
                         compras = int(r.get("compras") or 0)
-                        vt = r.get("valor_total")
-                        vt = float(vt) if isinstance(vt, (int, float)) else pd.to_numeric(vt, errors="coerce")
-                        vt = float(vt) if pd.notna(vt) else 0.0
+                        vt = float(r.get("valor_total") or 0.0)
 
-                        cA, cB, cC = st.columns([3.8, 1.2, 1.2])
+                        fam_lbl = _clean_label(r.get("familia_descricao"))
+                        grp_lbl = _clean_label(r.get("grupo_descricao"))
+                        sh_i = float(r.get("share_itens") or 0.0)
+                        sh_v = float(r.get("share_valor") or 0.0)
+
+                        cA, cB, cC = st.columns([3.8, 1.2, 1.4])
                         with cA:
                             st.markdown(f"**{codn} — {desc}**")
-                            # Labels seguros (evita KeyError quando merge gera sufixos ou catálogo incompleto)
-                            fam_col = 'familia_descricao' if 'familia_descricao' in df_scope.columns else ('familia_descricao_y' if 'familia_descricao_y' in df_scope.columns else ('familia_descricao_x' if 'familia_descricao_x' in df_scope.columns else None))
-                            grp_col = 'grupo_descricao' if 'grupo_descricao' in df_scope.columns else ('grupo_descricao_y' if 'grupo_descricao_y' in df_scope.columns else ('grupo_descricao_x' if 'grupo_descricao_x' in df_scope.columns else None))
-                            if fam_sel != '(Todas)':
-                                fam_lbl = _clean_label(fam_sel)
-                            else:
-                                fam_lbl = _clean_label(_first_val(df_scope, codn, fam_col))
-                            if grp_sel != '(Todos)':
-                                grp_lbl = _clean_label(grp_sel)
-                            else:
-                                grp_lbl = _clean_label(_first_val(df_scope, codn, grp_col))
                             st.caption(f"Família: {fam_lbl}  •  Grupo: {grp_lbl}")
+                            st.caption(f"Representatividade: **{sh_v:.1%}** do valor • **{sh_i:.1%}** dos itens")
                         with cB:
                             st.metric("Compras", compras)
                         with cC:
-                            if col_total and col_total in df_scope.columns:
-                                st.metric("Valor", formatar_moeda_br(vt))
+                            st.metric("Valor", formatar_moeda_br(vt))
                             if st.button("Ver Ficha", key=f"famgrp_ver_{codn}"):
                                 st.session_state["material_fixo"] = {"cod": codn, "desc": desc}
                                 st.session_state["tipo_busca_ficha"] = "familia_grupo"
@@ -1111,7 +1186,6 @@ def exibir_ficha_material(_supabase):
                                 st.session_state["modo_ficha_material"] = True
                                 st.rerun()
                         st.divider()
-
                     with st.expander("Ver pedidos detalhados do escopo", expanded=False):
                         # Lista estilo "ERP" (sem modal)
                         df_det = df_scope.copy()
