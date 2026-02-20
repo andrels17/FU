@@ -37,7 +37,31 @@ div[role="radiogroup"] label { font-size: 0.90rem !important; }
 @media (max-width: 1100px){
   .block-container{ padding-left: .75rem; padding-right: .75rem; max-width: 100%; }
 }
+
+/* ===== Sidebar flex layout (compact mode) ===== */
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.fu-compact-nav{
+  flex: 1 1 auto;
+  justify-content: center;
+}
+.fu-sidebar-footer{
+  margin-top: auto;
+  padding-bottom: 10px;
+}
+
+        
+/* Compact mode: separador mais discreto */
+section[data-testid="stSidebar"] hr{
+  margin: 10px 0 !important;
+  opacity: 0.35;
+}
+
 </style>
+
 """, unsafe_allow_html=True)
 
 import importlib
@@ -783,6 +807,7 @@ def _fu_render_compact_sidebar(total_alertas: int, is_admin: bool, is_superadmin
 
 def _sidebar_footer(supabase_client) -> None:
     """Renderiza Sair + créditos (sempre por último na sidebar)."""
+    st.markdown("<div class=\"fu-sidebar-footer\">", unsafe_allow_html=True)
     st.markdown("---")
     if st.button("Sair", use_container_width=True, key="btn_logout_sidebar"):
         try:
@@ -814,6 +839,7 @@ def _sidebar_footer(supabase_client) -> None:
         """,
         unsafe_allow_html=True,
     )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _sync_empresa_nome(tenant_id: str | None, tenant_opts) -> None:
