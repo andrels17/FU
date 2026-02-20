@@ -987,16 +987,16 @@ def exibir_ficha_material(_supabase):
                     grp_norm_sel = _norm_txt(grp_sel)
                     df_scope = df_scope[df_scope["_grp_norm"] == grp_norm_sel]
 
-# Fallback: se não encontrou nada com match exato (muito comum por variações de pontuação),
-# tenta um match "contém" usando o texto normalizado.
-if df_scope.empty and (fam_sel != "(Todas)" or grp_sel != "(Todos)"):
-    df_scope = dfp.copy()
-    if fam_sel and fam_sel != "(Todas)":
-        fam_norm_sel = _norm_txt(fam_sel)
-        df_scope = df_scope[df_scope["_fam_norm"].str.contains(re.escape(fam_norm_sel), na=False)]
-    if grp_sel and grp_sel != "(Todos)":
-        grp_norm_sel = _norm_txt(grp_sel)
-        df_scope = df_scope[df_scope["_grp_norm"].str.contains(re.escape(grp_norm_sel), na=False)]
+                # Fallback: se não encontrou nada com match exato (muito comum por variações de pontuação),
+                # tenta um match "contém" usando o texto normalizado.
+                if df_scope.empty and (fam_sel != "(Todas)" or grp_sel != "(Todos)"):
+                    df_scope = dfp.copy()
+                    if fam_sel and fam_sel != "(Todas)":
+                        fam_norm_sel = _norm_txt(fam_sel)
+                        df_scope = df_scope[df_scope["_fam_norm"].str.contains(re.escape(fam_norm_sel), na=False)]
+                    if grp_sel and grp_sel != "(Todos)":
+                        grp_norm_sel = _norm_txt(grp_sel)
+                        df_scope = df_scope[df_scope["_grp_norm"].str.contains(re.escape(grp_norm_sel), na=False)]
 
 
                 # Pendentes: heurística - não entregue OU qtde_pendente > 0
