@@ -126,6 +126,74 @@ section[data-testid="stSidebar"] .fu-sidebar-toggle div.stButton > button{
   padding: 0 !important;
   font-size: 22px !important;
 }
+/* ===== OVERRIDE: Sidebar compacta mais densa (estilo Linear) ===== */
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
+  padding-top: 6px !important;
+}
+
+/* menu compacto: alinhado ao topo e com espaçamento menor */
+section[data-testid="stSidebar"] .fu-compact-nav{
+  flex: 1 1 auto !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  padding: 6px 6px 10px 6px !important;
+}
+
+/* wrapper ativo sem aumentar espaço */
+section[data-testid="stSidebar"] .fu-compact-active{
+  padding: 4px !important;
+  border-radius: 20px !important;
+}
+
+/* Botões (tamanho uniforme) */
+section[data-testid="stSidebar"] .fu-sidebar-toggle div.stButton,
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton{
+  width: 60px !important;
+  margin: 0 !important;
+}
+
+section[data-testid="stSidebar"] .fu-sidebar-toggle div.stButton > button,
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton > button{
+  width: 60px !important;
+  height: 60px !important;
+  border-radius: 18px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+
+  font-size: 25px !important;
+  font-weight: 800 !important;
+
+  font-family: ui-sans-serif, system-ui, "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", "Noto Sans Symbols", sans-serif !important;
+}
+
+/* Hover e ativo */
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton > button:hover{
+  border-color: rgba(239,68,68,0.35) !important;
+  background: rgba(239,68,68,0.10) !important;
+  color: rgba(239,68,68,0.95) !important;
+}
+section[data-testid="stSidebar"] .fu-compact-active div.stButton > button{
+  border-color: rgba(239,68,68,0.55) !important;
+  background: rgba(239,68,68,0.95) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(239,68,68,0.18) !important;
+}
+
+/* Footer no rodapé e mais compacto */
+section[data-testid="stSidebar"] .fu-sidebar-footer{
+  margin-top: auto !important;
+  padding: 8px 0 10px 0 !important;
+}
+section[data-testid="stSidebar"] hr{
+  margin: 10px 0 !important;
+  opacity: 0.22 !important;
+}
 </style>
 
 """, unsafe_allow_html=True)
