@@ -275,37 +275,11 @@ except Exception:
 
 
 
-# --- Detecta viewport (mobile) e seta parâmetro na URL para default colapsado ---
-components.html(
-    """
-    <script>
-      (function(){
-        try{
-          const isMobile = window.innerWidth < 900;
-          const url = new URL(window.location.href);
-          const params = url.searchParams;
-
-          // Evita loop: só seta uma vez por sessão do navegador
-          const already = window.localStorage.getItem("fu_mobile_detected") === "1";
-
-          if(isMobile && !already && !params.has("fu_mobile")){
-            params.set("fu_mobile","1");
-            url.search = params.toString();
-            window.localStorage.setItem("fu_mobile_detected","1");
-            window.location.replace(url.toString());
-          }
-        }catch(e){}
-      })();
-    </script>
-    """,
-    height=0,
-)
-
-# --- Responsividade global (zoom/mobile) + Sidebar colapsável ---
+# --- Sidebar fixa (sem modo colapsado) ---
 if "fu_sidebar_hidden" not in st.session_state:
-    # Se detectar mobile (via query param), começa com sidebar recolhida
-    is_mobile_default = bool(st.query_params.get("fu_mobile"))
-    st.session_state.fu_sidebar_hidden = True if is_mobile_default else False
+    st.session_state.fu_sidebar_hidden = False
+else:
+    st.session_state.fu_sidebar_hidden = False
 
 def _fu_inject_global_css(sidebar_hidden: bool) -> None:
     """Injeta CSS global e regras de sidebar colapsada."""
@@ -1441,7 +1415,7 @@ def main():
         _sync_empresa_nome(tenant_id, tenant_opts)
 
     # Se o usuário tiver mais de uma empresa, permite escolher
-    if tenant_opts and len(tenant_opts) > 1 and not st.session_state.get("fu_sidebar_hidden"):
+    if tenant_opts and len(tenant_opts) > 1:
         with st.sidebar:
             nomes = {t["tenant_id"]: (t.get("nome") or t["tenant_id"]) for t in tenant_opts}
             current = st.session_state.get("tenant_id") or tenant_opts[0]["tenant_id"]
@@ -1476,7 +1450,7 @@ def main():
 
     # ===== Filtro global por Almoxarifado (contexto do app) =====
     # Mostra apenas quando a sidebar está expandida (evita “prensar” no modo compacto/mobile).
-    if not st.session_state.get("fu_sidebar_hidden"):
+    if True:
         with st.sidebar:
             st.markdown("### Contexto")
             almox_list = _fetch_almoxarifados_tenant(supabase, tenant_id)
@@ -1539,28 +1513,12 @@ def main():
 
     # ===== Sidebar topo + menus (SEM botão sair/creditos aqui) =====
     with st.sidebar:
-        # Toggle: colapsar/expandir (hamburger)
-        is_hidden = bool(st.session_state.get("fu_sidebar_hidden"))
-        btn_lbl = "☰" if is_hidden else "✕"
-        btn_help = "Expandir menu lateral" if is_hidden else "Colapsar menu lateral"
-
-        st.markdown('<div class="fu-sidebar-toggle">', unsafe_allow_html=True)
-        if st.button(btn_lbl, help=btn_help, key="fu_sidebar_toggle"):
-            st.session_state.fu_sidebar_hidden = (not is_hidden)
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
         usuario = st.session_state.get("usuario") or {}
         perfil = (usuario.get("perfil") or "").lower()
         is_admin = perfil == "admin"
-        if st.session_state.get("fu_sidebar_hidden"):
-            _fu_render_compact_sidebar(
-                total_alertas=total_alertas,
-                is_admin=is_admin,
-                is_superadmin=bool(st.session_state.get("is_superadmin")),
-            )
 
-        if not st.session_state.get("fu_sidebar_hidden"):
+        if True:
             usuario = st.session_state.get("usuario") or {}
             nome = usuario.get("nome", "Usuário")
             perfil = (usuario.get("perfil") or "user").lower()
