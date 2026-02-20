@@ -610,6 +610,13 @@ def exibir_consulta_pedidos(_supabase):
     st.session_state.setdefault("consulta_tab", "Lista")
     st.session_state.setdefault("consulta_tab_target", None)
 
+    # Se alguma ação pediu troca de aba (ex.: clique em linha), aplica ANTES de criar o widget st.radio
+    target_tab = st.session_state.get("consulta_tab_target")
+    if target_tab:
+        st.session_state["consulta_tab"] = target_tab
+        st.session_state["consulta_tab_target"] = None
+
+
     # Top controls (executivo): Navegação + Filtro rápido na mesma linha
     # =========================
     st.markdown(
@@ -708,9 +715,6 @@ def exibir_consulta_pedidos(_supabase):
             on_change=_apply_quick_from_control,
         )
         st.markdown("</div></div>", unsafe_allow_html=True)
-    if st.session_state.get("consulta_tab_target"):
-        st.session_state["consulta_tab"] = st.session_state.get("consulta_tab_target")
-        st.session_state["consulta_tab_target"] = None
     # =========================
     # TAB: LISTA (principal)
     # =========================
