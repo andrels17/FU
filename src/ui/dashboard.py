@@ -67,15 +67,35 @@ def _apply_dashboard_filters(df: pd.DataFrame) -> pd.DataFrame:
                 )
                 deptos = sorted([d for d in deptos.unique().tolist() if d])
                 dept_sel = st.multiselect("Departamento", deptos, default=st.session_state.get("dash_dept", []), key="dash_dept")
-
-            # Fornecedor
+            # Estado (UF)
             with c3:
-                forn = (
-                    df.get("fornecedor_nome", pd.Series(dtype=str))
-                    .dropna().astype(str).str.strip()
+                uf_series = (
+                    df.get("fornecedor_uf", pd.Series(dtype=str))
+                    .dropna()
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
                 )
-                forn = sorted([f for f in forn.unique().tolist() if f])
-                forn_sel = st.multiselect("Fornecedor", forn, default=st.session_state.get("dash_forn", []), key="dash_forn")
+                # Contagem por UF para exibir "SP (120 pedidos)" e ordenar por quantidade
+                uf_counts = uf_series.value_counts()
+                uf_sorted = uf_counts.index.tolist()  # já vem ordenado desc
+                uf_label = {uf: f"{uf} ({int(uf_counts[uf])} pedidos)" for uf in uf_sorted}
+
+                options = [uf_label[uf] for uf in uf_sorted]
+                # default guarda os códigos (["SP","MG"...]) para não quebrar se a contagem mudar
+                default_ufs = st.session_state.get("dash_uf", [])
+                default_labels = [uf_label[u] for u in default_ufs if u in uf_label]
+
+                sel_labels = st.multiselect(
+                    "Estado (UF)",
+                    options,
+                    default=default_labels,
+                    key="dash_uf_labels",
+                )
+
+                # Converter labels selecionados de volta para UF (antes do primeiro espaço)
+                uf_sel = [s.split(" ", 1)[0].strip().upper() for s in (sel_labels or []) if isinstance(s, str) and s.strip()]
+                st.session_state["dash_uf"] = uf_sel
 
             # Status + pendentes
             with c4:
@@ -95,7 +115,7 @@ def _apply_dashboard_filters(df: pd.DataFrame) -> pd.DataFrame:
 
     # Limpar filtros
     if limpar:
-        for k in ["dash_periodo", "dash_dept", "dash_forn", "dash_status", "dash_only_pending"]:
+        for k in ["dash_periodo", "dash_dept", "dash_uf", "dash_uf_labels", "dash_status", "dash_only_pending"]:
             if k in st.session_state:
                 del st.session_state[k]
         st.session_state.dash_filters_applied = False
@@ -119,16 +139,14 @@ def _apply_dashboard_filters(df: pd.DataFrame) -> pd.DataFrame:
             dias = int(str(st.session_state.get("dash_periodo", "30 dias")).split()[0])
             ini = pd.Timestamp.now().normalize() - pd.Timedelta(days=dias)
             out = out.loc[base_dt >= ini]
-
         dept_sel = st.session_state.get("dash_dept", [])
-        forn_sel = st.session_state.get("dash_forn", [])
+        uf_sel = st.session_state.get("dash_uf", [])
         status_sel = st.session_state.get("dash_status", [])
         somente_pendentes = st.session_state.get("dash_only_pending", True)
-
         if dept_sel and "departamento" in out.columns:
             out = out[out["departamento"].astype(str).str.strip().isin(dept_sel)]
-        if forn_sel and "fornecedor_nome" in out.columns:
-            out = out[out["fornecedor_nome"].astype(str).str.strip().isin(forn_sel)]
+        if uf_sel and "fornecedor_uf" in out.columns:
+            out = out[out["fornecedor_uf"].astype(str).str.strip().str.upper().isin(uf_sel)]
         if status_sel and "status" in out.columns:
             out = out[out["status"].astype(str).str.strip().isin(status_sel)]
 
