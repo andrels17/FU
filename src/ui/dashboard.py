@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import time
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -129,30 +131,44 @@ def _apply_dashboard_filters(df: pd.DataFrame) -> pd.DataFrame:
 
     # Aplicar (quando clicar Gerar, ou se já aplicado antes)
     if gerar or not st.session_state.get("dash_df_view_ready", False):
-        out = df.copy()
+        # UX premium: feedback leve ao gerar dashboard
+        if gerar:
+            st.toast("Gerando dashboard…", icon="⏳")
+        
+        # Barra de progresso curtinha (sensação de fluidez)
+        prog = st.progress(0, text="Processando filtros…")
+        for i in range(20, 101, 20):
+            prog.progress(i, text="Processando filtros…")
+            time.sleep(0.03)
+        prog.empty()
+        
+        with st.spinner("Calculando indicadores e gráficos…"):
+            out = df.copy()
 
-        # Aplicar período com base em data_oc (se existir) senão previsao_entrega
-        base_dt = _dt_series(out, "data_oc")
-        if base_dt.isna().all():
-            base_dt = _dt_series(out, "previsao_entrega")
-        if not base_dt.isna().all() and st.session_state.get("dash_periodo", "30 dias") != "Tudo":
-            dias = int(str(st.session_state.get("dash_periodo", "30 dias")).split()[0])
-            ini = pd.Timestamp.now().normalize() - pd.Timedelta(days=dias)
-            out = out.loc[base_dt >= ini]
-        dept_sel = st.session_state.get("dash_dept", [])
-        uf_sel = st.session_state.get("dash_uf", [])
-        status_sel = st.session_state.get("dash_status", [])
-        somente_pendentes = st.session_state.get("dash_only_pending", True)
-        if dept_sel and "departamento" in out.columns:
-            out = out[out["departamento"].astype(str).str.strip().isin(dept_sel)]
-        if uf_sel and "fornecedor_uf" in out.columns:
-            out = out[out["fornecedor_uf"].astype(str).str.strip().str.upper().isin(uf_sel)]
-        if status_sel and "status" in out.columns:
-            out = out[out["status"].astype(str).str.strip().isin(status_sel)]
+            # Aplicar período com base em data_oc (se existir) senão previsao_entrega
+            base_dt = _dt_series(out, "data_oc")
+            if base_dt.isna().all():
+                base_dt = _dt_series(out, "previsao_entrega")
+            if not base_dt.isna().all() and st.session_state.get("dash_periodo", "30 dias") != "Tudo":
+                dias = int(str(st.session_state.get("dash_periodo", "30 dias")).split()[0])
+                ini = pd.Timestamp.now().normalize() - pd.Timedelta(days=dias)
+                out = out.loc[base_dt >= ini]
+            dept_sel = st.session_state.get("dash_dept", [])
+            uf_sel = st.session_state.get("dash_uf", [])
+            status_sel = st.session_state.get("dash_status", [])
+            somente_pendentes = st.session_state.get("dash_only_pending", True)
+            if dept_sel and "departamento" in out.columns:
+                out = out[out["departamento"].astype(str).str.strip().isin(dept_sel)]
+            if uf_sel and "fornecedor_uf" in out.columns:
+                out = out[out["fornecedor_uf"].astype(str).str.strip().str.upper().isin(uf_sel)]
+            if status_sel and "status" in out.columns:
+                out = out[out["status"].astype(str).str.strip().isin(status_sel)]
 
-        if somente_pendentes and "entregue" in out.columns:
-            entregue = _normalize_bool_series(out["entregue"])
-            out = out[~entregue]
+            if somente_pendentes and "entregue" in out.columns:
+                entregue = _normalize_bool_series(out["entregue"])
+                out = out[~entregue]
+            if gerar:
+                st.toast("Dashboard atualizado ✅", icon="✅")
 
         st.session_state["dash_df_view"] = out
         st.session_state.dash_filters_applied = True
@@ -531,4 +547,3 @@ def exibir_dashboard(_supabase):
 # ============================================
 # PÁGINA DE MAPA GEOGRÁFICO (NOVA VERSÃO)
 # ============================================
-
