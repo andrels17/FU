@@ -133,6 +133,28 @@ def _status_html(status: str) -> str:
 
     return f"<span class='{cls}'>{s or '—'}</span>"
 
+
+
+def _fu_show_desc_dialog(desc: str, meta: str = "") -> None:
+    """Mostra a descrição completa em um dialog (se disponível) ou expander (fallback).
+    Chamado após clique no botão '⋯' da lista ERP.
+    """
+    desc = (desc or "").strip()
+    meta = (meta or "").strip()
+    try:
+        @st.dialog("Descrição completa")
+        def _dlg():
+            if meta:
+                st.caption(meta)
+            st.write(desc if desc else "—")
+        _dlg()
+    except Exception:
+        with st.expander("Descrição completa", expanded=True):
+            if meta:
+                st.caption(meta)
+            st.write(desc if desc else "—")
+
+
 def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str | None:
     """Renderiza uma lista estilo ERP com botão 👁️ por linha (seleção única, intuitiva).
     Retorna o pid (id) quando o usuário clicar em 👁️, senão None.
