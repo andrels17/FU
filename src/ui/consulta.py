@@ -462,7 +462,8 @@ def _inject_consulta_css():
 h1, h2, h3 { letter-spacing: .2px; }
 [data-testid="stMetric"] { padding: .6rem .75rem; border-radius: 14px; }
 [data-testid="stMetric"] > div { gap: .1rem; }
-div.stButton > button { border-radius: 12px; height: 2.6rem; }
+div.stButton > button { border-radius: 12px; height: 2.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+div[data-testid="stButton"]{ min-width: 0 !important; }
 div[data-testid="stHorizontalBlock"] { align-items: center; }
 /* Fixar colunas principais no Data Editor (ERP-like v2) */
 [data-testid="stDataEditor"] [role="columnheader"],
@@ -715,26 +716,6 @@ def exibir_consulta_pedidos(_supabase):
 
             st.caption("Atalhos rápidos")
 
-            st.markdown("""
-            <style>
-              /* Atalhos rápidos: evita quebra feia (Atrasa
- dos) */
-              .fu-quick-actions div[data-testid="stButton"] > button{
-                white-space: nowrap !important;
-                word-break: keep-all !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
-                font-size: 0.88rem !important;
-                height: 2.45rem !important;
-                padding: 0.35rem 0.6rem !important;
-                border-radius: 14px !important;
-              }
-              .fu-quick-actions div[data-testid="stButton"]{ min-width: 0 !important; }
-              .fu-quick-actions [data-testid="stCaptionContainer"]{ margin-bottom: 0.25rem !important; }
-            </style>
-            <div class="fu-quick-actions">
-            """, unsafe_allow_html=True)
-
             # Chips em 2 linhas (fica bom no desktop e não espreme no mobile)
             r1 = st.columns(3)
             r2 = st.columns(2)
@@ -779,8 +760,6 @@ def exibir_consulta_pedidos(_supabase):
                 label_visibility="collapsed",
                 on_change=_apply_preset_from_selectbox,
             )
-
-            st.markdown("</div>", unsafe_allow_html=True)
 
         # Aplicar filtros (sem “fake rerun”)
         df_f = _apply_filters(
