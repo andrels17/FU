@@ -46,7 +46,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
 }
 .fu-compact-nav{
   flex: 1 1 auto;
-  justify-content: center;
+  justify-content: flex-start;
 }
 .fu-sidebar-footer{
   margin-top: auto;
@@ -203,14 +203,14 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         /* ===== Sidebar toggle (hamburger) ===== */
         .fu-sidebar-toggle{ display:flex; justify-content:flex-start; margin: 4px 0 10px 0; }
         .fu-sidebar-toggle .stButton > button{
-          width: 46px !important;
-          height: 46px !important;
-          border-radius: 14px !important;
+          width: 64px !important;
+          height: 64px !important;
+          border-radius: 18px !important;
           padding: 0 !important;
           display:flex !important;
           align-items:center !important;
           justify-content:center !important;
-          font-size: 20px !important;
+          font-size: 22px !important;
           line-height: 1 !important;
           border: 1px solid rgba(255,255,255,0.12) !important;
           background: rgba(255,255,255,0.05) !important;
@@ -226,8 +226,8 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
         .fu-compact-nav{
           display:flex;
           flex-direction:column;
-          gap: 10px;
-          padding: 6px 4px 10px 4px;
+          gap: 12px;
+          padding: 6px 6px 10px 6px;
           align-items:center;
         }
         .fu-compact-row{
@@ -239,14 +239,14 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
 
         /* ===== Compact sidebar (glyph buttons): branco / hover vermelho / ativo vermelho ===== */
         .fu-compact-nav .stButton > button{
-          width: 52px !important;
-          height: 52px !important;
-          border-radius: 14px !important;
+          width: 64px !important;
+          height: 64px !important;
+          border-radius: 18px !important;
           padding: 0 !important;
           display:flex !important;
           align-items:center !important;
           justify-content:center !important;
-          font-size: 20px !important;
+          font-size: 26px !important;
           line-height: 1 !important;
           color: rgba(255,255,255,0.92) !important;
           border: 1px solid rgba(255,255,255,0.10) !important;
