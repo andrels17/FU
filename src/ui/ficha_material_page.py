@@ -61,29 +61,59 @@ def _carregar_pedidos_cache(_supabase):
 @st.cache_data(ttl=300)
 def _carregar_catalogo_materiais_cache(_supabase, tenant_id: str | None) -> pd.DataFrame:
     """Carrega catálogo `materiais` do Supabase (por tenant) para enriquecer a ficha e permitir análise por família/grupo."""
+    # Em alguns fluxos (ex.: superadmin / navegação direta) o tenant_id pode não estar populado.
+    # Tentamos recuperar de outros campos conhecidos antes de desistir.
     if not tenant_id:
-        return pd.DataFrame()
+        tenant_id = (
+            st.session_state.get("tenant_id")
+            or (st.session_state.get("usuario") or {}).get("tenant_id")
+            or st.session_state.get("tenant")
+            or st.session_state.get("tenant_uuid")
+        )
     try:
-        res = (
+        q = (
             _supabase.table("materiais")
             .select("codigo_material,descricao,unidade,almoxarifado,familia_descricao,grupo_descricao,tipo_material,origem")
-            .eq("tenant_id", tenant_id)
             .limit(20000)
-            .execute()
         )
+        # Se tivermos tenant_id, filtramos. Se não, trazemos o máximo permitido pela RLS do usuário.
+        if tenant_id:
+            q = q.eq("tenant_id", tenant_id)
+        res = q.execute()
         return pd.DataFrame(res.data or [])
     except Exception:
         return pd.DataFrame()
 
 
 def _norm_code(x) -> str:
-    """Normaliza código para string numérica (remove não-dígitos) para casar pedidos <-> catálogo."""
+    """Normaliza código para string numérica (remove não-dígitos) para casar pedidos <-> catálogo.
+
+    Importante: evita o bug clássico de float em string (ex.: 857.0 -> "8570").
+    """
     import re
+
     if x is None:
         return ""
+
+    # Trata numéricos
+    try:
+        if isinstance(x, int):
+            return str(int(x))
+        if isinstance(x, float):
+            if pd.notna(x) and float(x).is_integer():
+                return str(int(x))
+    except Exception:
+        pass
+
     s = str(x).strip()
     if not s or s.lower() in ("nan", "none"):
         return ""
+
+    # Strings tipo "857.0" ou "857,0" → "857"
+    s2 = s.replace(",", ".")
+    if re.fullmatch(r"\d+\.0+", s2):
+        s = s2.split(".")[0]
+
     return re.sub(r"\D+", "", s)
 
 
