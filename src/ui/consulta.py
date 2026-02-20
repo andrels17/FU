@@ -135,26 +135,6 @@ def _status_html(status: str) -> str:
 
 
 
-def _fu_show_desc_dialog(desc: str, meta: str = "") -> None:
-    """Mostra a descrição completa em um dialog (se disponível) ou expander (fallback).
-    Chamado após clique no botão '⋯' da lista ERP.
-    """
-    desc = (desc or "").strip()
-    meta = (meta or "").strip()
-    try:
-        @st.dialog("Descrição completa")
-        def _dlg():
-            if meta:
-                st.caption(meta)
-            st.write(desc if desc else "—")
-        _dlg()
-    except Exception:
-        with st.expander("Descrição completa", expanded=True):
-            if meta:
-                st.caption(meta)
-            st.write(desc if desc else "—")
-
-
 def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str | None:
     """Renderiza uma lista estilo ERP com botão 👁️ por linha (seleção única, intuitiva).
     Retorna o pid (id) quando o usuário clicar em 👁️, senão None.
@@ -245,15 +225,8 @@ def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str 
             MAX_DESC = 55  # limita visual para não invadir outras colunas
             short = (desc[: MAX_DESC - 1] + "…") if len(desc) > MAX_DESC else desc
             label = short or "—"
-
-            cc = st.columns([0.88, 0.12])
-            with cc[0]:
-                if st.button(label, key=f"row_{pid}", help="Abrir ações deste pedido", use_container_width=True):
-                    return pid
-            with cc[1]:
-                if st.button("⋯", key=f"desc_{pid}", help="Ver descrição completa", use_container_width=True):
-                    meta = f"OC: {oc or '—'} • Solic.: {sol or '—'} • Dept.: {depto or '—'}"
-                    _fu_show_desc_dialog(desc, meta)
+            if st.button(label, key=f"row_{pid}", help="Abrir ações deste pedido", use_container_width=True):
+                return pid
 
         with c[3]:
             st.caption(f"{oc or '—'} / {sol or '—'}")
