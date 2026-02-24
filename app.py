@@ -5,6 +5,198 @@ st.set_page_config(
     layout="wide",
     page_icon="📊",
 )
+st.markdown("""
+<style>
+/* ===== Layout / spacing (global) ===== */
+.block-container{
+  padding-top: 1.0rem;
+  padding-bottom: 1.0rem;
+  padding-left: 1.0rem;
+  padding-right: 1.0rem;
+  /* evita que o conteúdo “estoure” em telas grandes mas mantém fluido */
+  max-width: 1600px;
+}
+
+/* Tipografia um pouco mais confortável em 100% zoom */
+html, body, [class*="css"]  { font-size: 15px; }
+
+/* Radios/labels mais compactos */
+div[role="radiogroup"] label { font-size: 0.90rem !important; }
+
+/* Dataframes mais “tight” */
+[data-testid="stDataFrame"] { font-size: 0.90rem; }
+
+/* Reduz espaçamento vertical geral */
+[data-testid="stVerticalBlock"] { gap: 0.6rem; }
+
+/* Plotly: melhora leitura sem precisar reduzir zoom */
+.stPlotlyChart, .js-plotly-plot { width: 100% !important; }
+.stPlotlyChart glyph text { font-size: 12px !important; }
+
+/* Em telas menores, reduz padding lateral para sobrar espaço pro gráfico */
+@media (max-width: 1100px){
+  .block-container{ padding-left: .75rem; padding-right: .75rem; max-width: 100%; }
+}
+
+/* ===== Sidebar flex layout (compact mode) ===== */
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.fu-compact-nav{
+  flex: 1 1 auto;
+  justify-content: flex-start;
+}
+.fu-sidebar-footer{
+  margin-top: auto;
+  padding-bottom: 10px;
+}
+
+        
+/* Compact mode: separador mais discreto */
+section[data-testid="stSidebar"] hr{
+  margin: 10px 0 !important;
+  opacity: 0.35;
+}
+
+/* ===== Compact icons: força tamanho uniforme (inclusive container do botão) ===== */
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton{
+  width: 64px !important;
+}
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton > button{
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 18px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+
+  font-size: 26px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+
+  /* fontes que renderizam glyphs com tamanho consistente */
+  font-family: ui-sans-serif, system-ui, "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", "Noto Sans Symbols", sans-serif !important;
+
+  color: rgba(255,255,255,0.92) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  background: rgba(255,255,255,0.03) !important;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease !important;
+}
+
+/* Hover vermelho */
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton > button:hover{
+  transform: translateY(-1px);
+  border-color: rgba(239,68,68,0.35) !important;
+  background: rgba(239,68,68,0.10) !important;
+  color: rgba(239,68,68,0.95) !important;
+}
+
+/* Ativo vermelho cheio */
+section[data-testid="stSidebar"] .fu-compact-active div.stButton > button{
+  border-color: rgba(239,68,68,0.55) !important;
+  background: rgba(239,68,68,0.95) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(239,68,68,0.18) !important;
+}
+section[data-testid="stSidebar"] .fu-compact-active div.stButton > button:hover{
+  transform: translateY(-1px);
+  color: #ffffff !important;
+  background: rgba(239,68,68,0.95) !important;
+}
+
+/* ===== Compact layout: reduz "vazio" visual ===== */
+/* remove padding extra no topo da sidebar quando colapsada */
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
+  padding-top: 4px !important;
+}
+/* menu mais denso */
+.fu-compact-nav{
+  gap: 10px !important;
+  padding-top: 4px !important;
+}
+/* Toggle (hambúrguer/fechar) no mesmo tamanho dos ícones */
+section[data-testid="stSidebar"] .fu-sidebar-toggle div.stButton > button{
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 18px !important;
+  padding: 0 !important;
+  font-size: 22px !important;
+}
+/* ===== OVERRIDE: Sidebar compacta mais densa (estilo Linear) ===== */
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
+  padding-top: 6px !important;
+}
+
+/* menu compacto: alinhado ao topo e com espaçamento menor */
+section[data-testid="stSidebar"] .fu-compact-nav{
+  flex: 1 1 auto !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  padding: 6px 6px 10px 6px !important;
+}
+
+/* wrapper ativo sem aumentar espaço */
+section[data-testid="stSidebar"] .fu-compact-active{
+  padding: 4px !important;
+  border-radius: 20px !important;
+}
+
+/* Botões (tamanho uniforme) */
+section[data-testid="stSidebar"] .fu-sidebar-toggle div.stButton,
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton{
+  width: 60px !important;
+  margin: 0 !important;
+}
+
+section[data-testid="stSidebar"] .fu-sidebar-toggle div.stButton > button,
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton > button{
+  width: 60px !important;
+  height: 60px !important;
+  border-radius: 18px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+
+  font-size: 25px !important;
+  font-weight: 800 !important;
+
+  font-family: ui-sans-serif, system-ui, "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", "Noto Sans Symbols", sans-serif !important;
+}
+
+/* Hover e ativo */
+section[data-testid="stSidebar"] .fu-compact-nav div.stButton > button:hover{
+  border-color: rgba(239,68,68,0.35) !important;
+  background: rgba(239,68,68,0.10) !important;
+  color: rgba(239,68,68,0.95) !important;
+}
+section[data-testid="stSidebar"] .fu-compact-active div.stButton > button{
+  border-color: rgba(239,68,68,0.55) !important;
+  background: rgba(239,68,68,0.95) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(239,68,68,0.18) !important;
+}
+
+/* Footer no rodapé e mais compacto */
+section[data-testid="stSidebar"] .fu-sidebar-footer{
+  margin-top: auto !important;
+  padding: 8px 0 10px 0 !important;
+}
+section[data-testid="stSidebar"] hr{
+  margin: 10px 0 !important;
+  opacity: 0.22 !important;
+}
+</style>
+
+""", unsafe_allow_html=True)
 
 import importlib
 
@@ -109,6 +301,142 @@ if "fu_sidebar_hidden" not in st.session_state:
 else:
     st.session_state.fu_sidebar_hidden = False
 
+def _fu_inject_global_css(sidebar_hidden: bool) -> None:
+    """Injeta CSS global e regras de sidebar colapsada."""
+    collapsed_css = (
+        textwrap.dedent(
+            """
+            /* Sidebar colapsada (modo compacto) */
+            section[data-testid="stSidebar"]{
+              width: 86px !important;
+              min-width: 86px !important;
+              overflow: hidden !important;
+              contain: layout paint style;
+              will-change: width;
+              backface-visibility: hidden;
+              transform: translateZ(0);
+            }
+            section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{
+              padding-top: 10px !important;
+              padding-left: 6px !important;
+              padding-right: 6px !important;
+            }
+            """
+        ).strip()
+    ) if sidebar_hidden else ""
+
+    style = textwrap.dedent(
+        """
+        <style>
+        /* ===== Sidebar toggle (hamburger) ===== */
+        .fu-sidebar-toggle{ display:flex; justify-content:flex-start; margin: 4px 0 10px 0; }
+        .fu-sidebar-toggle .stButton > button{
+          width: 64px !important;
+          height: 64px !important;
+          border-radius: 18px !important;
+          padding: 0 !important;
+          display:flex !important;
+          align-items:center !important;
+          justify-content:center !important;
+          font-size: 22px !important;
+          line-height: 1 !important;
+          border: 1px solid rgba(255,255,255,0.12) !important;
+          background: rgba(255,255,255,0.05) !important;
+          transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease !important;
+        }
+        .fu-sidebar-toggle .stButton > button:hover{
+          transform: translateY(-1px);
+          border-color: rgba(239,68,68,0.30) !important;
+          background: rgba(239,68,68,0.10) !important;
+        }
+
+        /* ===== Compact sidebar container ===== */
+        .fu-compact-nav{
+          display:flex;
+          flex-direction:column;
+          gap: 12px;
+          padding: 6px 6px 10px 6px;
+          align-items:center;
+        }
+        .fu-compact-row{
+          width: 100%;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+        }
+
+        /* ===== Compact sidebar (glyph buttons): branco / hover vermelho / ativo vermelho ===== */
+        .fu-compact-nav .stButton > button{
+          width: 64px !important;
+          height: 64px !important;
+          border-radius: 18px !important;
+          padding: 0 !important;
+          display:flex !important;
+          align-items:center !important;
+          justify-content:center !important;
+          font-size: 26px !important;
+          line-height: 1 !important;
+          color: rgba(255,255,255,0.92) !important;
+          border: 1px solid rgba(255,255,255,0.10) !important;
+          background: rgba(255,255,255,0.03) !important;
+          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease !important;
+        }
+        .fu-compact-nav .stButton > button:hover{
+          transform: translateY(-1px);
+          border-color: rgba(239,68,68,0.35) !important;
+          background: rgba(239,68,68,0.10) !important;
+          color: rgba(239,68,68,0.95) !important;
+        }
+        .fu-compact-active .stButton > button{
+          border-color: rgba(239,68,68,0.55) !important;
+          background: rgba(239,68,68,0.95) !important;
+          color: #ffffff !important;
+          box-shadow: 0 12px 24px rgba(239,68,68,0.18) !important;
+        }
+        .fu-compact-active .stButton > button:hover{
+          transform: translateY(-1px);
+          color: #ffffff !important;
+          background: rgba(239,68,68,0.95) !important;
+        }
+
+        /* Sidebar responsiva */
+        section[data-testid="stSidebar"]{
+          width: clamp(220px, 18vw, 300px) !important;
+          overflow: hidden;
+          transition: width 160ms ease;
+          contain: layout paint style;
+          will-change: width;
+          backface-visibility: hidden;
+          transform: translateZ(0);
+        }
+        @media (max-width: 1100px){
+          section[data-testid="stSidebar"]{ width: 240px !important; }
+        }
+        @media (max-width: 900px){
+          section[data-testid="stSidebar"]{ width: 100% !important; }
+        }
+        @media (prefers-reduced-motion: reduce){
+          section[data-testid="stSidebar"]{ transition: none !important; }
+        }
+
+        /* Conta: botões full-width e alinhados */
+        section[data-testid="stSidebar"] [data-testid="stExpander"] .stButton > button{
+          width: 100% !important;
+          height: 44px !important;
+          border-radius: 12px !important;
+          padding: 0 14px !important;
+          justify-content: flex-start !important;
+          font-size: 0.95rem !important;
+        }
+
+        /* ====== COLLAPSED CSS INJECT ====== */
+        __FU_COLLAPSED_CSS__
+        </style>
+        """
+    ).replace("__FU_COLLAPSED_CSS__", collapsed_css)
+
+    st.markdown(style, unsafe_allow_html=True)
+
 def _jwt_claim_exp(token: str):
     """Extrai 'exp' (epoch seconds) do JWT sem validar assinatura."""
     try:
@@ -164,9 +492,344 @@ def _safe_len(x) -> int:
 
 
 def _industrial_sidebar_css() -> None:
-    """No-op: CSS now injected via theme.py apply_theme()."""
-    pass
+    """Tema corporativo industrial + barra lateral laranja no item ativo + animações suaves."""
+    st.markdown(
+        textwrap.dedent(r"""
+        <style>
+            :root {
+                --fu-bg: #0b1220;
+                --fu-card: rgba(255,255,255,0.06);
+                --fu-border: rgba(255,255,255,0.10);
+                --fu-text: rgba(255,255,255,0.92);
+                --fu-muted: rgba(255,255,255,0.72);
+                --fu-accent: #ef4444;      /* red */
+                --fu-accent2: #dc2626;     /* deep red */
+            }
 
+            section[data-testid="stSidebar"] {
+                background:
+                    radial-gradient(1100px 420px at 15% 0%, rgba(239,68,68,0.10), transparent 55%),
+                    radial-gradient(900px 380px at 80% 18%, rgba(59,130,246,0.10), transparent 55%),
+                    var(--fu-bg);
+            }
+
+            section[data-testid="stSidebar"] > div { padding-top: 0.8rem; }
+
+            .fu-card {
+                background: var(--fu-card);
+                border: 1px solid var(--fu-border);
+                border-radius: 14px;
+                padding: 12px 12px;
+                margin-bottom: 10px;
+                color: var(--fu-text);
+                box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+            }
+
+            .fu-user-label { font-size: 12px; opacity: .8; margin: 0 0 4px 0; }
+            .fu-user-name { font-size: 16px; font-weight: 800; margin: 0; letter-spacing: .2px; }
+            .fu-user-role { font-size: 12px; opacity: .75; margin: 4px 0 0 0; }
+
+            /* Mini KPIs (grid 2x2, mobile friendly) */
+            .fu-kpi-grid{
+                display:grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap:8px;
+                margin: 8px 0 12px 0;
+            }
+            @media (max-width: 420px){
+                .fu-kpi-grid{ grid-template-columns: 1fr; }
+            }
+            .fu-kpi{
+                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 12px;
+                padding: 10px 10px;
+                min-height: 64px;
+                display:flex;
+                flex-direction:column;
+                justify-content:center;
+            }
+            .fu-kpi-title{ font-size: 11px; opacity: .80; margin: 0 0 2px 0; line-height: 1.05; }
+            .fu-kpi-value{ font-size: 18px; font-weight: 900; margin: 0; line-height: 1.05; }
+
+/* KPIs responsivos (evita “prensar” em mobile) */
+@media (max-width: 520px){
+    .fu-kpi-row{ flex-wrap: wrap; }
+    .fu-kpi{ flex: 1 1 calc(50% - 8px); }
+    .fu-kpi:last-child{ flex: 1 1 100%; }
+    .fu-kpi-value{ font-size: 20px; }
+}
+@media (max-width: 380px){
+    .fu-kpi{ flex: 1 1 100%; }
+}
+
+            /* Menu radio */
+            div[role="radiogroup"] label {
+                padding: 10px 12px;
+                border-radius: 12px;
+                margin-bottom: 6px;
+                transition: transform .12s ease, background-color .12s ease, border .12s ease;
+                border: 1px solid transparent;
+            }
+            div[role="radiogroup"] label:hover {
+                background-color: rgba(255,255,255,0.06);
+                transform: translateX(2px);
+                border: 1px solid rgba(239,68,68,0.14);
+            }
+
+            /* Item ativo: barra laranja + glow SaaS */
+            div[role="radiogroup"] input:checked + div {
+                background: linear-gradient(135deg, rgba(239,68,68,0.18), rgba(255,255,255,0.04));
+                border-radius: 12px;
+                box-shadow:
+                  inset 4px 0 0 var(--fu-accent),
+                  0 0 0 1px rgba(239,68,68,0.16),
+                  0 10px 26px rgba(239,68,68,0.10);
+            }
+
+            /* Expanders */
+            details {
+                background: rgba(255,255,255,0.02);
+                border: 1px solid rgba(255,255,255,0.06);
+                border-radius: 14px;
+                padding: 6px 10px;
+                margin-bottom: 10px;
+            }
+            summary { cursor: pointer; font-weight: 900; color: var(--fu-text); }
+
+            /* Destaque do grupo ativo (wrapper dentro do expander) */
+            .fu-expander-active {
+                border: 1px solid rgba(239,68,68,0.22);
+                background: linear-gradient(135deg, rgba(239,68,68,0.06), rgba(255,255,255,0.02));
+                border-radius: 14px;
+                padding: 6px 6px 2px 6px;
+                margin-top: 6px;
+            }
+
+            /* Botões */
+            button[kind="secondary"] {
+                background-color: rgba(255,255,255,0.06);
+                border: 1px solid rgba(255,255,255,0.12);
+                transition: transform .08s ease;
+            }
+            button[kind="secondary"]:hover { transform: translateY(-1px); }
+
+            .fu-bar {
+                height: 3px;
+                border-radius: 999px;
+                background: linear-gradient(90deg, var(--fu-accent), rgba(251,146,60,0.0));
+                margin: 10px 0 8px 0;
+                opacity: .9;
+            }
+        
+            /* ===== Menu Operações / Gestão (botões SaaS) ===== */
+            .fu-nav details{
+                background: rgba(255,255,255,0.03);
+                border: 1px solid rgba(255,255,255,0.07);
+                border-radius: 16px;
+                padding: 8px 10px;
+                margin-bottom: 10px;
+            }
+            .fu-nav summary{
+                font-weight: 900;
+                font-size: 0.95rem;
+                opacity: .92;
+            }
+            .fu-nav .fu-nav-group{
+                margin-top: 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .fu-nav .fu-nav-row{
+                display:flex;
+                align-items:center;
+                gap: 10px;
+            }
+            .fu-nav .fu-nav-dot{
+                width: 6px;
+                height: 10px;
+                border-radius: 999px;
+                background: rgba(255,255,255,0.12);
+            }
+            .fu-nav .fu-nav-dot--active{
+                height: 22px;
+                background: rgba(239,68,68,0.95);
+                box-shadow: 0 0 0 1px rgba(239,68,68,0.18);
+            }
+
+            /* Botões do menu (somente dentro da fu-nav) */
+            .fu-nav .stButton > button{
+                width: 100% !important;
+                height: 44px !important;
+                border-radius: 14px !important;
+                padding: 0 14px !important;
+                justify-content: flex-start !important;
+                font-weight: 800 !important;
+                border: 1px solid rgba(255,255,255,0.10) !important;
+                background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)) !important;
+                transition: transform 90ms ease, border-color 120ms ease, background 120ms ease !important;
+            }
+            .fu-nav .stButton > button:hover{
+    transform: translateY(-1px);
+    border-color: rgba(239,68,68,0.22) !important;
+    background: rgba(239,68,68,0.06) !important;
+}
+
+            
+            /* Item (alinhado) */
+            .fu-nav .fu-nav-item{
+                position: relative;
+            }
+            .fu-nav .fu-nav-item .stButton > button{
+                /* garante alinhamento perfeito sem coluna de “dot” */
+                padding-left: 16px !important;
+            }
+            .fu-nav .fu-nav-item--active{
+                border-radius: 16px;
+                padding: 4px;
+                background: rgba(0,0,0,0);
+                border: 1px solid rgba(239,68,68,0.14);
+                box-shadow: 0 10px 22px rgba(239,68,68,0.08);
+            }
+            .fu-nav .fu-nav-item--active::before{
+                content: "";
+                position: absolute;
+                left: 8px;
+                top: 16px;
+                width: 4px;
+                height: 22px;
+                border-radius: 999px;
+                background: rgba(239,68,68,0.95);
+                box-shadow: 0 0 0 1px rgba(239,68,68,0.18);
+            }
+
+
+/* Wrapper do ativo — Minimalista (Notion) */
+            .fu-nav .fu-nav-active{
+                position: relative;
+                border-radius: 14px;
+                padding: 4px;
+                background: rgba(0,0,0,0);
+                border: 1px solid rgba(239,68,68,0.14);
+                box-shadow: none;
+                transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
+            }
+            .fu-nav .fu-nav-active::before{
+                content: "";
+                position: absolute;
+                left: -6px;
+                top: 10px;
+                width: 3px;
+                height: calc(100% - 20px);
+                border-radius: 999px;
+                background: linear-gradient(180deg, rgba(239,68,68,1), rgba(220,38,38,1));
+                transition: height 140ms ease, top 140ms ease, opacity 140ms ease;
+            }
+            .fu-nav .fu-nav-active .stButton > button{
+                font-weight: 800 !important;
+            }
+
+/* Nav: otimização mobile (mais espaço e menos travamento) */
+@media (max-width: 520px){
+    .fu-nav .fu-nav-dot{ display:none; }
+    .fu-nav .fu-nav-row{ gap: 0; }
+    .fu-nav .stButton > button{
+        height: 48px !important;
+        border-radius: 16px !important;
+        padding: 0 12px !important;
+        font-size: 0.98rem !important;
+    }
+}
+
+/* Conta: botões com melhor toque */
+.fu-account .stButton > button{
+    width: 100% !important;
+    height: 46px !important;
+    border-radius: 16px !important;
+    padding: 0 14px !important;
+    justify-content: flex-start !important;
+    font-weight: 850 !important;
+    border: 1px solid rgba(255,255,255,0.10) !important;
+    background: rgba(255,255,255,0.04) !important;
+    transition: transform 90ms ease, border-color 120ms ease, background 120ms ease !important;
+}
+.fu-account .stButton > button:hover{
+    transform: translateY(-1px);
+    border-color: rgba(59,130,246,0.25) !important;
+    background: rgba(255,255,255,0.06) !important;
+}
+
+
+/* ===== Menu scroll interno + headers fixos ===== */
+.fu-menu-scroll{
+    max-height: calc(100vh - 430px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+}
+@media (max-width: 900px){
+    .fu-menu-scroll{ max-height: calc(100vh - 380px); }
+}
+.fu-menu-scroll::-webkit-scrollbar{ width: 8px; }
+.fu-menu-scroll::-webkit-scrollbar-thumb{
+    background: rgba(255,255,255,0.10);
+    border-radius: 999px;
+}
+.fu-group{
+    margin: 10px 0 12px 0;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.02);
+    border-radius: 16px;
+    overflow: hidden;
+}
+.fu-group--active{
+    border-color: rgba(239,68,68,0.18);
+    box-shadow: 0 12px 24px rgba(239,68,68,0.08);
+}
+.fu-group-h{
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 10px 12px;
+    font-weight: 900;
+    font-size: 0.92rem;
+    letter-spacing: .2px;
+    background: rgba(11,18,32,0.88);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.fu-group-b{
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+
+
+/* ===== Identidade Vermelha global (minimalista) ===== */
+button[kind="primary"]{
+    background: rgba(239,68,68,0.92) !important;
+    border: 1px solid rgba(239,68,68,0.55) !important;
+    color: #fff !important;
+    box-shadow: none !important;
+}
+button[kind="primary"]:hover{
+    background: rgba(239,68,68,1) !important;
+    border-color: rgba(239,68,68,0.75) !important;
+}
+button[kind="secondary"]:hover{
+    border-color: rgba(239,68,68,0.25) !important;
+    background: rgba(239,68,68,0.05) !important;
+}
+/* Links */
+a, a:visited{ color: rgba(239,68,68,0.82); }
+a:hover{ color: rgba(239,68,68,1); }
+</style>
+        """),
+        unsafe_allow_html=True,
+    )
 
 def _label_alertas(total_alertas: int) -> str:
     """Label visual de Alertas (sem emoji) com contagem quando houver."""
@@ -487,38 +1150,6 @@ def _norm_txt(s: str) -> str:
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
     return s
 
-def _nav_button_row(page_id: str, group: str, total_alertas: int = 0) -> None:
-    """Linha de navegação (HTML link) com destaque ativo via CSS.
-
-    Renderiza como <a href='?nav=...'> para permitir estilo consistente e navegação
-    por query param (já tratado no main()).
-    """
-    current = st.session_state.get("current_page") or "home"
-    active = (page_id == current)
-
-    # Badge separado (evita "quebrar" o retângulo quando o label cresce)
-    badge_html = ""
-    label_text = PAGE_LABELS.get(page_id, page_id)
-
-    if page_id == "alerts":
-        try:
-            n = int(total_alertas or 0)
-        except Exception:
-            n = 0
-        label_text = "Alertas"
-        if n > 0:
-            badge_html = f"<span class='fu-nav-badge'>{n}</span>"
-
-    # Mantém grupo apenas para rastreio futuro (logs/telemetria)
-    _ = group
-
-    cls = "fu-nav-item fu-nav-item--active" if active else "fu-nav-item"
-    st.markdown(
-        f"<a class='{cls}' href='?nav={page_id}'><span class='fu-nav-label'>{label_text}</span>{badge_html}</a>",
-        unsafe_allow_html=True,
-    )
-
-
 def main():
 
     # 🔒 Garante estrutura mínima de sessão (evita AttributeError)
@@ -532,141 +1163,6 @@ def main():
         apply_ui_theme()
     except Exception:
         pass
-
-    # Sidebar SaaS polish (menus + cards)
-    st.markdown('''
-    <style>
-    /* ==== Sidebar containers (enterprise) ==== */
-    section[data-testid="stSidebar"] .stExpander {
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 16px;
-        background: rgba(255,255,255,0.035);
-        overflow: hidden;
-        margin: 10px 0;
-    }
-    section[data-testid="stSidebar"] .stExpander > details > summary {
-        padding: 12px 14px;
-        font-weight: 700;
-        color: rgba(255,255,255,0.92);
-        background: rgba(255,255,255,0.02);
-    }
-    section[data-testid="stSidebar"] .stExpander > details[open] > summary {
-        background: rgba(255,255,255,0.04);
-    }
-
-    /* ==== "Ficha resumo" (top summary card) ==== */
-    section[data-testid="stSidebar"] .fu-sum-card{
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 18px;
-        background: rgba(255,255,255,0.035);
-        padding: 14px 14px 12px 14px;
-        margin: 8px 0 12px 0;
-        box-shadow: 0 14px 34px rgba(0,0,0,0.30);
-    }
-    section[data-testid="stSidebar"] .fu-sum-title{
-        font-size: 12px;
-        font-weight: 750;
-        color: rgba(226,232,240,0.92);
-        margin: 0 0 8px 0;
-    }
-    section[data-testid="stSidebar"] .fu-sum-rule{
-        height: 2px;
-        width: 44px;
-        border-radius: 999px;
-        background: rgba(239,68,68,0.90);
-        margin: 6px 0 12px 0;
-    }
-    section[data-testid="stSidebar"] .fu-sum-user{
-        display:flex;
-        align-items:center;
-        gap:10px;
-        margin-bottom: 10px;
-    }
-    section[data-testid="stSidebar"] .fu-sum-avatar{
-        width: 44px; height: 44px;
-        border-radius: 999px;
-        display:flex; align-items:center; justify-content:center;
-        font-weight: 900;
-        color: rgba(15,23,42,0.95);
-        background: linear-gradient(135deg, rgba(251,191,36,0.95), rgba(245,158,11,0.95));
-        box-shadow: 0 10px 24px rgba(0,0,0,0.30);
-        flex: 0 0 auto;
-    }
-    section[data-testid="stSidebar"] .fu-sum-name{
-        font-size: 16px;
-        font-weight: 850;
-        color: rgba(255,255,255,0.94);
-        line-height: 1.05;
-        margin:0;
-    }
-    section[data-testid="stSidebar"] .fu-sum-sub{
-        display:flex;
-        align-items:center;
-        gap:8px;
-        margin-top: 4px;
-        color: rgba(148,163,184,0.95);
-        font-size: 12px;
-        font-weight: 650;
-    }
-    section[data-testid="stSidebar"] .fu-sum-pill{
-        font-size: 11px;
-        font-weight: 900;
-        padding: 3px 8px;
-        border-radius: 999px;
-        border: 1px solid rgba(239,68,68,0.35);
-        background: rgba(239,68,68,0.10);
-        color: rgba(255,255,255,0.90);
-    }
-
-    /* KPI buttons inside the summary card (estilo ficha, 2x2) */
-    section[data-testid="stSidebar"] .fu-sum-kpis div.stButton > button{
-        width: 100%;
-        border-radius: 14px;
-        border: 1px solid rgba(255,255,255,0.08);
-        background: rgba(15,23,42,0.35);
-        color: rgba(255,255,255,0.95);
-        font-weight: 800;
-        padding: 14px 12px;
-        line-height: 1.15;
-        text-align: left;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.25);
-        white-space: pre-line;
-        transition: all 140ms ease;
-    }
-    section[data-testid="stSidebar"] .fu-sum-kpis div.stButton > button:hover{
-        border-color: rgba(239,68,68,0.45);
-        background: rgba(239,68,68,0.12);
-        transform: translateY(-1px);
-    }
-
-    /* ==== Navigation buttons (like your last screenshot) ==== */
-    section[data-testid="stSidebar"] .fu-nav-area div.stButton > button {
-        width: 100%;
-        height: 44px;
-        border-radius: 12px;
-        padding: 10px 12px;
-        border: 1px solid rgba(255,255,255,0.10);
-        background: rgba(255,255,255,0.02);
-        color: rgba(226,232,240,0.95);
-        font-weight: 750;
-        text-align: center;
-        transition: all 140ms ease;
-    }
-    section[data-testid="stSidebar"] .fu-nav-area div.stButton > button:hover {
-        border-color: rgba(239,68,68,0.45);
-        background: rgba(239,68,68,0.10);
-        transform: translateY(-1px);
-    }
-    section[data-testid="stSidebar"] .fu-nav-area div.stButton > button[kind="primary"] {
-        border-color: rgba(239,68,68,0.55);
-        background: linear-gradient(90deg, rgba(127,29,29,0.90), rgba(153,27,27,0.90));
-        color: #fff;
-        box-shadow: 0 10px 24px rgba(0,0,0,0.35);
-    }
-
-    section[data-testid="stSidebar"] a { color: inherit !important; text-decoration: none !important; }
-    </style>
-    ''', unsafe_allow_html=True)
 
 
     # Navegação via query param (usado pelos ícones monocromáticos da sidebar compacta)
@@ -683,23 +1179,6 @@ def main():
             except Exception:
                 pass
             st.rerun()
-
-    # Filtro de alertas via query param (usado pelos cards clicáveis do resumo)
-    af = st.query_params.get("af")
-    if af is not None:
-        try:
-            af = str(af)
-        except Exception:
-            af = None
-        if af:
-            allowed = {"atrasados", "criticos", "vencendo", "all"}
-            if af in allowed:
-                st.session_state["alerts_filter"] = None if af == "all" else af
-            try:
-                del st.query_params["af"]
-            except Exception:
-                pass
-
 
 
 
@@ -774,7 +1253,7 @@ def main():
                 border: 1px solid rgba(255,255,255,0.08);
                 border-radius: 22px;
                 padding: 22px 22px 18px 22px;
-                background: rgba(255,255,255,0.035);
+                background: rgba(255,255,255,0.03);
                 box-shadow: 0 14px 40px rgba(0,0,0,0.35);
               }
               .fu-header{
@@ -806,7 +1285,7 @@ def main():
                 border-radius: 999px;
                 border: 1px solid rgba(255,255,255,0.10);
                 color: rgba(255,255,255,0.70);
-                background: rgba(255,255,255,0.035);
+                background: rgba(255,255,255,0.03);
               }
               /* Links discretos */
               .fu-links{
@@ -1067,6 +1546,7 @@ def main():
                 st.session_state["almox_ctx"] = selecionado
                 st.rerun()
 
+
     # 🔐 Primeiro acesso: força troca de senha (se implementado em src.core.auth)
     try:
         from src.core.auth import verificar_primeiro_acesso, tela_troca_senha_primeiro_acesso
@@ -1136,57 +1616,45 @@ def main():
                 badge_cor = "#10b981"
 
 
-            # ── Ficha de resumo (topo) ──────────────────────────────────────────
             st.markdown(
-                f'''
-                <div class="fu-sum-card">
-                  <div class="fu-sum-title">Sistema de Follow-Up</div>
-                  <div class="fu-sum-rule"></div>
+                textwrap.dedent(f"""<div class="fu-card">
+  <p class="fu-user-label">Sistema de Follow-Up</p>
+  <div class="fu-bar"></div>
 
-                  <div class="fu-sum-user">
-                    <div class="fu-sum-avatar">{(nome[:1].upper() if nome else "U")}</div>
-                    <div>
-                      <div class="fu-sum-name">{nome}</div>
-                      <div class="fu-sum-sub">
-                        <span class="fu-sum-pill">{perfil.upper()}</span>
-                        <span>{saudacao}</span>
-                      </div>
-                    </div>
-                  </div>
-                ''',
+  <!-- Avatar -->
+  <div style="display:flex; align-items:center; gap:10px; margin: 6px 0 10px 0;">
+    {"<img src='" + (avatar_url or "") + "' style='width:52px;height:52px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.18);'/>" if avatar_url else "<div style='width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:white;border:1px solid rgba(255,255,255,0.14);'>" + (nome[:1].upper() if nome else "U") + "</div>"}
+    <div>
+      <p class="fu-user-name" style="margin:0;">{nome}</p>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+            <span style="background:{badge_cor};padding:2px 10px;border-radius:999px;font-size:11px;color:white;font-weight:900;letter-spacing:0.2px;">{perfil.upper()}</span>
+            <span style="font-size:11px; opacity:.72;">{saudacao}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="fu-kpi-grid">
+    <div class="fu-kpi">
+      <p class="fu-kpi-title">⚠️ Atrasados</p>
+      <p class="fu-kpi-value">{atrasados}</p>
+    </div>
+    <div class="fu-kpi">
+      <p class="fu-kpi-title">🚨 Críticos</p>
+      <p class="fu-kpi-value">{criticos}</p>
+    </div>
+    <div class="fu-kpi">
+      <p class="fu-kpi-title">⏰ Vencendo</p>
+      <p class="fu-kpi-value">{vencendo}</p>
+    </div>
+    <div class="fu-kpi">
+      <p class="fu-kpi-title">🔔 Alertas</p>
+      <p class="fu-kpi-value">{total_alertas}</p>
+    </div>
+  </div>
+</div>
+"""),
                 unsafe_allow_html=True,
             )
-
-            st.markdown('<div class="fu-sum-kpis">', unsafe_allow_html=True)
-
-            # KPIs estilo "ficha" (2x2) — clicáveis, sem abrir nova guia
-            c1, c2 = st.columns(2, gap="small")
-
-            with c1:
-                if st.button(f"⚠️  Atrasados\n{atrasados}", use_container_width=True, key="kpi_atrasados"):
-                    st.session_state.current_page = "alerts"
-                    st.session_state["alerts_filter"] = "atrasados"
-                    st.rerun()
-
-                if st.button(f"⏳  Vencendo\n{vencendo}", use_container_width=True, key="kpi_vencendo"):
-                    st.session_state.current_page = "alerts"
-                    st.session_state["alerts_filter"] = "vencendo"
-                    st.rerun()
-
-            with c2:
-                if st.button(f"🚨  Críticos\n{criticos}", use_container_width=True, key="kpi_criticos"):
-                    st.session_state.current_page = "alerts"
-                    st.session_state["alerts_filter"] = "criticos"
-                    st.rerun()
-
-                if st.button(f"🔔  Alertas\n{total_alertas}", use_container_width=True, key="kpi_total"):
-                    st.session_state.current_page = "alerts"
-                    st.session_state["alerts_filter"] = None
-                    st.rerun()
-
-            st.markdown('</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)  # end fu-sum-card
-
 
             # 🔎 Busca rápida (navegação)
             busca = st.text_input(
@@ -1232,111 +1700,185 @@ def main():
                             st.session_state.current_page = LEGACY_PAGE_TO_ID.get(destino, destino)
                             st.rerun()
 
-            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+            st.markdown("---")
+
+            if total_alertas > 0:
+                st.markdown(
+                    textwrap.dedent(f"""<div class="fu-card" style="
+  border: 1px solid rgba(245,158,11,0.35);
+  background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(255,255,255,0.04));
+">
+  <div style="display:flex; align-items:center; justify-content:space-between;">
+    <div style="font-weight:900;">Alertas</div>
+    <div style="
+      background: rgba(239,68,68,0.95);
+      color: white;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-weight: 900;
+      font-size: 12px;
+    ">{total_alertas}</div>
+  </div>
+  <div style="margin-top:6px; font-size: 12px; opacity: .82;">
+    Revise atrasos, vencimentos e fornecedores.
+  </div>
+</div>
+"""),
+                    unsafe_allow_html=True,
+                )
 
             usuario = st.session_state.get("usuario") or {}
             perfil = (usuario.get("perfil") or "").lower()
             is_admin = perfil == "admin"
-                                    # ✅ Navegação (colapsável + padrão SaaS — sem links azuis/HTML)
+            def _nav_button_row(page_id: str, group: str) -> None:
+                """Linha de navegação (alinhada). Usa apenas current_page como fonte de verdade."""
+                active = (page_id == st.session_state.current_page)
+                wrapper_cls = "fu-nav-item fu-nav-item--active" if active else "fu-nav-item"
+
+                st.markdown(f'<div class="{wrapper_cls}">', unsafe_allow_html=True)
+
+                if st.button(
+                    page_label(page_id, total_alertas),
+                    key=f"nav__{group}__{page_id}",
+                    use_container_width=True,
+                ):
+                    if page_id != st.session_state.current_page:
+                        st.session_state.current_page = page_id
+                        st.rerun()
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            # ✅ Navegação (seleção única) — com grupos e header fixo (sem expanders)
             if "current_page" not in st.session_state:
                 st.session_state.current_page = "home"
 
+            # Helper: render de grupo com header sticky dentro do scroll
             pagina_atual = st.session_state.get("current_page") or "home"
 
-            def _nav_btn(pid: str, label: str) -> None:
-                active = (st.session_state.get("current_page") == pid)
-                btn_type = "primary" if active else "secondary"
-                if st.button(label, use_container_width=True, key=f"nav_{pid}", type=btn_type):
-                    if pid != st.session_state.get("current_page"):
-                        st.session_state.current_page = pid
-                        st.rerun()
+            def _render_group(title: str, items: list[str], group_key: str) -> None:
+                active_group = pagina_atual in items
+                cls = "fu-group fu-group--active" if active_group else "fu-group"
 
+                st.markdown(f'<div class="{cls}">', unsafe_allow_html=True)
+                st.markdown(f'<div class="fu-group-h">{title}</div>', unsafe_allow_html=True)
+                st.markdown('<div class="fu-group-b">', unsafe_allow_html=True)
+
+                for pid in items:
+                    _nav_button_row(pid, group_key)
+
+                st.markdown("</div></div>", unsafe_allow_html=True)
+
+            # Fonte de verdade: página atual precisa existir no menu (ou volta para home)
+            all_pages = {"home","dashboard","map","reports","imports","reports_whatsapp","reports_gerenciais","alerts",
+                         "orders_search","material_sheet","catalog_materials","orders_manage",
+                         "users","profile","backup","saas_admin","observability","tenant_health","tenant_ranking",
+                         "audit_logs","exec_metrics","snapshots","dept_almox_config"}
+            if st.session_state.current_page not in all_pages:
+                st.session_state.current_page = "home"
+                pagina_atual = "home"
+
+                        # Definições de grupos (sidebar colapsável)
             dashboards = ["dashboard", "map", "alerts"]
+
             operacoes = ["orders_search", "material_sheet", "orders_manage"]
-            dados = ["reports"] + (["catalog_materials", "imports"] if is_admin else [])
-            conta = (["users", "profile", "backup", "dept_almox_config"] if is_admin else ["profile"])
-            if (not is_admin) and bool(st.session_state.get("is_superadmin")):
+
+            # Dados (relatórios, catálogo e importações)
+            dados = ["reports"]
+            if is_admin:
+                # Catálogo e Importações são operações administrativas
+                dados += ["catalog_materials", "imports"]
+
+            # Configuração de conta
+            conta = ["profile"]
+            if is_admin:
+                conta = ["users", "profile", "backup", "dept_almox_config"]
+            elif bool(st.session_state.get("is_superadmin")):
+                # superadmin pode configurar vínculos mesmo sem perfil admin
                 conta = ["profile", "dept_almox_config"]
 
-            superadmin_pages: list[str] = []
+            # Superadmin (somente o que é exclusivo do superadmin)
+            superadmin_pages = []
             if bool(st.session_state.get("is_superadmin")):
-                superadmin_pages = ["saas_admin","observability","tenant_health","tenant_ranking","audit_logs","exec_metrics","snapshots"]
+                superadmin_pages = [
+                    "saas_admin",
+                    "observability",
+                    "tenant_health",
+                    "tenant_ranking",
+                    "audit_logs",
+                    "exec_metrics",
+                    "snapshots",
+                ]
 
-            st.markdown('<div class="fu-nav-area">', unsafe_allow_html=True)
-            _nav_btn("home", "Início")
+            def _render_group_expander(title: str, items: list[str], group_key: str) -> None:
+                if not items:
+                    return
+                expanded = pagina_atual in items
+                with st.expander(title, expanded=expanded):
+                    for pid in items:
+                        _nav_button_row(pid, group_key)
 
-            with st.expander("Dashboards", expanded=(pagina_atual in dashboards)):
-                _nav_btn("dashboard", "Dashboard")
-                _nav_btn("map", "Mapa")
-                _nav_btn("alerts", f"Alertas ({total_alertas})" if total_alertas else "Alertas")
+            # ===== Menu colapsável =====
+            _nav_button_row("home", "root")
 
-            with st.expander("Operações", expanded=(pagina_atual in operacoes)):
-                _nav_btn("orders_search", "Consultar pedidos")
-                _nav_btn("material_sheet", "Ficha de material")
-                _nav_btn("orders_manage", "Gestão de pedidos")
-
-            with st.expander("Dados", expanded=(pagina_atual in dados)):
-                _nav_btn("reports", "Relatórios")
-                if is_admin:
-                    _nav_btn("catalog_materials", "Catálogo de Materiais")
-                    _nav_btn("imports", "Importações")
-
-            with st.expander("Conta", expanded=(pagina_atual in conta)):
-                for _pid in conta:
-                    _nav_btn(_pid, PAGE_LABELS.get(_pid, _pid))
+            _render_group_expander("Dashboards", dashboards, "dash")
+            _render_group_expander("Operações", operacoes, "ops")
+            _render_group_expander("Dados", dados, "dados")
+            _render_group_expander("Configuração de Conta", conta, "conta")
 
             if superadmin_pages:
-                with st.expander("Superadmin", expanded=(pagina_atual in superadmin_pages)):
-                    for _pid in superadmin_pages:
-                        _nav_btn(_pid, PAGE_LABELS.get(_pid, _pid))
+                _render_group_expander("Superadmin", superadmin_pages, "super")
 
-            st.markdown('</div>', unsafe_allow_html=True)
+# Página atual (fonte de verdade)
+        pagina = st.session_state.current_page
+        # Normaliza (caso ainda exista valor antigo por label/emoji)
+        if isinstance(pagina, str) and pagina.startswith("Alertas"):
+            pagina = "alerts"
+            st.session_state.current_page = pagina
+        elif 'LEGACY_PAGE_TO_ID' in globals() and pagina in LEGACY_PAGE_TO_ID:
+            pagina = LEGACY_PAGE_TO_ID[pagina]
+            st.session_state.current_page = pagina
 
-
-    # Página atual (fonte de verdade)
-    pagina = st.session_state.current_page
-    # Normaliza (caso ainda exista valor antigo por label/emoji)
-    if isinstance(pagina, str) and pagina.startswith("Alertas"):
-        pagina = "alerts"
-        st.session_state.current_page = pagina
-    elif "LEGACY_PAGE_TO_ID" in globals() and pagina in LEGACY_PAGE_TO_ID:
-        pagina = LEGACY_PAGE_TO_ID[pagina]
-        st.session_state.current_page = pagina
-
-    # ── Topbar: breadcrumb + ações rápidas ───────────────────────────────────
-    pagina_label_display = PAGE_LABELS.get(st.session_state.get("current_page","home"), "—")
-    _now_fo = datetime.now(ZoneInfo("America/Fortaleza"))
-    ts_display = _now_fo.strftime("%H:%M") + " (Fortaleza)"
-    ts_html = f'<span class="fu-topbar-ts">⟳ {ts_display}</span>' if ts_display else ""
     st.markdown(
-        f'''<div class="fu-topbar">
-          <div class="fu-topbar-left">
-            <span class="fu-topbar-page">Follow-up de Compras</span>
-            <span class="fu-topbar-sep">/</span>
-            <span class="fu-topbar-sub">{pagina_label_display}</span>
-          </div>
-          <div class="fu-topbar-right">
-            {ts_html}
-          </div>
-        </div>''',
+        """
+        <style>
+          .fu-sticky-actions{
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            background: rgba(10,12,16,0.92);
+            backdrop-filter: blur(6px);
+            padding: 0.35rem 0 0.25rem 0;
+            margin: 0 0 0.75rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+          }
+          .fu-sticky-actions .stButton button{
+            width: 100%;
+          }
+        </style>
+        """,
         unsafe_allow_html=True,
     )
 
-    # Quick-action buttons (compactos, direita alinhada)
-    _qa_spacer, _qa1, _qa2, _qa3 = st.columns([7, 1.1, 1.1, 1.1])
-    with _qa1:
+    st.markdown('<div class="fu-sticky-actions">', unsafe_allow_html=True)
+    spacer, b1, b2, b3 = st.columns([7, 1.2, 1.2, 1.2])
+
+    with b1:
         if st.button("🔄 Atualizar", use_container_width=True, key="qa_refresh", help="Limpa cache e recarrega"):
             st.cache_data.clear()
             st.rerun()
-    with _qa2:
-        if st.button("📤 Relatórios", use_container_width=True, key="qa_export", help="Relatórios / Exportação"):
+
+    with b2:
+        if st.button("📤 Relatórios", use_container_width=True, key="qa_export", help="Abrir Relatórios / Exportação"):
             st.session_state.current_page = "reports"
             st.session_state["hub_reports_force"] = "Exportação"
             st.rerun()
-    with _qa3:
+
+    with b3:
         if st.button("➕ Novo", use_container_width=True, key="qa_new", help="Criar novo pedido"):
             st.session_state.current_page = "orders_manage"
             st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     try:
         with obs.time_block(f"page.{pagina}"):
@@ -1469,3 +2011,29 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+st.markdown('''
+<style>
+.fu-compact-nav .fu-ico .fu-glyph{
+  font-size: 20px;
+  line-height: 1;
+  color: rgba(255,255,255,0.92);
+  transition: color 120ms ease;
+}
+
+.fu-compact-nav .fu-ico:hover .fu-glyph{
+  color: rgba(239,68,68,0.95);
+}
+
+.fu-compact-nav .fu-ico.fu-ico--active{
+  border-color: rgba(239,68,68,0.55);
+  background: rgba(239,68,68,0.95);
+  box-shadow: 0 12px 24px rgba(239,68,68,0.18);
+}
+
+.fu-compact-nav .fu-ico.fu-ico--active .fu-glyph{
+  color: #ffffff;
+}
+</style>
+''', unsafe_allow_html=True)
