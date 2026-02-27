@@ -3,6 +3,8 @@ from datetime import datetime, time, timedelta, timezone
 import json
 import pandas as pd
 import streamlit as st
+from src.ui import ux
+
 import streamlit.components.v1 as components
 from supabase import create_client
 import re
@@ -91,7 +93,7 @@ def _whatsapp_single_panel(phone_digits: str, text: str, key: str = "wa", label_
     """
     phone_digits = _normalize_whatsapp(phone_digits)
     if not phone_digits:
-        st.warning("Destinatário sem WhatsApp cadastrado.")
+        ux.warn("Destinatário sem WhatsApp cadastrado.")
         return
 
     # Link WhatsApp Web com texto
@@ -311,7 +313,7 @@ def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: 
 
     # proteção simples contra uploads enormes (evita crash por limites do Storage)
     if len(csv_bytes) > 8 * 1024 * 1024:
-        st.warning("CSV muito grande para upload automático. O envio foi enfileirado sem anexo.")
+        ux.warn("CSV muito grande para upload automático. O envio foi enfileirado sem anexo.")
         return None
 
     storage_path = f"tenant/{tenant_id}/materiais_entregues/{job_id}.csv"
@@ -334,7 +336,7 @@ def _upload_csv_artifact_safe(supabase, tenant_id: str, job_id: str, csv_bytes: 
         ).execute()
         return storage_path
     except Exception as e:
-        st.warning(
+        ux.warn(
             "Falha ao anexar o CSV. O envio foi enfileirado mesmo assim. "
             f"Detalhe: {e}"
         )
@@ -960,7 +962,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
             deps = _load_departamentos_from_pedidos(supabase, tenant_id)
             if not deps:
-                st.info("Não encontrei departamentos em pedidos (coluna 'departamento').")
+                ux.info("Não encontrei departamentos em pedidos (coluna 'departamento').")
                 deps_sel = []
             else:
                 deps_sel = st.multiselect(
@@ -976,7 +978,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
             faltando = [d for d, g in (mapa or {}).items() if not g]
             if faltando:
-                st.warning("Sem destinatário vinculado: " + ", ".join(faltando))
+                ux.warn("Sem destinatário vinculado: " + ", ".join(faltando))
 
             # Ação principal: gerar prévia
             st.divider()
@@ -1020,7 +1022,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                 if len(partes) == 1:
                     st.text_area("Mensagem", value=partes[0], height=280, key="rep_texto_full")
                 else:
-                    st.info(f"O texto ficou grande e foi dividido em **{len(partes)}** mensagens.")
+                    ux.info(f"O texto ficou grande e foi dividido em **{len(partes)}** mensagens.")
                     idx = st.selectbox(
                         "Escolha a parte",
                         options=list(range(1, len(partes) + 1)),
@@ -1060,7 +1062,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                             st.error("Nenhum destinatário disponível (RPC/fallback vazio). Verifique roles / tenant_users.")
                             st.stop()
 
-                        st.warning("Nenhum vínculo de departamento encontrado. Selecione destinatários manualmente abaixo.")
+                        ux.warn("Nenhum vínculo de departamento encontrado. Selecione destinatários manualmente abaixo.")
                         destinos = st.multiselect(
                             "Enviar para",
                             options=[g["user_id"] for g in gestores],
@@ -1126,7 +1128,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                     except Exception:
                         pass
 
-                    st.success(f"{ok} destinatário(s) enfileirado(s).")
+                    ux.ok(f"{ok} destinatário(s) enfileirado(s).")
 
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1157,7 +1159,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             st.markdown("<h3>🧭 Próximos passos</h3>", unsafe_allow_html=True)
             st.caption("Se houver avisos de vínculo faltando, corrija em **Configuração**.")
 
-            st.info("Dica: cadastre WhatsApp dos destinatários para habilitar o envio assistido.")
+            ux.info("Dica: cadastre WhatsApp dos destinatários para habilitar o envio assistido.")
             st.markdown("</div>", unsafe_allow_html=True)
 
         # -----------------------------
@@ -1171,11 +1173,11 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
         with st.container(border=True):
             if df_prev_cache is None or texto_cache is None:
-                st.info("Gere a prévia acima para habilitar o envio assistido.")
+                ux.info("Gere a prévia acima para habilitar o envio assistido.")
             else:
                 destinos_assist = sorted({g for g in (mapa or {}).values() if g}) or (st.session_state.get("rep_manual_destinos", []) or [])
                 if not destinos_assist:
-                    st.warning("Nenhum destinatário definido (vincule departamentos ou selecione manualmente).")
+                    ux.warn("Nenhum destinatário definido (vincule departamentos ou selecione manualmente).")
                 else:
                     partes_assist = _split_text(texto_cache, max_chars=3500)
 
@@ -1196,7 +1198,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
                     with colsA:
                         if without_wa:
-                            st.warning("Sem WhatsApp cadastrado: " + ", ".join([o["nome"] for o in without_wa][:8]) + ("..." if len(without_wa) > 8 else ""))
+                            ux.warn("Sem WhatsApp cadastrado: " + ", ".join([o["nome"] for o in without_wa][:8]) + ("..." if len(without_wa) > 8 else ""))
 
                         if not with_wa:
                             st.error("Nenhum destinatário com WhatsApp cadastrado. Vá em **Configuração → Telefones WhatsApp**.")
@@ -1243,9 +1245,9 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                                         "status": "sent_manual",
                                     }
                                 ).execute()
-                                st.success("Marcado como enviado.")
+                                ux.ok("Marcado como enviado.")
                             except Exception as e:
-                                st.warning(f"Não consegui marcar como enviado: {e}")
+                                ux.warn(f"Não consegui marcar como enviado: {e}")
 
     # ==========================================================
     # TAB 2 — CONFIGURAÇÃO (Vínculos + Telefones)
@@ -1264,7 +1266,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
             df_users = pd.DataFrame(gestores or [])
             if df_users.empty:
-                st.info("Nenhum usuário retornado (RPC/fallback).")
+                ux.info("Nenhum usuário retornado (RPC/fallback).")
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
                 if "user_id" not in df_users.columns and "id" in df_users.columns:
@@ -1364,7 +1366,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                     st.caption(f"WhatsApp Web: **https://web.whatsapp.com/send?phone={full_digits}**")
 
                 if full_digits and not valid:
-                    st.warning("Ajuste: " + "; ".join(errs))
+                    ux.warn("Ajuste: " + "; ".join(errs))
 
                 csave, ctest, cclear = st.columns(3)
                 with csave:
@@ -1376,7 +1378,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                         else:
                             ok_upd = _update_user_whatsapp(supabase, uid_sel, full_digits)
                             if ok_upd:
-                                st.success("WhatsApp salvo.")
+                                ux.ok("WhatsApp salvo.")
                                 st.rerun()
                             else:
                                 st.error("Não consegui salvar (verifique coluna user_profiles.whatsapp e policies).")
@@ -1389,7 +1391,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                     if st.button("Limpar", use_container_width=True, key="rep_whats_clear_one"):
                         ok_upd = _update_user_whatsapp(supabase, uid_sel, "")
                         if ok_upd:
-                            st.success("WhatsApp removido.")
+                            ux.ok("WhatsApp removido.")
                             st.rerun()
                         else:
                             st.error("Não consegui limpar (verifique policies).")
@@ -1404,11 +1406,11 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
 
             deps = _load_departamentos_from_pedidos(supabase, tenant_id)
             if not deps:
-                st.info("Não encontrei departamentos em pedidos (coluna 'departamento').")
+                ux.info("Não encontrei departamentos em pedidos (coluna 'departamento').")
                 st.caption("Cadastre ao menos um pedido com departamento preenchido para habilitar os vínculos.")
                 st.markdown("</div>", unsafe_allow_html=True)
             elif not gestores:
-                st.warning("Nenhum destinatário encontrado para este tenant (RPC/fallback vazio).")
+                ux.warn("Nenhum destinatário encontrado para este tenant (RPC/fallback vazio).")
                 st.caption("Se sua base usa roles específicas, ajuste roles_destino no código.")
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
@@ -1433,7 +1435,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                         st.error("Departamento inválido (vazio).")
                     else:
                         _upsert_link(supabase, tenant_id, dep_ok, gestor_id)
-                        st.success("Vínculo salvo.")
+                        ux.ok("Vínculo salvo.")
                         st.rerun()
 
                 st.divider()
@@ -1487,7 +1489,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                                 if mapa_links.get(dep_l) != g_id:
                                     _upsert_link(supabase, tenant_id, dep_l, g_id)
                                     changed += 1
-                            st.success(f"Alterações aplicadas: {changed}.")
+                            ux.ok(f"Alterações aplicadas: {changed}.")
                             st.rerun()
 
                     with c_rm:
@@ -1498,13 +1500,13 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                         )
                         if st.button("Remover selecionados", use_container_width=True, key="rep_links_rm_btn"):
                             if not rm_deps:
-                                st.warning("Selecione ao menos um departamento para remover.")
+                                ux.warn("Selecione ao menos um departamento para remover.")
                             else:
                                 ids_to_rm = [l.get("id") for l in links if (l.get("departamento") or "").strip() in set(rm_deps)]
                                 for lid in ids_to_rm:
                                     if lid:
                                         _delete_link(supabase, lid)
-                                st.success(f"Removidos: {len(ids_to_rm)}.")
+                                ux.ok(f"Removidos: {len(ids_to_rm)}.")
                                 st.rerun()
                 else:
                     st.caption("Nenhum vínculo cadastrado ainda.")
@@ -1534,7 +1536,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                             continue
                         _upsert_link(supabase, tenant_id, d_ok, alvo)
                         total += 1
-                    st.success(f"Vínculos atualizados: {total}.")
+                    ux.ok(f"Vínculos atualizados: {total}.")
                     st.rerun()
 
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -1562,7 +1564,7 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             logs = []
 
         if not logs:
-            st.info("Sem envios registrados ainda.")
+            ux.info("Sem envios registrados ainda.")
             return
 
         df_logs = pd.DataFrame(logs).rename(
@@ -1732,9 +1734,9 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
             if failed_users:
                 n = _enqueue_reenvio(failed_users, True)
                 if n:
-                    st.success(f"Auto-retry: {n} destinatário(s) reenfileirado(s).")
+                    ux.ok(f"Auto-retry: {n} destinatário(s) reenfileirado(s).")
                 else:
-                    st.info("Auto-retry: nada para reenfileirar (pode ter batido o limite de tentativas).")
+                    ux.info("Auto-retry: nada para reenfileirar (pode ter batido o limite de tentativas).")
 
         b1, b2 = st.columns(2)
         with b1:
@@ -1743,13 +1745,13 @@ def render_relatorios_whatsapp(supabase, tenant_id: str, created_by: str):
                     st.error("Este log não possui lista de destinatários.")
                 else:
                     n = _enqueue_reenvio(destinos, False)
-                    st.success(f"{n} destinatário(s) reenfileirado(s).")
+                    ux.ok(f"{n} destinatário(s) reenfileirado(s).")
         with b2:
             if st.button("🔁 Reenviar SOMENTE falhas", use_container_width=True, key="rep_reenvio_failed"):
                 if not destinos:
                     st.error("Este log não possui lista de destinatários.")
                 elif not failed_users:
-                    st.info("Nenhuma falha detectada para reenviar.")
+                    ux.info("Nenhuma falha detectada para reenviar.")
                 else:
                     n = _enqueue_reenvio(failed_users, True)
-                    st.success(f"{n} destinatário(s) com falha reenfileirado(s).")
+                    ux.ok(f"{n} destinatário(s) com falha reenfileirado(s).")

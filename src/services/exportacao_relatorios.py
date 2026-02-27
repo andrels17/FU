@@ -3,7 +3,304 @@ Módulo de Exportação de Relatórios - VERSÃO PREMIUM
 PDFs profissionais com design avançado, gráficos e análises detalhadas
 """
 
+
+from __future__ import annotations
 import streamlit as st
+import datetime
+
+
+import pandas as pd
+# -------------------------------
+# Mobile/cards-first helpers (polido)
+# -------------------------------
+def _is_cards_first() -> bool:
+    # Use uma escolha explícita (funciona no desktop também)
+    return bool(st.session_state.get("ui_cards_first", True))
+
+
+def _pretty_label(col: str) -> str:
+    col = str(col)
+    mapping = {
+        "nr_oc": "Nº OC",
+        "nr_solicitacao": "Nº Solicitação",
+        "cod_material": "Cód. Material",
+        "cod_equipamento": "Equipamento",
+        "qtde_solicitada": "Qtd. Solicitada",
+        "qtde_entregue": "Qtd. Entregue",
+        "pendente_calc": "Qtd. Pendente",
+        "pendente_ui": "Qtd. Pendente",
+        "valor_total": "Valor Total",
+        "valor_unitario": "Valor Unitário",
+        "departamento": "Departamento",
+        "fornecedor": "Fornecedor",
+        "uf": "UF",
+        "status": "Status",
+        "data_entrega_real": "Data Entrega",
+        "data_oc": "Data OC",
+        "criado_em": "Criado em",
+        "atualizado_em": "Atualizado em",
+    }
+    if col in mapping:
+        return mapping[col]
+    return (
+        col.replace("_", " ")
+        .replace("qtde", "qtd")
+        .title()
+    )
+
+
+def _fmt_date(v) -> str:
+    if v is None:
+        return "—"
+    try:
+        import pandas as _pd
+        if isinstance(v, _pd.Timestamp):
+            if _pd.isna(v):
+                return "—"
+            return v.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+    s = str(v).strip()
+    if not s:
+        return "—"
+    # tenta ISO (datas)
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+        try:
+            dt = datetime.datetime.strptime(s[:len(fmt)], fmt)
+            return dt.strftime("%d/%m/%Y")
+        except Exception:
+            continue
+    return s
+
+
+def _fmt_money(v) -> str:
+    try:
+        x = float(v)
+    except Exception:
+        return "—" if v is None or str(v).strip() == "" else str(v)
+    s = f"{x:,.2f}"
+    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {s}"
+
+
+def _fmt_value(col: str, v) -> str:
+    if v is None:
+        return "—"
+    if col in ("valor_total", "valor_unitario", "preco", "valor"):
+        return _fmt_money(v)
+    if col.startswith("data_") or col.endswith("_em") or col.endswith("_real"):
+        return _fmt_date(v)
+    try:
+        if isinstance(v, (int, float)) and col.startswith(("qtde", "qtd", "pendente")):
+            return f"{float(v):g}"
+    except Exception:
+        pass
+    s = str(v).strip()
+    return s if s else "—"
+
+
+def _badge(text: str) -> str:
+    t = (text or "").strip()
+    if not t or t == "—":
+        return ""
+    color = "var(--fu-muted)"
+    tl = t.lower()
+    if tl in ("entregue", "ok", "concluido", "concluído"):
+        color = "var(--fu-success, #22c55e)"
+    elif tl in ("pendente", "atrasado", "critico", "crítico"):
+        color = "var(--fu-danger, #ef4444)"
+    return (
+        "<span style='padding:2px 10px;border:1px solid rgba(255,255,255,.10);"
+        f"border-radius:999px;color:{color};font-size:0.82rem;'>{t}</span>"
+    )
+
+
+def _kv_grid(r: dict, cols: list[str], *, max_items: int = 8) -> None:
+    show = [c for c in cols if c in r][:max_items]
+    if not show:
+        return
+    grid = st.columns(2, gap="small")
+    for i, c in enumerate(show):
+        with grid[i % 2]:
+            st.caption(_pretty_label(c))
+            st.write(_fmt_value(c, r.get(c)))
+
+
+def _detail_view(title: str, r: dict, *, primary: list[str], secondary: list[str]) -> None:
+    st.markdown(f"### {title}")
+    st.markdown(_badge(str(r.get("status") or "")), unsafe_allow_html=True)
+    st.markdown("#### Resumo")
+    _kv_grid(r, primary, max_items=8)
+    if secondary:
+        st.markdown("---")
+        st.markdown("#### Detalhes")
+        _kv_grid(r, secondary, max_items=14)
+
+
+def _open_detail(title: str, r: dict, *, primary: list[str], secondary: list[str]) -> None:
+    if hasattr(st, "dialog"):
+        @st.dialog(title)
+        def _d():
+            _detail_view(title, r, primary=primary, secondary=secondary)
+        _d()
+    else:
+        with st.expander(title, expanded=True):
+            _detail_view(title, r, primary=primary, secondary=secondary)
+
+
+def _cards_first_list(
+    df: pd.DataFrame,
+    *,
+    title_col: str,
+    subtitle_cols: list[str],
+    badge_col: str | None = None,
+    key_prefix: str = "cf",
+    primary_detail_cols: list[str] | None = None,
+    secondary_detail_cols: list[str] | None = None,
+) -> None:
+    """Renderiza lista em cards (mobile-first) com detalhes em dialog."""
+    if df is None or df.empty:
+        st.info("Nada para exibir.")
+        return
+
+    cols_all = list(df.columns)
+    primary_detail_cols = primary_detail_cols or [
+        c for c in [
+            title_col, "status", "nr_oc", "nr_solicitacao", "departamento",
+            "cod_equipamento", "cod_material",
+            "qtde_solicitada", "qtde_entregue", "pendente_calc", "pendente_ui",
+            "valor_total", "valor_unitario", "data_entrega_real", "data_oc"
+        ] if c in cols_all
+    ]
+    secondary_detail_cols = secondary_detail_cols or [
+        c for c in cols_all
+        if c not in set(primary_detail_cols + ["id", "tenant_id"])
+        and not str(c).lower().endswith("_id")
+    ]
+
+    rows = df.to_dict("records")
+    for i, r in enumerate(rows):
+        rid = str(r.get("id") or r.get("pedido_id") or i)
+        title_val = _fmt_value(title_col, r.get(title_col))
+        badge_val = _fmt_value(badge_col, r.get(badge_col)) if badge_col else ""
+
+        with st.container(border=True):
+            if badge_col and badge_val != "—":
+                st.markdown(
+                    f"**{title_val}**  ·  {_badge(badge_val)}",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(f"**{title_val}**")
+
+            _kv_grid(r, subtitle_cols, max_items=6)
+
+            if st.button("Ver detalhes", key=f"{key_prefix}_detail_{rid}_{i}", use_container_width=True):
+                _open_detail("Detalhes", r, primary=primary_detail_cols, secondary=secondary_detail_cols)
+
+
+def _pretty_label(col: str) -> str:
+    return (
+        str(col)
+        .replace("_", " ")
+        .replace("qtde", "qtd")
+        .replace("nr ", "nº ")
+        .title()
+    )
+
+
+def _fmt_value(v):
+    if v is None:
+        return "—"
+    try:
+        # timestamps/dates
+        import pandas as _pd
+        if isinstance(v, (_pd.Timestamp,)):
+            if _pd.isna(v):
+                return "—"
+            return v.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+    s = str(v).strip()
+    return s if s else "—"
+
+
+def _render_kv_grid(r: dict, cols: list[str], *, max_items: int = 6) -> None:
+    show_cols = [c for c in cols if c in r][:max_items]
+    if not show_cols:
+        return
+    grid = st.columns(2, gap="small")
+    for i, c in enumerate(show_cols):
+        with grid[i % 2]:
+            st.caption(_pretty_label(c))
+            st.write(_fmt_value(r.get(c)))
+
+
+def _render_detail_dialog(title: str, r: dict, *, primary_cols: list[str], secondary_cols: list[str]) -> None:
+    if hasattr(st, "dialog"):
+        @st.dialog(title)
+        def _d():
+            st.markdown("#### Resumo")
+            _render_kv_grid(r, primary_cols, max_items=6)
+            if secondary_cols:
+                st.markdown("---")
+                st.markdown("#### Detalhes")
+                _render_kv_grid(r, secondary_cols, max_items=12)
+        _d()
+    else:
+        with st.expander("Detalhes", expanded=True):
+            st.markdown("#### Resumo")
+            _render_kv_grid(r, primary_cols, max_items=6)
+            if secondary_cols:
+                st.markdown("---")
+                st.markdown("#### Detalhes")
+                _render_kv_grid(r, secondary_cols, max_items=12)
+
+
+def _cards_first_list(
+    df: pd.DataFrame,
+    *,
+    title_col: str,
+    subtitle_cols: list[str],
+    badge_col: str | None = None,
+    key_prefix: str = "cf",
+    primary_detail_cols: list[str] | None = None,
+    secondary_detail_cols: list[str] | None = None,
+) -> None:
+    """Renderiza uma lista em modo cards-first com detalhes em dialog/expander."""
+    if df is None or df.empty:
+        st.info("Nada para exibir.")
+        return
+
+    primary_detail_cols = primary_detail_cols or subtitle_cols[:6]
+    secondary_detail_cols = secondary_detail_cols or [c for c in df.columns if c not in set(primary_detail_cols + [title_col])]
+
+    rows = df.to_dict("records")
+    for i, r in enumerate(rows):
+        rid = str(r.get("id") or r.get("pedido_id") or i)
+        title_val = _fmt_value(r.get(title_col))
+        badge_val = _fmt_value(r.get(badge_col)) if badge_col else ""
+        with st.container(border=True):
+            # Header
+            if badge_col and badge_val != "—":
+                st.markdown(
+                    f"**{title_val}**  ·  <span style='color: var(--fu-muted);'>{badge_val}</span>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(f"**{title_val}**")
+
+            # Body
+            _render_kv_grid(r, subtitle_cols, max_items=6)
+
+            # Action
+            if st.button("Ver detalhes", key=f"{key_prefix}_detail_{rid}_{i}", use_container_width=True):
+                _render_detail_dialog("Detalhes", r, primary_cols=primary_detail_cols, secondary_cols=secondary_detail_cols)
+
+
+
+from src.ui import ux
+
 import pandas as pd
 from datetime import datetime
 import io
@@ -29,7 +326,7 @@ try:
     PDF_DISPONIVEL = True
 except ImportError:
     PDF_DISPONIVEL = False
-    st.warning("⚠️ Para exportar em PDF Premium, instale: pip install reportlab")
+    ux.warn("⚠️ Para exportar em PDF Premium, instale: pip install reportlab")
 
 
 # --- Anti páginas em branco: quebra descrições longas em múltiplas linhas ---
@@ -371,7 +668,7 @@ def gerar_botoes_exportacao(df_pedidos, formatar_moeda_br):
     """Gera botões de exportação em múltiplos formatos"""
     
     st.markdown("### Exportar Relatório Completo")
-    st.info("Exporte todos os pedidos em formatos profissionais")
+    ux.info("Exporte todos os pedidos em formatos profissionais")
     
 
     # Filtros completos (mesmo padrão do Dashboard) + opção Por mês
@@ -409,7 +706,7 @@ def gerar_botoes_exportacao(df_pedidos, formatar_moeda_br):
                 with st.spinner("Gerando PDF profissional..."):
                     pdf_buffer = gerar_pdf_completo_premium(df_pedidos, formatar_moeda_br)
                     if pdf_buffer:
-                        st.success("PDF gerado!")
+                        ux.ok("PDF gerado!")
                         st.download_button(
                             label="Download PDF",
                             data=pdf_buffer.getvalue(),
@@ -479,7 +776,15 @@ def criar_relatorio_executivo(df_pedidos, formatar_moeda_br):
     df_dept['Taxa (%)'] = (df_dept['Entregues'] / df_dept['Pedidos'] * 100).round(1)
     df_dept = df_dept.sort_values('Valor Total', ascending=False)
     
-    st.dataframe(df_dept, use_container_width=True, hide_index=True)
+    if _is_cards_first():
+        _cards_first_list(df_dept,
+            title_col='descricao' if 'descricao' in df_dept.columns else df_dept.columns[0],
+            subtitle_cols=[c for c in df_dept.columns if c not in ['descricao']][:6],
+            badge_col='status' if 'status' in df_dept.columns else None,
+            key_prefix='exportacao_relatorios'
+        )
+    else:
+        st.dataframe(df_dept, use_container_width=True, hide_index=True)
     
     st.markdown("---")
     col1, col2, col3 = st.columns(3)
@@ -513,7 +818,7 @@ def gerar_relatorio_fornecedor(df_pedidos, fornecedor, formatar_moeda_br):
     # Filtros completos (mesmo padrão do Dashboard) + opção Por mês
     df_forn, filtros = ui_filtros_exportacao_estilo_dashboard(df_forn, prefix="forn")
     if df_forn.empty:
-        st.warning("Nenhum pedido encontrado")
+        ux.warn("Nenhum pedido encontrado")
         return
     
     col1, col2, col3, col4 = st.columns(4)
@@ -531,7 +836,15 @@ def gerar_relatorio_fornecedor(df_pedidos, fornecedor, formatar_moeda_br):
         st.metric("Atrasados", (df_forn['atrasado'] == True).sum())
     
     st.markdown("---")
-    st.dataframe(preparar_dados_exportacao(df_forn), use_container_width=True, hide_index=True)
+    if _is_cards_first():
+        _cards_first_list(preparar_dados_exportacao,
+            title_col='descricao' if 'descricao' in preparar_dados_exportacao.columns else preparar_dados_exportacao.columns[0],
+            subtitle_cols=[c for c in preparar_dados_exportacao.columns if c not in ['descricao']][:6],
+            badge_col='status' if 'status' in preparar_dados_exportacao.columns else None,
+            key_prefix='exportacao_relatorios'
+        )
+    else:
+        st.dataframe(preparar_dados_exportacao(df_forn), use_container_width=True, hide_index=True)
     
     st.markdown("---")
     col1, col2, col3 = st.columns(3)
@@ -567,7 +880,7 @@ def gerar_relatorio_departamento(df_pedidos, departamento, formatar_moeda_br):
     # Filtros completos (mesmo padrão do Dashboard) + opção Por mês
     df_dept, filtros = ui_filtros_exportacao_estilo_dashboard(df_dept, prefix="dept")
     if df_dept.empty:
-        st.warning("Nenhum pedido encontrado")
+        ux.warn("Nenhum pedido encontrado")
         return
     
     col1, col2, col3, col4 = st.columns(4)
@@ -585,7 +898,15 @@ def gerar_relatorio_departamento(df_pedidos, departamento, formatar_moeda_br):
         st.metric("Atrasados", (df_dept['atrasado'] == True).sum())
     
     st.markdown("---")
-    st.dataframe(preparar_dados_exportacao(df_dept), use_container_width=True, hide_index=True)
+    if _is_cards_first():
+        _cards_first_list(preparar_dados_exportacao,
+            title_col='descricao' if 'descricao' in preparar_dados_exportacao.columns else preparar_dados_exportacao.columns[0],
+            subtitle_cols=[c for c in preparar_dados_exportacao.columns if c not in ['descricao']][:6],
+            badge_col='status' if 'status' in preparar_dados_exportacao.columns else None,
+            key_prefix='exportacao_relatorios'
+        )
+    else:
+        st.dataframe(preparar_dados_exportacao(df_dept), use_container_width=True, hide_index=True)
     
     st.markdown("---")
     col1, col2, col3 = st.columns(3)
@@ -1593,4 +1914,3 @@ def gerar_pdf_departamento_premium(df_dept, departamento, formatar_moeda_br):
     except Exception as e:
         st.error(f"Erro: {e}")
         return None
-

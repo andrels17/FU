@@ -25,6 +25,8 @@ import pandas as pd
 import streamlit as st
 
 
+from src.ui import ux
+
 def registrar_acao(*args, **kwargs) -> None:
     """Registra ações do usuário em logs_auditoria.
 
@@ -137,7 +139,7 @@ def exibir_painel_auditoria(supabase) -> None:
 
     df = carregar_logs_auditoria(supabase, filtro_acao=(filtro.strip() or None), limite=int(limite))
     if df.empty:
-        st.info("Nenhum log encontrado (verifique se a tabela logs_auditoria existe e está acessível).")
+        ux.info("Nenhum log encontrado (verifique se a tabela logs_auditoria existe e está acessível).")
         return
 
     if "timestamp" in df.columns:
@@ -174,7 +176,7 @@ def realizar_backup_manual(supabase) -> None:
                     df_fornecedores.to_excel(writer, sheet_name="Fornecedores", index=False)
 
                 output.seek(0)
-                st.success("Backup gerado com sucesso!")
+                ux.ok("Backup gerado com sucesso!")
                 st.download_button(
                     "📥 Baixar Backup",
                     data=output,

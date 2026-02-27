@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from src.ui import ux
+
 from src.ui.theme import section_header
 
 
@@ -31,12 +33,7 @@ def exibir_importacoes_hub(supabase_user, supabase_admin=None, tenant_id: str | 
     )
 
     with st.container(border=True):
-        escolha = st.radio(
-            "",
-            options=["Pedidos", "Materiais", "Fornecedores"],
-            horizontal=True,
-            key="hub_imports__selector",
-        )
+        escolha = ux.segmented("", options=["Pedidos", "Materiais", "Fornecedores"], key="hub_imports__selector", default="Pedidos")
 
         st.markdown("---")
 
@@ -57,7 +54,7 @@ def exibir_importacoes_hub(supabase_user, supabase_admin=None, tenant_id: str | 
             is_admin = (st.session_state.get("usuario") or {}).get("perfil") == "admin"
             is_superadmin = bool(st.session_state.get("is_superadmin"))
             if not (is_admin or is_superadmin):
-                st.warning("Apenas Admin/Superadmin pode acessar o Catálogo de Materiais.")
+                ux.warn("Apenas Admin/Superadmin pode acessar o Catálogo de Materiais.")
                 return
 
             if st.button("Abrir Catálogo de Materiais", use_container_width=True, key="hub_imports__go_catalog"):

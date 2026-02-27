@@ -18,6 +18,8 @@ import os
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 from src.core.db import init_supabase_admin
 
 
@@ -289,7 +291,7 @@ def _normalize_admin_user(obj: Any) -> dict[str, Any]:
     return out
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(max_entries=256, ttl=300, show_spinner=False)
 def _admin_fetch_users(user_ids: list[str]) -> dict[str, dict[str, Any]]:
     """Busca e-mails/nomes via Admin API para IDs sem profile (evita tela vazia).
 
@@ -308,7 +310,7 @@ def _admin_fetch_users(user_ids: list[str]) -> dict[str, dict[str, Any]]:
     return out
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(max_entries=256, ttl=300, show_spinner=False)
 def _admin_find_user_id_by_email(email: str) -> str | None:
     """Encontra user_id pelo email via Admin API (list_users + filtro)."""
     email_norm = (email or "").strip().lower()
@@ -420,7 +422,7 @@ def exibir_gestao_usuarios(_supabase):
 
     admin_ok, admin_err = _is_admin_api_ready()
     if not admin_ok:
-        st.warning(
+        ux.warn(
             "⚠️ Admin API não está pronta (provável ausência da SERVICE_ROLE).\n\n"
             f"Detalhe: {admin_err}"
         )
@@ -476,7 +478,7 @@ def exibir_gestao_usuarios(_supabase):
 
     df = pd.DataFrame(table)
     if df.empty:
-        st.info("Nenhum membro vinculado a esta empresa.")
+        ux.info("Nenhum membro vinculado a esta empresa.")
     else:
         st.dataframe(
             df[["nome", "email", "role", "created_at", "user_id"]],
@@ -530,7 +532,7 @@ def exibir_gestao_usuarios(_supabase):
                         nome=novo_nome or None,
                     )
 
-                    st.success("✅ Usuário atualizado com sucesso!")
+                    ux.ok("✅ Usuário atualizado com sucesso!")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
@@ -542,7 +544,7 @@ def exibir_gestao_usuarios(_supabase):
                         "tenant_id", tenant_id
                     ).eq("user_id", uid_sel).execute()
 
-                    st.success("✅ Usuário removido da empresa (vínculo apagado).")
+                    ux.ok("✅ Usuário removido da empresa (vínculo apagado).")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
@@ -572,7 +574,7 @@ def exibir_gestao_usuarios(_supabase):
                     else:
                         rr = _safe_send_recovery_email(supabase_admin, email_sel)
                         if rr.get("ok"):
-                            st.success("✅ Link de redefinição enviado!")
+                            ux.ok("✅ Link de redefinição enviado!")
                         else:
                             st.error(f"Falha ao enviar recovery: {rr.get('error')}")
             
@@ -600,7 +602,7 @@ def exibir_gestao_usuarios(_supabase):
                         else:
                             rr = _safe_set_password_by_user_id(supabase_admin, uid_sel, nova_senha)
                             if rr.get("ok"):
-                                st.success("✅ Senha atualizada com sucesso.")
+                                ux.ok("✅ Senha atualizada com sucesso.")
                             else:
                                 st.error(f"Falha ao atualizar senha: {rr.get('error')}")
             
@@ -622,11 +624,11 @@ def exibir_gestao_usuarios(_supabase):
                         else:
                             rr = _safe_send_recovery_email(supabase_admin, email_reset)
                             if rr.get("ok"):
-                                st.success("✅ Link de recuperação enviado! Oriente o usuário a verificar o e-mail.")
+                                ux.ok("✅ Link de recuperação enviado! Oriente o usuário a verificar o e-mail.")
                             else:
                                 st.error(f"❌ Falha ao enviar recuperação: {rr.get('error')}")
                 else:
-                    st.info("Nenhum e-mail disponível na lista para enviar recuperação.")
+                    ux.info("Nenhum e-mail disponível na lista para enviar recuperação.")
             
                 st.divider()
             
@@ -689,18 +691,18 @@ def exibir_gestao_usuarios(_supabase):
                                     supabase_admin.table("tenant_users").update({"role": role}).eq(
                                         "tenant_id", tenant_id
                                     ).eq("user_id", existing_user_id).execute()
-                                    st.success("✅ Usuário já existia. Vínculo encontrado e perfil atualizado na empresa!")
+                                    ux.ok("✅ Usuário já existia. Vínculo encontrado e perfil atualizado na empresa!")
                                 else:
                                     supabase_admin.table("tenant_users").insert(
                                         {"tenant_id": tenant_id, "user_id": existing_user_id, "role": role}
                                     ).execute()
-                                    st.success("✅ Usuário já existia. Agora ele foi vinculado à empresa!")
+                                    ux.ok("✅ Usuário já existia. Agora ele foi vinculado à empresa!")
 
                                 _upsert_user_profile_admin(
                                     supabase_admin, existing_user_id, email=email, nome=nome or None
                                 )
 
-                                st.info(
+                                ux.info(
                                     "ℹ️ Como o usuário já existia, ele deve entrar pelo login normal.\n"
                                     "Se não lembrar a senha, use a opção de recuperação de senha acima."
                                 )
@@ -713,14 +715,14 @@ def exibir_gestao_usuarios(_supabase):
                 else:
                     invited_user_id = _extract_user_id(invite.get("res"))
                     if not invited_user_id:
-                        st.success("✅ Convite enviado (não foi possível extrair o user_id do retorno).")
+                        ux.ok("✅ Convite enviado (não foi possível extrair o user_id do retorno).")
                     else:
                         try:
                             supabase_admin.table("tenant_users").insert(
                                 {"tenant_id": tenant_id, "user_id": invited_user_id, "role": role}
                             ).execute()
                         except Exception as e:
-                            st.warning(
+                            ux.warn(
                                 "Convite enviado, mas falhou ao vincular o usuário na empresa (tenant_users).\n\n"
                                 f"Detalhe: {e}"
                             )
@@ -728,7 +730,7 @@ def exibir_gestao_usuarios(_supabase):
                             _upsert_user_profile_admin(
                                 supabase_admin, invited_user_id, email=email, nome=nome or None
                             )
-                            st.success("✅ Convite enviado e usuário vinculado à empresa!")
+                            ux.ok("✅ Convite enviado e usuário vinculado à empresa!")
                             st.cache_data.clear()
                             st.rerun()
 
@@ -771,7 +773,7 @@ def exibir_gestao_usuarios(_supabase):
                     new_uid = info.get("user_id")
 
                     if not new_uid:
-                        st.warning(
+                        ux.warn(
                             "Usuário criado, mas não consegui extrair o user_id do retorno. "
                             "Verifique no Supabase Auth."
                         )
@@ -795,14 +797,14 @@ def exibir_gestao_usuarios(_supabase):
                             supabase_admin, user_id=new_uid, email=email_m, nome=nome_m or None
                         )
 
-                        st.success("✅ Usuário criado e vinculado à empresa!")
+                        ux.ok("✅ Usuário criado e vinculado à empresa!")
 
                         if forcar_troca and email_m:
                             rr = _safe_send_recovery_email(supabase_admin, email_m)
                             if rr.get("ok"):
-                                st.info("📧 Enviamos um link de redefinição para o usuário trocar a senha.")
+                                ux.info("📧 Enviamos um link de redefinição para o usuário trocar a senha.")
                             else:
-                                st.warning(f"Usuário criado, mas falhou ao enviar recovery: {rr.get('error')}")
+                                ux.warn(f"Usuário criado, mas falhou ao enviar recovery: {rr.get('error')}")
 
                         st.cache_data.clear()
                         st.rerun()

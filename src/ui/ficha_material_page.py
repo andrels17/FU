@@ -5,6 +5,9 @@ from datetime import datetime
 
 import pandas as pd
 import streamlit as st
+from src.ui import ux
+from src.ui.responsive import rcols, is_mobile
+
 from src.services import ficha_material as fm
 from src.repositories.pedidos import carregar_pedidos
 from src.utils.formatting import formatar_moeda_br
@@ -38,7 +41,7 @@ def _call_insights_automaticos(historico: pd.DataFrame, material_atual: dict) ->
     except TypeError:
         pass
     except Exception as e:
-        st.warning(f"⚠️ Erro ao gerar insights automáticos: {e}")
+        ux.warn(f"⚠️ Erro ao gerar insights automáticos: {e}")
         return
 
     for args in ((historico,), (material_atual,), ()):
@@ -48,17 +51,17 @@ def _call_insights_automaticos(historico: pd.DataFrame, material_atual: dict) ->
         except Exception:
             continue
 
-    st.warning("⚠️ Não foi possível gerar insights automáticos (assinatura incompatível).")
+    ux.warn("⚠️ Não foi possível gerar insights automáticos (assinatura incompatível).")
 
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(max_entries=256, ttl=300)
 def _carregar_pedidos_cache(_supabase):
     # Cache simples para deixar a página mais rápida e reduzir chamadas ao banco
     return carregar_pedidos(_supabase, st.session_state.get("tenant_id"))
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(max_entries=256, ttl=300)
 def _carregar_catalogo_materiais_cache(_supabase, tenant_id: str | None) -> pd.DataFrame:
     """Carrega catálogo `materiais` do Supabase (por tenant) para enriquecer a ficha e permitir análise por família/grupo.
 
@@ -274,7 +277,7 @@ def exibir_ficha_material(_supabase):
 
 
     if df_pedidos.empty:
-        st.info("📭 Nenhum pedido cadastrado ainda")
+        ux.info("📭 Nenhum pedido cadastrado ainda")
         return
 
     # Normalizações leves (evitam bugs em filtros e cálculos)
@@ -351,7 +354,7 @@ def exibir_ficha_material(_supabase):
                 )
                 materiais_unicos["cod_material"] = None
 
-            col1, col2 = st.columns([4, 1])
+            col1, col2 = rcols([4, 1])
 
             with col1:
                 busca_texto = st.text_input(
@@ -385,14 +388,14 @@ def exibir_ficha_material(_supabase):
                     ]
 
                 if materiais_filtrados.empty:
-                    st.warning(f"⚠️ Nenhum material encontrado com código '{busca_texto}'")
-                    st.info("💡 Tente códigos mais genéricos ou verifique se o código está correto")
+                    ux.warn(f"⚠️ Nenhum material encontrado com código '{busca_texto}'")
+                    ux.info("💡 Tente códigos mais genéricos ou verifique se o código está correto")
                 else:
-                    st.success(f"✅ {len(materiais_filtrados)} material(is) encontrado(s)")
+                    ux.ok(f"✅ {len(materiais_filtrados)} material(is) encontrado(s)")
                     st.markdown("#### Selecione um material:")
 
                     for idx, row in materiais_filtrados.head(10).iterrows():
-                        c1, c2, c3 = st.columns([3, 1, 1])
+                        c1, c2, c3 = rcols([3, 1, 1])
 
                         with c1:
                             cod = row.get("cod_material")
@@ -419,15 +422,15 @@ def exibir_ficha_material(_supabase):
                         st.markdown("---")
 
                     if len(materiais_filtrados) > 10:
-                        st.info(
+                        ux.info(
                             f"ℹ️ Mostrando 10 de {len(materiais_filtrados)} resultados. Refine sua busca para ver mais."
                         )
             else:
-                st.info("💡 Digite o código do material no campo acima para começar a busca")
+                ux.info("💡 Digite o código do material no campo acima para começar a busca")
 
                 st.markdown("#### 📊 Top 10 Materiais Mais Comprados")
                 for idx, row in materiais_unicos.head(10).iterrows():
-                    c1, c2, c3 = st.columns([3, 1, 1])
+                    c1, c2, c3 = rcols([3, 1, 1])
 
                     with c1:
                         desc = row.get("descricao", "")
@@ -460,17 +463,17 @@ def exibir_ficha_material(_supabase):
             st.markdown("### 🔧 Materiais por Equipamento")
 
             if not col_equip or col_equip not in df_pedidos.columns:
-                st.warning("⚠️ Coluna de equipamento não encontrada nos pedidos")
+                ux.warn("⚠️ Coluna de equipamento não encontrada nos pedidos")
             else:
                 equipamentos_todos = df_pedidos[col_equip].dropna().astype(str).str.strip().unique().tolist()
                 equipamentos_todos = sorted([eq for eq in equipamentos_todos if eq])
 
                 if not equipamentos_todos:
-                    st.warning("⚠️ Nenhum equipamento cadastrado nos pedidos")
+                    ux.warn("⚠️ Nenhum equipamento cadastrado nos pedidos")
                 else:
                     # Busca rápida de equipamento
                     st.markdown("#### 🔍 Buscar Equipamento")
-                    c1, c2 = st.columns([4, 1])
+                    c1, c2 = rcols([4, 1])
 
                     with c1:
                         busca_equipamento = st.text_input(
@@ -493,10 +496,10 @@ def exibir_ficha_material(_supabase):
                     if busca_equipamento:
                         equipamentos_filtrados = [eq for eq in equipamentos_todos if busca_equipamento.upper() in eq.upper()]
                         if not equipamentos_filtrados:
-                            st.warning(f"⚠️ Nenhum equipamento encontrado com '{busca_equipamento}'")
+                            ux.warn(f"⚠️ Nenhum equipamento encontrado com '{busca_equipamento}'")
                             equipamentos_filtrados = []
                         else:
-                            st.success(f"✅ {len(equipamentos_filtrados)} equipamento(s) encontrado(s)")
+                            ux.ok(f"✅ {len(equipamentos_filtrados)} equipamento(s) encontrado(s)")
                     else:
                         equipamentos_filtrados = equipamentos_todos
 
@@ -517,7 +520,7 @@ def exibir_ficha_material(_supabase):
                         # Filtros (mantendo o visual de boxes)
                         # ------------------------------
                         st.markdown("#### 🎛️ Filtros Avançados")
-                        f1, f2, f3, f4 = st.columns([1.4, 1.1, 1.1, 1.4])
+                        f1, f2, f3, f4 = rcols([1.4, 1.1, 1.1, 1.4])
 
                         with f1:
                             status_options = df_equipamento[col_status].dropna().unique().tolist() if col_status and col_status in df_equipamento.columns else []
@@ -617,7 +620,7 @@ def exibir_ficha_material(_supabase):
                         # ------------------------------
                         # KPIs (boxes)
                         # ------------------------------
-                        k1, k2, k3, k4, k5 = st.columns(5)
+                        k1, k2, k3, k4, k5 = rcols(5)
 
                         k1.metric("📦 Total de Pedidos", int(len(df_eq_filtrado)))
                         k2.metric("🔧 Materiais Diferentes", int(df_eq_filtrado["descricao"].nunique()) if "descricao" in df_eq_filtrado.columns else 0)
@@ -636,7 +639,7 @@ def exibir_ficha_material(_supabase):
                         # Lista em boxes (como você gosta)
                         # ------------------------------
                         if df_eq_filtrado.empty:
-                            st.warning("⚠️ Nenhum material encontrado com os filtros aplicados")
+                            ux.warn("⚠️ Nenhum material encontrado com os filtros aplicados")
                         else:
                             st.markdown(f"#### 📋 Materiais do Equipamento **{equipamento_selecionado}**")
 
@@ -712,7 +715,7 @@ def exibir_ficha_material(_supabase):
                                 </div>
                                 """
                                 
-                                c_left, c_btn = st.columns([6, 1])
+                                c_left, c_btn = rcols([6, 1])
                                 with c_left:
                                     st.markdown(card_html, unsafe_allow_html=True)
                                 with c_btn:
@@ -734,15 +737,15 @@ def exibir_ficha_material(_supabase):
             st.markdown("### 🏢 Materiais por Departamento")
 
             if not col_dep or col_dep not in df_pedidos.columns:
-                st.warning("⚠️ Coluna de departamento não encontrada nos pedidos")
+                ux.warn("⚠️ Coluna de departamento não encontrada nos pedidos")
             else:
                 departamentos = df_pedidos[col_dep].dropna().astype(str).str.strip().unique().tolist()
                 departamentos = sorted([d for d in departamentos if d])
 
                 if not departamentos:
-                    st.warning("⚠️ Nenhum departamento cadastrado nos pedidos")
+                    ux.warn("⚠️ Nenhum departamento cadastrado nos pedidos")
                 else:
-                    c1, c2 = st.columns([4, 1])
+                    c1, c2 = rcols([4, 1])
 
                     with c1:
                         departamento_selecionado = st.selectbox(
@@ -767,7 +770,7 @@ def exibir_ficha_material(_supabase):
                         st.markdown("---")
 
                         st.markdown("#### 🎛️ Filtros Avançados")
-                        f1, f2, f3, f4, f5 = st.columns([1.4, 1.1, 1.1, 1.2, 1.4])
+                        f1, f2, f3, f4, f5 = rcols([1.4, 1.1, 1.1, 1.2, 1.4])
 
                         with f1:
                             status_options_dep = df_departamento[col_status].dropna().unique().tolist() if col_status and col_status in df_departamento.columns else []
@@ -868,7 +871,7 @@ def exibir_ficha_material(_supabase):
                         st.markdown("---")
 
                         # KPIs (boxes)
-                        k1, k2, k3, k4, k5 = st.columns(5)
+                        k1, k2, k3, k4, k5 = rcols(5)
                         k1.metric("📦 Pedidos", int(len(df_dep_filtrado)))
                         k2.metric("🔧 Materiais", int(df_dep_filtrado["descricao"].nunique()) if "descricao" in df_dep_filtrado.columns else 0)
 
@@ -883,7 +886,7 @@ def exibir_ficha_material(_supabase):
                         st.markdown("---")
 
                         if df_dep_filtrado.empty:
-                            st.warning("⚠️ Nenhum material encontrado com os filtros aplicados")
+                            ux.warn("⚠️ Nenhum material encontrado com os filtros aplicados")
                         else:
                             st.markdown(f"#### 📋 Materiais do Departamento **{departamento_selecionado}**")
 
@@ -975,7 +978,7 @@ def exibir_ficha_material(_supabase):
                                 </div>
                                 """
 
-                                c_left, c_btn = st.columns([6, 1])
+                                c_left, c_btn = rcols([6, 1])
                                 with c_left:
                                     st.markdown(card_html, unsafe_allow_html=True)
                                 with c_btn:
@@ -1003,7 +1006,7 @@ def exibir_ficha_material(_supabase):
             st.caption("Selecione uma família e/ou grupo do **Catálogo** para ver todos os pedidos relacionados (cluster).")
 
             if df_cat.empty or ("familia_descricao" not in df_cat.columns and "grupo_descricao" not in df_cat.columns):
-                st.info("Importe o **Catálogo de Materiais** (tabela `materiais`) com `familia_descricao` e `grupo_descricao` para habilitar esta busca.")
+                ux.info("Importe o **Catálogo de Materiais** (tabela `materiais`) com `familia_descricao` e `grupo_descricao` para habilitar esta busca.")
             else:
                 dcat = df_cat.copy()
                 if "_cod_norm" not in dcat.columns and "codigo_material" in dcat.columns:
@@ -1018,7 +1021,7 @@ def exibir_ficha_material(_supabase):
                 grp_all = sorted([g for g in dcat["grupo_descricao"].dropna().astype(str).unique().tolist() if str(g).strip()])
 
                                 # Filtros compactos (estilo enterprise clean)
-                f1, f2, f3, f4 = st.columns([2.2, 2.2, 2.0, 1.1])
+                f1, f2, f3, f4 = rcols([2.2, 2.2, 2.0, 1.1])
                 with f1:
                     fam_sel = st.selectbox("Família", options=["(Todas)"] + fam_opts, index=0, key="fm_busca_fam")
                 with f2:
@@ -1122,12 +1125,12 @@ def exibir_ficha_material(_supabase):
                     df_scope = df_scope[df_scope["_pendente"]]
 
                 if df_scope.empty:
-                    st.warning("Nenhum pedido encontrado para a família/grupo selecionados.")
+                    ux.warn("Nenhum pedido encontrado para a família/grupo selecionados.")
                     st.stop()
 
                 st.subheader("Resumo do cluster")
 
-                k1, k2, k3, k4 = st.columns([1, 1, 1, 1.4])
+                k1, k2, k3, k4 = rcols([1, 1, 1, 1.4])
                 k1.metric("Pedidos", int(len(df_scope)))
                 k2.metric("Materiais", int(df_scope["_cod_norm"].nunique()))
                 k3.metric("Pendentes", int(df_scope["_pendente"].sum()) if "_pendente" in df_scope.columns else 0)
@@ -1135,7 +1138,7 @@ def exibir_ficha_material(_supabase):
 
                 st.subheader("Materiais mais recorrentes")
 
-                r1, r2, r3 = st.columns([2.0, 1.0, 1.2])
+                r1, r2, r3 = rcols([2.0, 1.0, 1.2])
                 with r1:
                     ordenar = st.selectbox("Ordenar por", ["Valor", "Compras"], index=0, key="fm_busca_ord")
                 with r2:
@@ -1196,7 +1199,7 @@ def exibir_ficha_material(_supabase):
                       <div class="fm-bar"><div class="fm-bar-fill" style="width:{min(100.0, max(0.0, float(row.get('pct_valor', 0.0)))):.1f}%;"></div></div>
                     </div>
                     """
-                    cL, cB = st.columns([6, 1])
+                    cL, cB = rcols([6, 1])
 
                     with cL:
                         st.markdown(card, unsafe_allow_html=True)
@@ -1268,7 +1271,7 @@ def exibir_ficha_material(_supabase):
     # ============================================================
 
     if modo_ficha:
-        c1, c2 = st.columns([1, 7])
+        c1, c2 = rcols([1, 7])
         with c1:
             if st.button("← Nova busca", use_container_width=True):
                 st.session_state["modo_ficha_material"] = False
@@ -1329,13 +1332,13 @@ def exibir_ficha_material(_supabase):
             detalhes.append(f"Departamento: **{departamento_ctx}**")
         detalhes_txt = " • " + " • ".join(detalhes) if detalhes else ""
 
-        st.info(
+        ux.info(
             f"📌 Exibindo ficha do material {contexto}{detalhes_txt}",
             icon="ℹ️",
         )
 
         if historico_material is None or historico_material.empty:
-            st.warning("Não encontrei pedidos para este material na base atual. Vou mostrar os dados do catálogo e, na aba **Família & Grupo**, os pedidos do mesmo agrupamento (quando existirem).")
+            ux.warn("Não encontrei pedidos para este material na base atual. Vou mostrar os dados do catálogo e, na aba **Família & Grupo**, os pedidos do mesmo agrupamento (quando existirem).")
 
         # Header com informações básicas
         cod_show = material_atual.get("cod_material", material_selecionado_cod) if "cod_material" in material_atual else material_selecionado_cod
@@ -1375,7 +1378,7 @@ def exibir_ficha_material(_supabase):
             if pu.notna().any():
                 preco_unit_medio = float(pu.mean())
 
-        a1, a2, a3, a4, a5, a6 = st.columns([1.2, 1.2, 1.2, 1.4, 1.4, 1.2])
+        a1, a2, a3, a4, a5, a6 = rcols([1.2, 1.2, 1.2, 1.4, 1.4, 1.2])
         a1.metric("🧾 Código", cod_show if cod_show else "—")
         a2.metric("📅 1ª compra", first_dt.strftime("%d/%m/%Y") if pd.notna(first_dt) else "—")
         a3.metric("📅 Última", last_dt.strftime("%d/%m/%Y") if pd.notna(last_dt) else "—")
@@ -1385,14 +1388,14 @@ def exibir_ficha_material(_supabase):
 
         with st.expander("📚 Dados do Catálogo (dimensões do material)", expanded=False):
             if cat_row:
-                c1, c2, c3 = st.columns(3)
+                c1, c2, c3 = rcols(3)
                 c1.write(f"**Unidade:** {(cat_row.get('unidade') or '—')}")
                 c1.write(f"**Almoxarifado:** {(cat_row.get('almoxarifado') or '—')}")
                 c2.write(f"**Tipo Material:** {(cat_row.get('tipo_material') or '—')}")
                 c2.write(f"**Origem:** {(cat_row.get('origem') or '—')}")
                 c3.write(f"**Descrição catálogo:** {(cat_row.get('descricao') or '—')}")
             else:
-                st.info("Sem correspondência no catálogo para este código (ou catálogo não importado).")
+                ux.info("Sem correspondência no catálogo para este código (ou catálogo não importado).")
 
 # ============================================================
         # ABAS: FICHA TÉCNICA vs HISTÓRICO DETALHADO
@@ -1478,7 +1481,7 @@ def exibir_ficha_material(_supabase):
         # - Valor total: soma de todos os pedidos no escopo (família/grupo/material)
         # - Valor pendente: soma apenas dos itens ainda pendentes
         valor_total_escopo = float(df_mat["_valor_total"].sum())
-        k1, k2, k3, k4, k5, k6 = st.columns(6)
+        k1, k2, k3, k4, k5, k6 = rcols(6)
         k1.metric("📦 Pedidos", int(len(df_mat)))
         k2.metric("⏳ Pendentes", int(df_mat["_pendente"].sum()))
         k3.metric("🔴 Atrasados", qtd_atrasados)
@@ -1492,7 +1495,7 @@ def exibir_ficha_material(_supabase):
         with tab_acomp:
             st.markdown("### 📌 Fila de Follow-up (pedidos pendentes)")
 
-            f1, f2, f3, f4 = st.columns([1.2, 1.2, 1.2, 1.4])
+            f1, f2, f3, f4 = rcols([1.2, 1.2, 1.2, 1.4])
             only_atrasados = f1.toggle("Só atrasados", value=False)
             only_pendentes = f2.toggle("Só pendentes", value=True)
             ordenar = f3.selectbox("Ordenar por", ["Prioridade", "Maior valor", "Mais antigo"], index=0)
@@ -1570,7 +1573,7 @@ def exibir_ficha_material(_supabase):
             st.markdown("### 📦 Histórico do material")
             st.caption("Auditoria e histórico completo (com filtros e exportação).")
 
-            c1, c2, c3 = st.columns([1.2, 1.2, 1.6])
+            c1, c2, c3 = rcols([1.2, 1.2, 1.6])
             filtro_status = None
             if col_status and col_status in df_mat.columns:
                 status_opts = sorted(df_mat[col_status].dropna().astype(str).unique().tolist())
@@ -1629,7 +1632,7 @@ def exibir_ficha_material(_supabase):
         with tab_forn:
             st.markdown("### 🏷️ Análise de fornecedores (follow-up)")
             if not (col_fornecedor and col_fornecedor in df_mat.columns):
-                st.info("ℹ️ Não encontrei coluna de fornecedor nos pedidos para este material.")
+                ux.info("ℹ️ Não encontrei coluna de fornecedor nos pedidos para este material.")
             else:
                 df_f = df_mat.copy()
                 df_f["Fornecedor"] = df_f[col_fornecedor].astype(str)
@@ -1670,7 +1673,7 @@ def exibir_ficha_material(_supabase):
             df_done = df_ent[entregues_mask & df_ent["_entrega_real"].notna() & df_ent["_due"].notna()].copy()
 
             if df_done.empty:
-                st.info("ℹ️ Não há entregas com datas suficientes (vencimento e entrega real) para calcular SLA.")
+                ux.info("ℹ️ Não há entregas com datas suficientes (vencimento e entrega real) para calcular SLA.")
             else:
                 df_done["_no_prazo"] = df_done["_entrega_real"] <= df_done["_due"]
                 sla = float(df_done["_no_prazo"].mean() * 100)
@@ -1678,7 +1681,7 @@ def exibir_ficha_material(_supabase):
                 atraso_dias = (df_done["_entrega_real"] - df_done["_due"]).dt.days
                 atraso_medio = float(atraso_dias[atraso_dias > 0].mean()) if (atraso_dias > 0).any() else 0.0
 
-                a1, a2, a3 = st.columns(3)
+                a1, a2, a3 = rcols(3)
                 a1.metric("✅ SLA (no prazo)", f"{sla:.1f}%")
                 a2.metric("⏱️ Atraso médio (dias)", f"{atraso_medio:.0f}")
                 a3.metric("📦 Entregas analisadas", int(len(df_done)))
@@ -1705,17 +1708,17 @@ def exibir_ficha_material(_supabase):
             st.caption("Visão consolidada para analisar o consumo e follow-up do *cluster* do material (família/grupo) usando o Catálogo.")
 
             if df_cat.empty:
-                st.info("Importe o **Catálogo de Materiais** para habilitar Família/Grupo nesta tela.")
+                ux.info("Importe o **Catálogo de Materiais** para habilitar Família/Grupo nesta tela.")
             elif not cat_row:
-                st.info("Este material não foi encontrado no catálogo (ou o código não está padronizado).")
+                ux.info("Este material não foi encontrado no catálogo (ou o código não está padronizado).")
             
             else:
                 if cat_row.get("_tenant_mismatch"):
-                    st.warning("Encontrei o material no catálogo, mas em OUTRO tenant_id. Verifique se o material foi importado no tenant correto.")
+                    ux.warn("Encontrei o material no catálogo, mas em OUTRO tenant_id. Verifique se o material foi importado no tenant correto.")
                 fam = (cat_row.get("familia_descricao") or "").strip()
                 grp = (cat_row.get("grupo_descricao") or "").strip()
 
-                ctop1, ctop2 = st.columns([2, 3])
+                ctop1, ctop2 = rcols([2, 3])
                 with ctop1:
                     scope = st.radio(
                         "Escopo",
@@ -1730,19 +1733,19 @@ def exibir_ficha_material(_supabase):
 
                 if scope == "Família":
                     if not fam:
-                        st.warning("Este material está sem **Família** no catálogo.")
+                        ux.warn("Este material está sem **Família** no catálogo.")
                         st.stop()
                     cat_scope = df_cat[df_cat.get("familia_descricao", "").astype(str).str.strip() == fam]
                     titulo_scope = f"Família: {fam}"
                 elif scope == "Grupo":
                     if not grp:
-                        st.warning("Este material está sem **Grupo** no catálogo.")
+                        ux.warn("Este material está sem **Grupo** no catálogo.")
                         st.stop()
                     cat_scope = df_cat[df_cat.get("grupo_descricao", "").astype(str).str.strip() == grp]
                     titulo_scope = f"Grupo: {grp}"
                 else:
                     if not fam and not grp:
-                        st.warning("Este material está sem **Família** e **Grupo** no catálogo.")
+                        ux.warn("Este material está sem **Família** e **Grupo** no catálogo.")
                         st.stop()
                     cat_scope = df_cat.copy()
                     if fam:
@@ -1753,7 +1756,7 @@ def exibir_ficha_material(_supabase):
 
                 codes = set([c for c in cat_scope.get("_cod_norm", pd.Series([], dtype=str)).astype(str).tolist() if c])
                 if not codes:
-                    st.info("Nenhum material encontrado no catálogo para o escopo selecionado.")
+                    ux.info("Nenhum material encontrado no catálogo para o escopo selecionado.")
                     st.stop()
 
                 df_scope = df_pedidos[df_pedidos.get("_cod_norm", pd.Series([], dtype=str)).isin(codes)].copy()
@@ -1762,11 +1765,11 @@ def exibir_ficha_material(_supabase):
                 st.caption(f"Materiais no escopo: **{len(codes)}**  ·  Pedidos no escopo: **{len(df_scope)}**")
 
                 if df_scope.empty:
-                    st.warning("Nenhum pedido encontrado para o escopo selecionado.")
+                    ux.warn("Nenhum pedido encontrado para o escopo selecionado.")
                     st.stop()
 
                 # ---- filtros executivos
-                f1, f2, f3, f4 = st.columns([1.2, 1.2, 1.4, 1.2])
+                f1, f2, f3, f4 = rcols([1.2, 1.2, 1.4, 1.2])
                 only_pend = f1.toggle("Só pendentes", value=True, key="fm_fg_only_pend")
                 only_atras = f2.toggle("Só atrasados", value=False, key="fm_fg_only_atras")
                 janela = f3.selectbox("Período", ["Tudo", "Últimos 3 meses", "Últimos 6 meses", "Último ano"], index=0, key="fm_fg_janela")
@@ -1818,7 +1821,7 @@ def exibir_ficha_material(_supabase):
                     df_scope = df_scope[df_scope["_atrasado"]]
 
                 # KPIs
-                kk1, kk2, kk3, kk4, kk5 = st.columns(5)
+                kk1, kk2, kk3, kk4, kk5 = rcols(5)
                 kk1.metric("📦 Pedidos", int(len(df_scope)))
                 kk2.metric("🧾 Materiais", int(df_scope["_cod_norm"].nunique()) if "_cod_norm" in df_scope.columns else 0)
                 kk3.metric("💰 Valor", formatar_moeda_br(float(df_scope["_valor_total"].sum())))
@@ -1937,7 +1940,7 @@ def exibir_ficha_material(_supabase):
 
             # Guard rails: só desenhar preço se houver dados
             if col_unit and col_unit in historico_material.columns and pd.to_numeric(historico_material[col_unit], errors="coerce").notna().sum() >= 2:
-                col1, col2 = st.columns([2, 1])
+                col1, col2 = rcols([2, 1])
                 with col1:
                     fm.criar_grafico_evolucao_precos(historico_material)
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -1948,7 +1951,7 @@ def exibir_ficha_material(_supabase):
                 st.markdown("---")
                 fm.criar_ranking_fornecedores_visual(historico_material)
             else:
-                st.info("📊 Ainda não há histórico suficiente de preço para gráficos comparativos.")
+                ux.info("📊 Ainda não há histórico suficiente de preço para gráficos comparativos.")
 
             st.markdown("---")
             fm.criar_timeline_compras(historico_material)

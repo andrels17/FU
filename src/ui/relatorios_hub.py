@@ -1,5 +1,7 @@
 import streamlit as st
 
+from src.ui import ux
+
 from src.ui.theme import section_header
 
 
@@ -29,13 +31,7 @@ def exibir_relatorios_hub(supabase_user, supabase_admin=None, tenant_id: str | N
         _force = st.session_state.pop("hub_reports_force", None)
         _default_idx = opcoes.index(_force) if _force in opcoes else 0
 
-        escolha = st.radio(
-            "",
-            options=opcoes,
-            index=_default_idx,
-            horizontal=True,
-            key="hub_reports__selector",
-        )
+        escolha = ux.segmented("", options=opcoes, key="hub_reports__selector", default=opcoes[_default_idx])
 
         st.markdown("---")
 
@@ -48,7 +44,7 @@ def exibir_relatorios_hub(supabase_user, supabase_admin=None, tenant_id: str | N
             df_all = carregar_pedidos(supabase_user, tenant_id)
 
             if df_all.empty:
-                st.info("📭 Nenhum pedido encontrado para exportação.")
+                ux.info("📭 Nenhum pedido encontrado para exportação.")
                 return
 
             # Reaproveita o último recorte do Dashboard (se o usuário tiver clicado em 'Gerar dashboard')
@@ -143,7 +139,7 @@ def exibir_relatorios_hub(supabase_user, supabase_admin=None, tenant_id: str | N
         else:
             # Executivo (superadmin)
             if not bool(st.session_state.get("is_superadmin")):
-                st.info("Relatórios executivos completos são visíveis apenas para Superadmin.")
+                ux.info("Relatórios executivos completos são visíveis apenas para Superadmin.")
                 return
             if supabase_admin is None:
                 st.error("Supabase admin não inicializado (SERVICE ROLE).")

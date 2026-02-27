@@ -6,6 +6,8 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 from src.services.snapshots import gerar_snapshot_por_tenant, listar_snapshots
 from src.ui.theme import section_header
 
@@ -26,15 +28,15 @@ def exibir_snapshots(supabase_admin) -> None:
             with st.spinner("Gerando snapshots por tenant..."):
                 rows = gerar_snapshot_por_tenant(supabase_admin, snapshot_date=snap_date.isoformat())
             if rows:
-                st.success(f"Snapshot gerado para {len(rows)} tenants.")
+                ux.ok(f"Snapshot gerado para {len(rows)} tenants.")
             else:
-                st.warning("Nenhum tenant encontrado para gerar snapshot.")
+                ux.warn("Nenhum tenant encontrado para gerar snapshot.")
 
     st.markdown("---")
     st.subheader("Histórico")
     data = listar_snapshots(supabase_admin)
     if not data:
-        st.info("Sem snapshots ainda.")
+        ux.info("Sem snapshots ainda.")
         return
 
     # normaliza

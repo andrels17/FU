@@ -5,6 +5,8 @@ import os
 
 import streamlit as st
 
+from src.ui import ux
+
 from src.core.db import init_supabase_admin
 
 
@@ -292,13 +294,13 @@ def exibir_admin_saas(supabase_user) -> None:
 
                     try:
                         supabase_admin.table("tenants").insert(payload).execute()
-                        st.success("✅ Empresa criada!")
+                        ux.ok("✅ Empresa criada!")
                         st.rerun()
                     except Exception:
                         # fallback: sem codigo
                         try:
                             supabase_admin.table("tenants").insert({name_field: nome.strip()}).execute()
-                            st.success("✅ Empresa criada (sem código)!")
+                            ux.ok("✅ Empresa criada (sem código)!")
                             st.rerun()
                         except Exception as e2:
                             st.error(f"Erro ao criar empresa: {e2}")
@@ -307,7 +309,7 @@ def exibir_admin_saas(supabase_user) -> None:
         st.subheader("✏️ Editar empresa")
 
         if not tenants:
-            st.info("Nenhuma empresa cadastrada.")
+            ux.info("Nenhuma empresa cadastrada.")
         else:
             # select tenant
             def _label(t: dict[str, Any]) -> str:
@@ -341,7 +343,7 @@ def exibir_admin_saas(supabase_user) -> None:
                                 supabase_admin.table("tenants").update(
                                     {name_field: novo_nome.strip()}
                                 ).eq("id", tenant_id).execute()
-                                st.success("✅ Empresa atualizada!")
+                                ux.ok("✅ Empresa atualizada!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Erro ao atualizar empresa: {e}")
@@ -355,7 +357,7 @@ def exibir_admin_saas(supabase_user) -> None:
                         else:
                             rr = _link_user_to_tenant(supabase_admin, tenant_id, user_id, "admin")
                             if rr.get("ok"):
-                                st.success("✅ Você foi vinculado como admin.")
+                                ux.ok("✅ Você foi vinculado como admin.")
                             else:
                                 st.error(f"Falha ao vincular: {rr.get('error')}")
 
@@ -366,7 +368,7 @@ def exibir_admin_saas(supabase_user) -> None:
         st.subheader("👥 Gestão de usuários por empresa")
 
         if not tenants:
-            st.info("Crie uma empresa primeiro.")
+            ux.info("Crie uma empresa primeiro.")
         else:
             tenant_sel = st.selectbox(
                 "Empresa",
@@ -393,7 +395,7 @@ def exibir_admin_saas(supabase_user) -> None:
                         if not inv.get("ok"):
                             st.error(f"Falha ao enviar convite: {inv.get('error')}")
                         else:
-                            st.success("✅ Convite enviado! Assim que o usuário aceitar, você poderá vinculá-lo abaixo.")
+                            ux.ok("✅ Convite enviado! Assim que o usuário aceitar, você poderá vinculá-lo abaixo.")
 
             st.divider()
             st.markdown("### 🔗 Vincular usuário existente ao tenant")
@@ -414,7 +416,7 @@ def exibir_admin_saas(supabase_user) -> None:
                     else:
                         rr = _link_user_to_tenant(supabase_admin, tenant_id, user_id, role2)
                         if rr.get("ok"):
-                            st.success("✅ Vínculo atualizado!")
+                            ux.ok("✅ Vínculo atualizado!")
                         else:
                             st.error(f"Falha: {rr.get('error')}")
 
@@ -424,7 +426,7 @@ def exibir_admin_saas(supabase_user) -> None:
             try:
                 members = _list_tenant_members(supabase_admin, tenant_id)
                 if not members:
-                    st.info("Nenhum usuário vinculado a esta empresa ainda.")
+                    ux.info("Nenhum usuário vinculado a esta empresa ainda.")
                 else:
                     for m in members:
                         email_m = m.get("email") or "—"
@@ -446,7 +448,7 @@ def exibir_admin_saas(supabase_user) -> None:
                             if st.button("Salvar role", key=f"save_role_{uid_m}", use_container_width=True):
                                 rr = _link_user_to_tenant(supabase_admin, tenant_id, uid_m, new_role)
                                 if rr.get("ok"):
-                                    st.success("✅ Role atualizada!")
+                                    ux.ok("✅ Role atualizada!")
                                 else:
                                     st.error(f"Falha: {rr.get('error')}")
 
@@ -462,7 +464,7 @@ def exibir_admin_saas(supabase_user) -> None:
                                     else:
                                         rr = _safe_send_recovery_email(supabase_admin, email_m)
                                         if rr.get("ok"):
-                                            st.success("✅ Link de recuperação enviado!")
+                                            ux.ok("✅ Link de recuperação enviado!")
                                         else:
                                             st.error(f"Falha ao enviar: {rr.get('error')}")
 
@@ -474,7 +476,7 @@ def exibir_admin_saas(supabase_user) -> None:
                                     else:
                                         rr = _safe_set_temp_password(supabase_admin, uid_m, temp)
                                         if rr.get("ok"):
-                                            st.success("✅ Senha atualizada via Admin API.")
+                                            ux.ok("✅ Senha atualizada via Admin API.")
                                         else:
                                             st.error(f"Falha: {rr.get('error')}")
             except Exception as e:

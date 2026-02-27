@@ -7,6 +7,8 @@ Fluxos de autenticação (Supabase + Streamlit):
 from __future__ import annotations
 
 import streamlit as st
+from src.ui import ux
+
 import streamlit.components.v1 as components
 
 
@@ -110,7 +112,7 @@ def handle_auth_callback(supabase_anon) -> None:
                 if flow_type:
                     st.session_state["auth_flow_type"] = flow_type
                 _clear_auth_params_keep_page('home')
-                st.success("✅ Autenticação concluída. Entrando…")
+                ux.ok("✅ Autenticação concluída. Entrando…")
                 st.rerun()
                 return
             except Exception as e:
@@ -122,7 +124,7 @@ def handle_auth_callback(supabase_anon) -> None:
 
     # 2) Fluxo antigo: set_session com tokens
     if not access_token or not refresh_token:
-        st.info("Finalizando autenticação… Se não avançar, feche e clique no link novamente.")
+        ux.info("Finalizando autenticação… Se não avançar, feche e clique no link novamente.")
         st.stop()
 
     try:
@@ -136,7 +138,7 @@ def handle_auth_callback(supabase_anon) -> None:
     if flow_type:
         st.session_state["auth_flow_type"] = flow_type
     _clear_auth_params_keep_page('home')
-    st.success("✅ Autenticação concluída. Entrando…")
+    ux.ok("✅ Autenticação concluída. Entrando…")
     st.rerun()
 
 
@@ -163,7 +165,7 @@ def tela_primeiro_acesso_definir_senha(supabase_anon) -> None:
             return
         try:
             supabase_anon.auth.update_user({"password": nova})
-            st.success("Senha definida com sucesso! Você poderá entrar por e-mail e senha.")
+            ux.ok("Senha definida com sucesso! Você poderá entrar por e-mail e senha.")
             st.session_state["auth_flow_type"] = None
         except Exception as e:
             st.error(f"❌ Falha ao definir senha: {e}")
@@ -248,7 +250,7 @@ def tela_redefinir_senha(supabase_anon) -> None:
             return
         try:
             supabase_anon.auth.update_user({"password": nova})
-            st.success("✅ Senha atualizada! Você já pode entrar com e-mail e senha.")
+            ux.ok("✅ Senha atualizada! Você já pode entrar com e-mail e senha.")
             st.session_state["auth_flow_type"] = None
         except Exception as e:
             st.error(f"❌ Falha ao atualizar senha: {e}")

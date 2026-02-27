@@ -8,6 +8,8 @@ import datetime
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 # Repositórios (mantém compatibilidade com a estrutura do projeto)
 try:
     from src.repositories.pedidos import carregar_pedidos
@@ -79,6 +81,24 @@ def _badge_status(s: str) -> str:
         return f"🟡 {s}"
 
     return f"⚪ {s}"
+
+
+def _dt_series(df: pd.DataFrame, col: str) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series([pd.NaT] * len(df), index=df.index)
+    return pd.to_datetime(df[col], errors="coerce")
+
+
+def _compute_due_dates(df: pd.DataFrame) -> pd.Series:
+    """Calcula a data 'due' com a mesma regra do Dashboard/Alertas.
+
+    previsao_entrega > prazo_entrega > data_oc + 30 dias
+    """
+    prev = _dt_series(df, "previsao_entrega")
+    prazo = _dt_series(df, "prazo_entrega")
+    data_oc = _dt_series(df, "data_oc")
+    fallback = data_oc + pd.to_timedelta(30, unit="D")
+    return prev.fillna(prazo).fillna(fallback)
 
 
 def _status_pill(status: str) -> str:
@@ -177,17 +197,24 @@ def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str 
 
     st.markdown('<div class="fu-erp-list">', unsafe_allow_html=True)
 
-    # Cabeçalho (sticky-like por CSS fica complexo; aqui deixamos simples e limpo)
-    header_cols = st.columns([0.6, 1.4, 3.6, 1.2, 1.1, 1.2, 1.2])
-    header_cols[0].markdown("**Ver**")
-    header_cols[1].markdown("**Equip.**")
-    header_cols[2].markdown("**Descrição**")
-    header_cols[3].markdown("**OC / SOL**")
-    header_cols[4].markdown("**Depto**")
-    header_cols[5].markdown("**Status**")
-    header_cols[6].markdown("**Valor**")
 
-    st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
+    mobile = bool(st.session_state.get("mobile_mode", False))
+
+    # Cabeçalho (desktop)
+    if not mobile:
+        header_cols = st.columns([0.6, 1.4, 3.6, 1.2, 1.1, 1.2, 1.2])
+        header_cols[0].markdown("**Ver**")
+        header_cols[1].markdown("**Equip.**")
+        header_cols[2].markdown("**Descrição**")
+        header_cols[3].markdown("**OC / SOL**")
+        header_cols[4].markdown("**Depto**")
+        header_cols[5].markdown("**Status**")
+        header_cols[6].markdown("**Valor**")
+        st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
+
+    else:
+        st.caption("Toque em 👁️ para abrir as ações do pedido.")
+        st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
 
     for i, r in page.reset_index(drop=False).iterrows():
         # r contém a coluna "index" do df original (drop=False) — útil se precisar
@@ -208,39 +235,55 @@ def _render_lista_erp_com_olho(page: pd.DataFrame, show_cols: list[str]) -> str 
         except Exception:
             val_str = _to_str(val)
 
-        c = st.columns([0.6, 1.4, 3.6, 1.2, 1.1, 1.2, 1.2])
+        if mobile:
+            # Card compacto (mobile)
+            top = st.columns([0.82, 0.18])
+            with top[0]:
+                desc_full = str(desc or "").replace("\n", " ").replace("\r", " ").strip()
+                desc_full = re.sub(r"\s+", " ", desc_full)
+                st.markdown(f"**{(desc_full or '—')}**")
+                st.caption(f"Equip.: {cod_eq or '—'}  •  OC/SOL: {oc or '—'} / {sol or '—'}")
+                st.caption(f"Depto: {depto or '—'}  •  {val_str or '—'}")
+                st.markdown(_status_html(_to_str(r.get('status'))), unsafe_allow_html=True)
+            with top[1]:
+                if st.button("👁️", key=f"see_{pid}", help="Abrir ações deste pedido", use_container_width=True):
+                    return pid
+            st.markdown('<div class="fu-erp-sep"><hr></div>', unsafe_allow_html=True)
 
-        with c[0]:
-            if st.button("👁️", key=f"see_{pid}", help="Abrir ações deste pedido", use_container_width=True):
-                return pid
+        else:
+            c = st.columns([0.6, 1.4, 3.6, 1.2, 1.1, 1.2, 1.2])
 
-        with c[1]:
-            st.caption(cod_eq or "—")
+            with c[0]:
+                if st.button("👁️", key=f"see_{pid}", help="Abrir ações deste pedido", use_container_width=True):
+                    return pid
 
-        with c[2]:
-            # descrição (curta) + botão de info (abre modal com texto completo)
-            desc = str(desc or "").replace("\n", " ").replace("\r", " ").strip()
-            desc = re.sub(r"\s+", " ", desc)
+            with c[1]:
+                st.caption(cod_eq or "—")
 
-            MAX_DESC = 55  # limita visual para não invadir outras colunas
-            short = (desc[: MAX_DESC - 1] + "…") if len(desc) > MAX_DESC else desc
-            label = short or "—"
-            if st.button(label, key=f"row_{pid}", help="Abrir ações deste pedido", use_container_width=True):
-                return pid
+            with c[2]:
+                # descrição (curta) + botão de info (abre modal com texto completo)
+                desc = str(desc or "").replace("\n", " ").replace("\r", " ").strip()
+                desc = re.sub(r"\s+", " ", desc)
 
-        with c[3]:
-            st.caption(f"{oc or '—'} / {sol or '—'}")
+                MAX_DESC = 55  # limita visual para não invadir outras colunas
+                short = (desc[: MAX_DESC - 1] + "…") if len(desc) > MAX_DESC else desc
+                label = short or "—"
+                if st.button(label, key=f"row_{pid}", help="Abrir ações deste pedido", use_container_width=True):
+                    return pid
 
-        with c[4]:
-            st.caption(depto or "—")
+            with c[3]:
+                st.caption(f"{oc or '—'} / {sol or '—'}")
 
-        with c[5]:
-            st.markdown(_status_html(_to_str(r.get('status'))), unsafe_allow_html=True)
+            with c[4]:
+                st.caption(depto or "—")
 
-        with c[6]:
-            st.caption(val_str or "—")
+            with c[5]:
+                st.markdown(_status_html(_to_str(r.get('status'))), unsafe_allow_html=True)
 
-        st.markdown('<div class="fu-erp-sep"><hr></div>', unsafe_allow_html=True)
+            with c[6]:
+                st.caption(val_str or "—")
+
+            st.markdown('<div class="fu-erp-sep"><hr></div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
     return None
@@ -257,7 +300,7 @@ def _make_stamp(df: pd.DataFrame, col: str = "atualizado_em") -> tuple:
         mx = pd.to_datetime(df[col], errors="coerce").max()
     return (len(df), str(mx) if mx is not None else "none")
 
-@st.cache_data(ttl=120)
+@st.cache_data(max_entries=256, ttl=120)
 def _prepare_search(stamp: tuple, df: pd.DataFrame) -> pd.DataFrame:
     """Normaliza tipos e cria coluna de busca (cacheada)."""
     if df is None or df.empty:
@@ -306,6 +349,7 @@ def _apply_filters(
     df: pd.DataFrame,
     q: str,
     deptos: list[str],
+    ufs: list[str],
     status_list: list[str],
     somente_atrasados: bool,
     cod_equip: str = "",
@@ -314,8 +358,19 @@ def _apply_filters(
     """Aplica filtros estáveis (multiselect) + busca + atrasados + códigos numéricos."""
     out = df
 
+    # Navegação vinda do Dashboard (por KPI): restringe a um conjunto de IDs
+    nav_ids = st.session_state.get("consulta_nav_ids")
+    if nav_ids and isinstance(nav_ids, set):
+        try:
+            out = out.loc[out.index.intersection(nav_ids)]
+        except Exception:
+            pass
+
     if deptos and "departamento" in out.columns:
         out = out[out["departamento"].isin(deptos)]
+
+    if ufs and "fornecedor_uf" in out.columns:
+        out = out[out["fornecedor_uf"].fillna("").astype(str).str.strip().str.upper().isin([u.strip().upper() for u in ufs])]
 
     if status_list and "status" in out.columns:
         out = out[out["status"].isin(status_list)]
@@ -345,6 +400,25 @@ def _apply_filters(
 
     if somente_atrasados:
         out = out[_is_atrasado(out)]
+
+    # Filtro por janela de vencimento (quando aplicado via KPI)
+    win = st.session_state.get("consulta_due_window")
+    if win in ("vencendo", "risco"):
+        try:
+            entregue = out.get("entregue", pd.Series([False] * len(out))).astype(str).str.lower().isin(["true", "1", "yes", "sim"])
+            due = _compute_due_dates(out)
+            hoje = pd.Timestamp.now().normalize()
+            limite = hoje + pd.Timedelta(days=3)
+            flag_atrasado = out.get("atrasado", pd.Series([False] * len(out))).astype(str).str.lower().isin(["true", "1", "yes", "sim"])
+            if win == "vencendo":
+                out = out[(~entregue) & (due.notna() & (due >= hoje) & (due <= limite))]
+            else:  # risco
+                out = out[(~entregue) & (
+                    flag_atrasado | (due.notna() & (due < hoje)) |
+                    (due.notna() & (due >= hoje) & (due <= limite))
+                )]
+        except Exception:
+            pass
 
     return out
 
@@ -534,7 +608,7 @@ def exibir_consulta_pedidos(_supabase):
     tenant_id = st.session_state.get("tenant_id")
     df_raw = _get_cached_pedidos(_supabase, tenant_id)
     if df_raw is None or df_raw.empty:
-        st.info("📭 Nenhum pedido cadastrado.")
+        ux.info("📭 Nenhum pedido cadastrado.")
         return
 
     df = _prepare_search(_make_stamp(df_raw), df_raw)
@@ -551,6 +625,7 @@ def exibir_consulta_pedidos(_supabase):
     # -------------------- Estado padrão (filtros + seleção)
     st.session_state.setdefault("c_q", "")
     st.session_state.setdefault("c_deptos", [])
+    st.session_state.setdefault("c_uf", [])
     st.session_state.setdefault("c_status_list", [])
     st.session_state.setdefault("c_cod_equip", "")
     st.session_state.setdefault("c_cod_mat", "")
@@ -561,6 +636,49 @@ def exibir_consulta_pedidos(_supabase):
     st.session_state.setdefault("consulta_auto_opened_pid", None)
     st.session_state.setdefault("consulta_selected_label", "")
     st.session_state.setdefault("go_key", "")
+
+    # -------------------- Navegação por KPIs (Dashboard -> Consulta)
+    # Usa uma chave simples e remove após aplicar, para não "grudar".
+    nav_mode = st.session_state.pop("consulta_nav_mode", None)
+    if nav_mode:
+        nav_mode = str(nav_mode).strip().lower()
+        st.session_state["c_pag"] = 1
+        # limpa filtros que normalmente atrapalham uma navegação rápida
+        st.session_state["c_status_list"] = []
+        st.session_state["c_deptos"] = st.session_state.get("c_deptos", []) or []
+        st.session_state["c_uf"] = st.session_state.get("c_uf", []) or []
+        st.session_state["c_atraso"] = False
+
+        # aplica por regra equivalente ao Dashboard
+        base = df.copy()
+        entregue = base.get("entregue", pd.Series([False] * len(base))).astype(str).str.lower().isin(["true", "1", "yes", "sim"])
+        due = _compute_due_dates(base)
+        hoje = pd.Timestamp.now().normalize()
+        limite = hoje + pd.Timedelta(days=3)
+        flag_atrasado = base.get("atrasado", pd.Series([False] * len(base))).astype(str).str.lower().isin(["true", "1", "yes", "sim"])
+
+        if nav_mode == "pendentes":
+            mask = ~entregue
+        elif nav_mode == "atrasados":
+            mask = (~entregue) & (flag_atrasado | (due.notna() & (due < hoje)))
+            st.session_state["c_atraso"] = True
+        elif nav_mode == "vencendo":
+            mask = (~entregue) & (due.notna() & (due >= hoje) & (due <= limite))
+            st.session_state["consulta_due_window"] = "vencendo"
+        elif nav_mode == "risco":
+            mask = (~entregue) & (
+                flag_atrasado | (due.notna() & (due < hoje)) |
+                (due.notna() & (due >= hoje) & (due <= limite))
+            )
+            st.session_state["consulta_due_window"] = "risco"
+        else:
+            mask = pd.Series([True] * len(base), index=base.index)
+
+        # guarda um filtro rápido por IDs para ser aplicado no _apply_filters
+        try:
+            st.session_state["consulta_nav_ids"] = set(base.loc[mask].index.tolist())
+        except Exception:
+            st.session_state["consulta_nav_ids"] = None
     # -------------------- Presets/Atalhos (robusto, evita StreamlitAPIException)
     # Regras:
     # - Callback (on_change/on_click) roda antes de renderizar widgets -> seguro para setar chaves
@@ -736,6 +854,17 @@ def exibir_consulta_pedidos(_supabase):
             else:
                 st.multiselect("Departamento", [], key="c_deptos", placeholder="Todos")
 
+
+
+            # UF do fornecedor
+            if "fornecedor_uf" in df.columns:
+                uf_opts = sorted(
+                    df["fornecedor_uf"].dropna().astype(str).str.strip().str.upper().unique().tolist()
+                )
+                st.multiselect("UF", uf_opts, key="c_uf", placeholder="Todas")
+            else:
+                st.multiselect("UF", [], key="c_uf", placeholder="Todas")
+
             # Status
             if "status" in df.columns:
                 status_opts = sorted(df["status"].dropna().astype(str).unique().tolist())
@@ -786,6 +915,7 @@ def exibir_consulta_pedidos(_supabase):
             df,
             st.session_state.get("c_q", ""),
             st.session_state.get("c_deptos", []),
+            st.session_state.get("c_uf", []),
             st.session_state.get("c_status_list", []),
             st.session_state.get("c_atraso", False),
             st.session_state.get("c_cod_equip", ""),
@@ -921,7 +1051,7 @@ def exibir_consulta_pedidos(_supabase):
             st.session_state.update({"c_status_list": ["Entregue"], "c_atraso": False, "c_pag": 1})
             st.rerun()
 
-        st.info("Dica: use os atalhos aqui e volte na aba **Lista** para ver o resultado sem poluir a tela.")
+        ux.info("Dica: use os atalhos aqui e volte na aba **Lista** para ver o resultado sem poluir a tela.")
 
     # =========================
     # TAB: AÇÕES (operacional)
@@ -938,20 +1068,20 @@ def exibir_consulta_pedidos(_supabase):
                 pid = _find_pid_by_key(df, st.session_state.get("go_key", ""))
                 if pid:
                     st.session_state["consulta_selected_pid"] = pid
-                    st.success("Pedido localizado.")
+                    ux.ok("Pedido localizado.")
                 else:
-                    st.warning("Não encontrei OC/SOL com esse valor.")
+                    ux.warn("Não encontrei OC/SOL com esse valor.")
 
         pid = st.session_state.get("consulta_selected_pid")
         if not pid:
-            st.info("Selecione um pedido na aba **Lista** ou use o campo acima.")
+            ux.info("Selecione um pedido na aba **Lista** ou use o campo acima.")
             return
 
         row = df[df["id"].astype(str) == str(pid)] if "id" in df.columns else pd.DataFrame()
         if row.empty and "nr_oc" in df.columns:
             row = df[df["nr_oc"].fillna("").astype(str) == str(pid)]
         if row.empty:
-            st.warning("Pedido selecionado não foi encontrado no dataset atual.")
+            ux.warn("Pedido selecionado não foi encontrado no dataset atual.")
             return
 
         r = row.iloc[0]

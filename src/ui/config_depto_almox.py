@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import streamlit as st
+from src.ui import ux
+
 import pandas as pd
 
 from src.ui.theme import section_header
@@ -132,7 +134,7 @@ def exibir_config_depto_almox(supabase_user, supabase_admin=None, tenant_id: str
                     st.session_state[dep_key] = deps[0]
                 departamento = st.selectbox("Departamento", options=deps, key=dep_key, on_change=_on_dep_change)
             else:
-                st.warning(
+                ux.warn(
                     "Não encontrei departamentos para listar (do seu tenant). "
                     "Se você tem pedidos e mesmo assim aparece vazio, pode ser permissão/RLS na tabela `pedidos`."
                 )
@@ -155,7 +157,7 @@ def exibir_config_depto_almox(supabase_user, supabase_admin=None, tenant_id: str
                         st.session_state[almox_key] = almox[0]
                 almoxarifado = st.selectbox("Almoxarifado", options=almox, key=almox_key)
             else:
-                st.warning("Não encontrei almoxarifados no view vw_almoxarifados.")
+                ux.warn("Não encontrei almoxarifados no view vw_almoxarifados.")
                 almoxarifado = st.text_input(
                     "Almoxarifado",
                     key="cfg_depto_almox__almox_txt",
@@ -170,7 +172,7 @@ def exibir_config_depto_almox(supabase_user, supabase_admin=None, tenant_id: str
             else:
                 try:
                     _upsert_mapeamento(_supabase, tenant_id, dep, alx)
-                    st.success("✅ Vínculo salvo.")
+                    ux.ok("✅ Vínculo salvo.")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Não foi possível salvar: {e}")
@@ -179,7 +181,7 @@ def exibir_config_depto_almox(supabase_user, supabase_admin=None, tenant_id: str
     st.subheader("Vínculos atuais")
 
     if df_map.empty:
-        st.info("Nenhum vínculo cadastrado ainda.")
+        ux.info("Nenhum vínculo cadastrado ainda.")
         return
 
     show = df_map[["departamento", "almoxarifado", "created_at", "id"]].copy()
@@ -198,7 +200,7 @@ def exibir_config_depto_almox(supabase_user, supabase_admin=None, tenant_id: str
         if st.button("🗑️ Remover", use_container_width=True, key="cfg_depto_almox__rm"):
             try:
                 _delete_mapeamento(_supabase, tenant_id, int(opt))
-                st.success("✅ Removido.")
+                ux.ok("✅ Removido.")
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Não foi possível remover: {e}")

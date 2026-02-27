@@ -8,6 +8,8 @@ from collections import defaultdict
 import streamlit as st
 
 
+from src.ui import ux
+
 def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
     # -----------------------------
     # Saudação (timezone correto)
@@ -456,9 +458,9 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
             )
 
     if vencendo_48h > 0:
-        st.info(f" Atenção: {vencendo_48h} pedido(s) vencendo em até 48h. Pode valer um follow-up preventivo.")
+        ux.info(f" Atenção: {vencendo_48h} pedido(s) vencendo em até 48h. Pode valer um follow-up preventivo.")
     elif maior_atraso >= 10:
-        st.warning(f" Maior atraso observado: {maior_atraso} dia(s). Recomendo priorizar tratativa com fornecedor.")
+        ux.warn(f" Maior atraso observado: {maior_atraso} dia(s). Recomendo priorizar tratativa com fornecedor.")
 
     # -----------------------------
     # 🎯 Prioridades do dia
@@ -546,16 +548,16 @@ def exibir_home(alertas: dict, usuario_nome: str = "Usuário") -> None:
 
     with a1:
         if st.button("Dashboard", use_container_width=True):
-            _go("Dashboard")
+            _go("dashboard")
     with a2:
         if st.button("Alertas", use_container_width=True):
-            _go("🔔 Alertas e Notificações")
+            _go("alerts")
     with a3:
         if st.button("Novo pedido", use_container_width=True):
-            _go("Gestão de Pedidos")
+            _go("orders_manage")
     with a4:
         if st.button("Mapa", use_container_width=True):
-            _go("Mapa Geográfico")
+            _go("map")
 
     st.markdown('<p class="fu-muted">Dica: use a busca rápida na barra lateral para navegar instantaneamente.</p>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)  # end wrap

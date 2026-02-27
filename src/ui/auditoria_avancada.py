@@ -4,6 +4,8 @@ import json
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 from src.services import backup_auditoria as ba
 
 
@@ -31,7 +33,7 @@ def exibir_auditoria_avancada(supabase_admin):
 
     df = ba.carregar_logs_auditoria(supabase_admin, filtro_acao=(acao.strip() or None), limite=int(limite))
     if df.empty:
-        st.info("Sem logs (ou a tabela logs_auditoria não existe).")
+        ux.info("Sem logs (ou a tabela logs_auditoria não existe).")
         return
 
     if "timestamp" in df.columns:

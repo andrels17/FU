@@ -3,7 +3,305 @@ Módulo de Dashboard Avançado
 Gráficos interativos e análises preditivas
 """
 
+
+from __future__ import annotations
 import streamlit as st
+from src.ui.plotly_style import style_plotly, add_bar_labels
+import datetime
+
+
+import pandas as pd
+# -------------------------------
+# Mobile/cards-first helpers (polido)
+# -------------------------------
+def _is_cards_first() -> bool:
+    # Use uma escolha explícita (funciona no desktop também)
+    return bool(st.session_state.get("ui_cards_first", True))
+
+
+def _pretty_label(col: str) -> str:
+    col = str(col)
+    mapping = {
+        "nr_oc": "Nº OC",
+        "nr_solicitacao": "Nº Solicitação",
+        "cod_material": "Cód. Material",
+        "cod_equipamento": "Equipamento",
+        "qtde_solicitada": "Qtd. Solicitada",
+        "qtde_entregue": "Qtd. Entregue",
+        "pendente_calc": "Qtd. Pendente",
+        "pendente_ui": "Qtd. Pendente",
+        "valor_total": "Valor Total",
+        "valor_unitario": "Valor Unitário",
+        "departamento": "Departamento",
+        "fornecedor": "Fornecedor",
+        "uf": "UF",
+        "status": "Status",
+        "data_entrega_real": "Data Entrega",
+        "data_oc": "Data OC",
+        "criado_em": "Criado em",
+        "atualizado_em": "Atualizado em",
+    }
+    if col in mapping:
+        return mapping[col]
+    return (
+        col.replace("_", " ")
+        .replace("qtde", "qtd")
+        .title()
+    )
+
+
+def _fmt_date(v) -> str:
+    if v is None:
+        return "—"
+    try:
+        import pandas as _pd
+        if isinstance(v, _pd.Timestamp):
+            if _pd.isna(v):
+                return "—"
+            return v.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+    s = str(v).strip()
+    if not s:
+        return "—"
+    # tenta ISO (datas)
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+        try:
+            dt = datetime.datetime.strptime(s[:len(fmt)], fmt)
+            return dt.strftime("%d/%m/%Y")
+        except Exception:
+            continue
+    return s
+
+
+def _fmt_money(v) -> str:
+    try:
+        x = float(v)
+    except Exception:
+        return "—" if v is None or str(v).strip() == "" else str(v)
+    s = f"{x:,.2f}"
+    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {s}"
+
+
+def _fmt_value(col: str, v) -> str:
+    if v is None:
+        return "—"
+    if col in ("valor_total", "valor_unitario", "preco", "valor"):
+        return _fmt_money(v)
+    if col.startswith("data_") or col.endswith("_em") or col.endswith("_real"):
+        return _fmt_date(v)
+    try:
+        if isinstance(v, (int, float)) and col.startswith(("qtde", "qtd", "pendente")):
+            return f"{float(v):g}"
+    except Exception:
+        pass
+    s = str(v).strip()
+    return s if s else "—"
+
+
+def _badge(text: str) -> str:
+    t = (text or "").strip()
+    if not t or t == "—":
+        return ""
+    color = "var(--fu-muted)"
+    tl = t.lower()
+    if tl in ("entregue", "ok", "concluido", "concluído"):
+        color = "var(--fu-success, #22c55e)"
+    elif tl in ("pendente", "atrasado", "critico", "crítico"):
+        color = "var(--fu-danger, #ef4444)"
+    return (
+        "<span style='padding:2px 10px;border:1px solid rgba(255,255,255,.10);"
+        f"border-radius:999px;color:{color};font-size:0.82rem;'>{t}</span>"
+    )
+
+
+def _kv_grid(r: dict, cols: list[str], *, max_items: int = 8) -> None:
+    show = [c for c in cols if c in r][:max_items]
+    if not show:
+        return
+    grid = st.columns(2, gap="small")
+    for i, c in enumerate(show):
+        with grid[i % 2]:
+            st.caption(_pretty_label(c))
+            st.write(_fmt_value(c, r.get(c)))
+
+
+def _detail_view(title: str, r: dict, *, primary: list[str], secondary: list[str]) -> None:
+    st.markdown(f"### {title}")
+    st.markdown(_badge(str(r.get("status") or "")), unsafe_allow_html=True)
+    st.markdown("#### Resumo")
+    _kv_grid(r, primary, max_items=8)
+    if secondary:
+        st.markdown("---")
+        st.markdown("#### Detalhes")
+        _kv_grid(r, secondary, max_items=14)
+
+
+def _open_detail(title: str, r: dict, *, primary: list[str], secondary: list[str]) -> None:
+    if hasattr(st, "dialog"):
+        @st.dialog(title)
+        def _d():
+            _detail_view(title, r, primary=primary, secondary=secondary)
+        _d()
+    else:
+        with st.expander(title, expanded=True):
+            _detail_view(title, r, primary=primary, secondary=secondary)
+
+
+def _cards_first_list(
+    df: pd.DataFrame,
+    *,
+    title_col: str,
+    subtitle_cols: list[str],
+    badge_col: str | None = None,
+    key_prefix: str = "cf",
+    primary_detail_cols: list[str] | None = None,
+    secondary_detail_cols: list[str] | None = None,
+) -> None:
+    """Renderiza lista em cards (mobile-first) com detalhes em dialog."""
+    if df is None or df.empty:
+        st.info("Nada para exibir.")
+        return
+
+    cols_all = list(df.columns)
+    primary_detail_cols = primary_detail_cols or [
+        c for c in [
+            title_col, "status", "nr_oc", "nr_solicitacao", "departamento",
+            "cod_equipamento", "cod_material",
+            "qtde_solicitada", "qtde_entregue", "pendente_calc", "pendente_ui",
+            "valor_total", "valor_unitario", "data_entrega_real", "data_oc"
+        ] if c in cols_all
+    ]
+    secondary_detail_cols = secondary_detail_cols or [
+        c for c in cols_all
+        if c not in set(primary_detail_cols + ["id", "tenant_id"])
+        and not str(c).lower().endswith("_id")
+    ]
+
+    rows = df.to_dict("records")
+    for i, r in enumerate(rows):
+        rid = str(r.get("id") or r.get("pedido_id") or i)
+        title_val = _fmt_value(title_col, r.get(title_col))
+        badge_val = _fmt_value(badge_col, r.get(badge_col)) if badge_col else ""
+
+        with st.container(border=True):
+            if badge_col and badge_val != "—":
+                st.markdown(
+                    f"**{title_val}**  ·  {_badge(badge_val)}",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(f"**{title_val}**")
+
+            _kv_grid(r, subtitle_cols, max_items=6)
+
+            if st.button("Ver detalhes", key=f"{key_prefix}_detail_{rid}_{i}", use_container_width=True):
+                _open_detail("Detalhes", r, primary=primary_detail_cols, secondary=secondary_detail_cols)
+
+
+def _pretty_label(col: str) -> str:
+    return (
+        str(col)
+        .replace("_", " ")
+        .replace("qtde", "qtd")
+        .replace("nr ", "nº ")
+        .title()
+    )
+
+
+def _fmt_value(v):
+    if v is None:
+        return "—"
+    try:
+        # timestamps/dates
+        import pandas as _pd
+        if isinstance(v, (_pd.Timestamp,)):
+            if _pd.isna(v):
+                return "—"
+            return v.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+    s = str(v).strip()
+    return s if s else "—"
+
+
+def _render_kv_grid(r: dict, cols: list[str], *, max_items: int = 6) -> None:
+    show_cols = [c for c in cols if c in r][:max_items]
+    if not show_cols:
+        return
+    grid = st.columns(2, gap="small")
+    for i, c in enumerate(show_cols):
+        with grid[i % 2]:
+            st.caption(_pretty_label(c))
+            st.write(_fmt_value(r.get(c)))
+
+
+def _render_detail_dialog(title: str, r: dict, *, primary_cols: list[str], secondary_cols: list[str]) -> None:
+    if hasattr(st, "dialog"):
+        @st.dialog(title)
+        def _d():
+            st.markdown("#### Resumo")
+            _render_kv_grid(r, primary_cols, max_items=6)
+            if secondary_cols:
+                st.markdown("---")
+                st.markdown("#### Detalhes")
+                _render_kv_grid(r, secondary_cols, max_items=12)
+        _d()
+    else:
+        with st.expander("Detalhes", expanded=True):
+            st.markdown("#### Resumo")
+            _render_kv_grid(r, primary_cols, max_items=6)
+            if secondary_cols:
+                st.markdown("---")
+                st.markdown("#### Detalhes")
+                _render_kv_grid(r, secondary_cols, max_items=12)
+
+
+def _cards_first_list(
+    df: pd.DataFrame,
+    *,
+    title_col: str,
+    subtitle_cols: list[str],
+    badge_col: str | None = None,
+    key_prefix: str = "cf",
+    primary_detail_cols: list[str] | None = None,
+    secondary_detail_cols: list[str] | None = None,
+) -> None:
+    """Renderiza uma lista em modo cards-first com detalhes em dialog/expander."""
+    if df is None or df.empty:
+        st.info("Nada para exibir.")
+        return
+
+    primary_detail_cols = primary_detail_cols or subtitle_cols[:6]
+    secondary_detail_cols = secondary_detail_cols or [c for c in df.columns if c not in set(primary_detail_cols + [title_col])]
+
+    rows = df.to_dict("records")
+    for i, r in enumerate(rows):
+        rid = str(r.get("id") or r.get("pedido_id") or i)
+        title_val = _fmt_value(r.get(title_col))
+        badge_val = _fmt_value(r.get(badge_col)) if badge_col else ""
+        with st.container(border=True):
+            # Header
+            if badge_col and badge_val != "—":
+                st.markdown(
+                    f"**{title_val}**  ·  <span style='color: var(--fu-muted);'>{badge_val}</span>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(f"**{title_val}**")
+
+            # Body
+            _render_kv_grid(r, subtitle_cols, max_items=6)
+
+            # Action
+            if st.button("Ver detalhes", key=f"{key_prefix}_detail_{rid}_{i}", use_container_width=True):
+                _render_detail_dialog("Detalhes", r, primary_cols=primary_detail_cols, secondary_cols=secondary_detail_cols)
+
+
+
+from src.ui import ux
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -67,7 +365,7 @@ def criar_grafico_evolucao_temporal(df_pedidos, formatar_moeda_br):
     
     # Validar se há dados
     if df_pedidos.empty or 'data_solicitacao' not in df_pedidos.columns:
-        st.info("Dados insuficientes para gerar o gráfico de evolução temporal")
+        ux.info("Dados insuficientes para gerar o gráfico de evolução temporal")
         return
     
     # Preparar dados
@@ -77,7 +375,7 @@ def criar_grafico_evolucao_temporal(df_pedidos, formatar_moeda_br):
     df_temporal = df_temporal[df_temporal['data_solicitacao'].notna()].copy()
     
     if df_temporal.empty:
-        st.info("📭 Não há pedidos com data de solicitação válida")
+        ux.info("📭 Não há pedidos com data de solicitação válida")
         return
     
     # Converter para datetime se ainda não for
@@ -88,7 +386,7 @@ def criar_grafico_evolucao_temporal(df_pedidos, formatar_moeda_br):
             df_temporal = df_temporal[df_temporal['data_solicitacao'].notna()].copy()
             
         if df_temporal.empty:
-            st.info("📭 Não há pedidos com data de solicitação válida")
+            ux.info("📭 Não há pedidos com data de solicitação válida")
             return
     except Exception as e:
         st.error(f"Erro ao processar datas: {e}")
@@ -172,6 +470,7 @@ def criar_grafico_evolucao_temporal(df_pedidos, formatar_moeda_br):
         )
     )
     
+    style_plotly(fig)
     st.plotly_chart(fig, use_container_width=True)
     
     # Calcular tendências
@@ -202,11 +501,11 @@ def criar_funil_conversao(df_pedidos: pd.DataFrame):
     st.subheader("Funil de Conversão de Pedidos")
 
     if df_pedidos is None or df_pedidos.empty:
-        st.info("Sem dados para montar o funil.")
+        ux.info("Sem dados para montar o funil.")
         return
 
     if not _has_cols(df_pedidos, ["status", "entregue"]):
-        st.info("📭 Dados insuficientes (colunas esperadas: status, entregue).")
+        ux.info("📭 Dados insuficientes (colunas esperadas: status, entregue).")
         st.caption(f"Colunas disponíveis: {list(df_pedidos.columns)}")
         return
 
@@ -238,6 +537,7 @@ def criar_funil_conversao(df_pedidos: pd.DataFrame):
         )
     )
     fig.update_layout(height=380, paper_bgcolor="#0e1117", plot_bgcolor="#1a1d29", font=dict(color="white", size=14))
+    style_plotly(fig)
     st.plotly_chart(fig, use_container_width=True)
 
     # KPIs
@@ -266,14 +566,14 @@ def criar_heatmap_pedidos(df_pedidos):
     
     # Validar se há dados
     if df_heat.empty or 'data_solicitacao' not in df_heat.columns:
-        st.info("Dados insuficientes para gerar o mapa de calor")
+        ux.info("Dados insuficientes para gerar o mapa de calor")
         return
     
     # Remover valores nulos
     df_heat = df_heat[df_heat['data_solicitacao'].notna()].copy()
     
     if df_heat.empty:
-        st.info("Não há pedidos com data de solicitação válida")
+        ux.info("Não há pedidos com data de solicitação válida")
         return
     
     # Converter para datetime se ainda não for
@@ -284,7 +584,7 @@ def criar_heatmap_pedidos(df_pedidos):
             df_heat = df_heat[df_heat['data_solicitacao'].notna()].copy()
             
         if df_heat.empty:
-            st.info("Não há pedidos com data de solicitação válida")
+            ux.info("Não há pedidos com data de solicitação válida")
             return
     except Exception as e:
         st.error(f"Erro ao processar datas: {e}")
@@ -359,6 +659,7 @@ def criar_heatmap_pedidos(df_pedidos):
         font=dict(color='white')
     )
     
+    style_plotly(fig)
     st.plotly_chart(fig, use_container_width=True)
 
 def criar_comparativo_periodos(df_pedidos, formatar_moeda_br):
@@ -368,7 +669,7 @@ def criar_comparativo_periodos(df_pedidos, formatar_moeda_br):
     
     # Validar se há dados
     if df_pedidos.empty or 'data_solicitacao' not in df_pedidos.columns:
-        st.info("Dados insuficientes para gerar o comparativo de períodos")
+        ux.info("Dados insuficientes para gerar o comparativo de períodos")
         return
     
     col1, col2 = st.columns(2)
@@ -394,7 +695,7 @@ def criar_comparativo_periodos(df_pedidos, formatar_moeda_br):
     df_comp = df_comp[df_comp['data_solicitacao'].notna()].copy()
     
     if df_comp.empty:
-        st.info("Não há pedidos com data de solicitação válida")
+        ux.info("Não há pedidos com data de solicitação válida")
         return
     
     # Converter para datetime se ainda não for
@@ -405,7 +706,7 @@ def criar_comparativo_periodos(df_pedidos, formatar_moeda_br):
             df_comp = df_comp[df_comp['data_solicitacao'].notna()].copy()
             
         if df_comp.empty:
-            st.info("Não há pedidos com data de solicitação válida")
+            ux.info("Não há pedidos com data de solicitação válida")
             return
     except Exception as e:
         st.error(f"Erro ao processar datas: {e}")
@@ -460,6 +761,7 @@ def criar_comparativo_periodos(df_pedidos, formatar_moeda_br):
         font=dict(color='white')
     )
     
+    style_plotly(fig)
     st.plotly_chart(fig, use_container_width=True)
     
     # Estatísticas do período
@@ -485,11 +787,11 @@ def exibir_dashboard_avancado(df_pedidos: pd.DataFrame, formatar_moeda_br):
 
     # Se você está usando o fluxo "Gerar dashboard", respeita isso aqui também
     if st.session_state.get("dash_filters_applied") is False:
-        st.info("Selecione os filtros e clique em **Gerar dashboard** na aba principal para alimentar o Dashboard Avançado.")
+        ux.info("Selecione os filtros e clique em **Gerar dashboard** na aba principal para alimentar o Dashboard Avançado.")
         return
 
     if df_pedidos is None or df_pedidos.empty:
-        st.info("Nenhum pedido no recorte atual.")
+        ux.info("Nenhum pedido no recorte atual.")
         return
 
     # Seções visíveis (mesmo estilo do dashboard)

@@ -1,10 +1,16 @@
 import streamlit as st
+from src.ui import ux
+from src.ui.theme import apply_theme
+
 import unicodedata
 st.set_page_config(
     page_title="Sistema de Follow-Up",
     layout="wide",
     page_icon="📊",
+    initial_sidebar_state="collapsed",
 )
+
+apply_theme()
 st.markdown("""
 <style>
 /* ===== Layout / spacing (global) ===== */
@@ -399,22 +405,49 @@ def _fu_inject_global_css(sidebar_hidden: bool) -> None:
           background: rgba(239,68,68,0.95) !important;
         }
 
-        /* Sidebar responsiva */
+        /* Sidebar fixa (Streamlit 1.37 / Cloud): trava largura e remove resize */
         section[data-testid="stSidebar"]{
-          width: clamp(220px, 18vw, 300px) !important;
+          width: 300px !important;
+          min-width: 300px !important;
+          max-width: 300px !important;
+          flex: 0 0 300px !important;
           overflow: hidden;
-          transition: width 160ms ease;
           contain: layout paint style;
-          will-change: width;
+          will-change: auto;
           backface-visibility: hidden;
           transform: translateZ(0);
         }
-        @media (max-width: 1100px){
-          section[data-testid="stSidebar"]{ width: 240px !important; }
+        section[data-testid="stSidebar"] > div{
+          width: 300px !important;
+          min-width: 300px !important;
+          max-width: 300px !important;
         }
+
+        /* Remove completamente o resizer/handle */
+        div[data-testid="stSidebarResizeHandle"],
+        div[data-testid="stSidebarResizer"]{
+          display: none !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+          width: 0 !important;
+          max-width: 0 !important;
+        }
+
+        /* Mobile: sidebar overlay ocupa a tela */
         @media (max-width: 900px){
-          section[data-testid="stSidebar"]{ width: 100% !important; }
+          section[data-testid="stSidebar"]{
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+            flex: 0 0 100% !important;
+          }
+          section[data-testid="stSidebar"] > div{
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+          }
         }
+
         @media (prefers-reduced-motion: reduce){
           section[data-testid="stSidebar"]{ transition: none !important; }
         }
@@ -515,6 +548,15 @@ def _industrial_sidebar_css() -> None:
 
             section[data-testid="stSidebar"] > div { padding-top: 0.8rem; }
 
+            /* ===== FIX (Streamlit >=1.37): ícones do expander como texto (arrow_*) ===== */
+            section[data-testid="stSidebar"] [data-testid="stExpanderToggleIcon"]{
+                display: none !important;
+            }
+            section[data-testid="stSidebar"] details > summary{
+                padding-left: 6px !important;
+            }
+
+
             .fu-card {
                 background: var(--fu-card);
                 border: 1px solid var(--fu-border);
@@ -551,6 +593,55 @@ def _industrial_sidebar_css() -> None:
             }
             .fu-kpi-title{ font-size: 11px; opacity: .80; margin: 0 0 2px 0; line-height: 1.05; }
             .fu-kpi-value{ font-size: 18px; font-weight: 900; margin: 0; line-height: 1.05; }
+
+            /* KPI clicável (botões com cara de card) */
+            .fu-kpi-click .stButton button{
+                background: rgba(255,255,255,0.04) !important;
+                border: 1px solid rgba(255,255,255,0.10) !important;
+                border-radius: 14px !important;
+                padding: 12px 10px !important;
+                min-height: 78px !important;
+                font-weight: 900 !important;
+                text-align: center !important;
+                white-space: pre-line !important; /* respeita \n do label */
+                line-height: 1.05 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+
+            /* Força todos os KPIs da sidebar a terem exatamente a mesma altura */
+            .fu-kpi-click .stButton{ height: 88px !important; }
+            .fu-kpi-click .stButton > button{ height: 100% !important; }
+            .fu-kpi-click .stButton button:hover{
+                border-color: rgba(239,68,68,0.30) !important;
+                background: rgba(255,255,255,0.06) !important;
+                transform: translateY(-1px);
+            }
+
+            /* KPIs clicáveis no corpo (Dashboard etc.) */
+            .fu-kpi-main-click .stButton{ height: 92px !important; }
+            .fu-kpi-main-click .stButton > button{
+                height: 100% !important;
+                background: rgba(255,255,255,0.035) !important;
+                border: 1px solid rgba(255,255,255,0.10) !important;
+                border-radius: 16px !important;
+                padding: 14px 12px !important;
+                font-weight: 900 !important;
+                text-align: left !important;
+                white-space: pre-line !important;
+                line-height: 1.05 !important;
+                display:flex !important;
+                align-items:center !important;
+                justify-content:flex-start !important;
+                gap: 10px !important;
+            }
+            .fu-kpi-main-click .stButton > button:hover{
+                border-color: rgba(239,68,68,0.30) !important;
+                background: rgba(255,255,255,0.055) !important;
+                transform: translateY(-1px);
+            }
+            .fu-kpi-main-click .stButton > button:active{ transform: translateY(0px); }
 
 /* KPIs responsivos (evita “prensar” em mobile) */
 @media (max-width: 520px){
@@ -622,7 +713,22 @@ def _industrial_sidebar_css() -> None:
                 opacity: .9;
             }
         
-            /* ===== Menu Operações / Gestão (botões SaaS) ===== */
+            
+
+/* Chips (filtros ativos) */
+.fu-chips{ display:flex; flex-wrap:wrap; gap:8px; margin: 6px 0 10px 0; }
+.fu-chip{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.86);
+    font-size: 12px;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+.fu-chip--danger{ border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.10); }/* ===== Menu Operações / Gestão (botões SaaS) ===== */
             .fu-nav details{
                 background: rgba(255,255,255,0.03);
                 border: 1px solid rgba(255,255,255,0.07);
@@ -1051,7 +1157,7 @@ def _sync_empresa_nome(tenant_id: str | None, tenant_opts) -> None:
         pass
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(max_entries=256, ttl=60)
 def _fetch_almoxarifados_tenant(_supabase, tenant_id: str) -> list[str]:
     try:
         res = (
@@ -1126,16 +1232,16 @@ def selecionar_empresa_no_login() -> bool:
 
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(max_entries=256, ttl=120)
 def _cached_carregar_pedidos(_supabase, tenant_id, almoxarifado):
     return carregar_pedidos(_supabase, tenant_id, almoxarifado)
 
-@st.cache_data(ttl=120)
+@st.cache_data(max_entries=256, ttl=120)
 def _cached_carregar_fornecedores(_supabase, tenant_id):
     return carregar_fornecedores(_supabase, tenant_id, incluir_inativos=True)
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(max_entries=256, ttl=60)
 def _cached_alertas(df_pedidos, df_fornecedores):
     return sa.calcular_alertas(df_pedidos, df_fornecedores)
 
@@ -1398,7 +1504,7 @@ def main():
                                     "email_redirect_to": "https://followupdef.streamlit.app/?auth_callback=1"
                                 }
                             })
-                            st.success("Link enviado! Verifique seu e-mail.")
+                            ux.ok("Link enviado! Verifique seu e-mail.")
                             st.session_state["fu_magic_modal_open"] = False
                         except Exception as e:
                             st.error(f"Falha ao enviar link: {e}")
@@ -1415,7 +1521,7 @@ def main():
                                     "email_redirect_to": "https://followupdef.streamlit.app/?auth_callback=1"
                                 }
                             })
-                            st.success("Link enviado! Verifique seu e-mail.")
+                            ux.ok("Link enviado! Verifique seu e-mail.")
                         except Exception as e:
                             st.error(f"Falha ao enviar link: {e}")
 
@@ -1434,7 +1540,7 @@ def main():
 
         if not ok:
 
-            st.warning("Sessão expirada. Faça login novamente.")
+            ux.warn("Sessão expirada. Faça login novamente.")
 
             try:
 
@@ -1592,6 +1698,25 @@ def main():
         perfil = (usuario.get("perfil") or "").lower()
         is_admin = perfil == "admin"
 
+        # 📱 Toggle manual de responsividade (mobile-first)
+        if "mobile_mode" not in st.session_state:
+            st.session_state["mobile_mode"] = False
+        st.toggle(
+            "📱 Modo mobile",
+            key="mobile_mode",
+            help="Ative para layouts mais confortáveis em telas pequenas (menos colunas, mais empilhamento e listas em cards).",
+        )
+
+        # 🧾 Toggle global: rótulos em gráficos de barras
+        if "show_chart_labels" not in st.session_state:
+            st.session_state["show_chart_labels"] = (not st.session_state.get("mobile_mode", False))
+        st.toggle(
+            "🧾 Mostrar rótulos nos gráficos",
+            key="show_chart_labels",
+            help="Exibe valores diretamente nas barras (pode poluir em telas pequenas).",
+        )
+        st.divider()
+
         if True:
             usuario = st.session_state.get("usuario") or {}
             nome = usuario.get("nome", "Usuário")
@@ -1633,28 +1758,58 @@ def main():
     </div>
   </div>
 
-  <div class="fu-kpi-grid">
-    <div class="fu-kpi">
-      <p class="fu-kpi-title">⚠️ Atrasados</p>
-      <p class="fu-kpi-value">{atrasados}</p>
-    </div>
-    <div class="fu-kpi">
-      <p class="fu-kpi-title">🚨 Críticos</p>
-      <p class="fu-kpi-value">{criticos}</p>
-    </div>
-    <div class="fu-kpi">
-      <p class="fu-kpi-title">⏰ Vencendo</p>
-      <p class="fu-kpi-value">{vencendo}</p>
-    </div>
-    <div class="fu-kpi">
-      <p class="fu-kpi-title">🔔 Alertas</p>
-      <p class="fu-kpi-value">{total_alertas}</p>
-    </div>
-  </div>
 </div>
 """),
                 unsafe_allow_html=True,
             )
+
+            # KPIs clicáveis (atalhos para Alertas com foco)
+            st.markdown('<div class="fu-kpi-click">', unsafe_allow_html=True)
+            k1, k2 = st.columns(2)
+            with k1:
+                if st.button(
+                    f"⚠️\nAtrasados\n{atrasados}",
+                    key="sb_kpi_atrasados",
+                    use_container_width=True,
+                    help="Abrir Alertas com foco em pedidos atrasados",
+                ):
+                    st.session_state["alerts_focus"] = "atrasados"
+                    st.session_state.current_page = "alerts"
+                    st.rerun()
+            with k2:
+                if st.button(
+                    f"🚨\nCríticos\n{criticos}",
+                    key="sb_kpi_criticos",
+                    use_container_width=True,
+                    help="Abrir Alertas com foco em pedidos críticos",
+                ):
+                    st.session_state["alerts_focus"] = "criticos"
+                    st.session_state.current_page = "alerts"
+                    st.rerun()
+
+            k3, k4 = st.columns(2)
+            with k3:
+                if st.button(
+                    f"⏰\nVencendo\n{vencendo}",
+                    key="sb_kpi_vencendo",
+                    use_container_width=True,
+                    help="Abrir Alertas com foco em pedidos vencendo",
+                ):
+                    st.session_state["alerts_focus"] = "vencendo"
+                    st.session_state.current_page = "alerts"
+                    st.rerun()
+            with k4:
+                if st.button(
+                    f"🔔\nAlertas\n{total_alertas}",
+                    key="sb_kpi_todos",
+                    use_container_width=True,
+                    help="Abrir página de Alertas",
+                ):
+                    st.session_state.pop("alerts_focus", None)
+                    st.session_state.current_page = "alerts"
+                    st.rerun()
+
+            st.markdown('</div>', unsafe_allow_html=True)
 
             # 🔎 Busca rápida (navegação)
             busca = st.text_input(
@@ -1701,31 +1856,6 @@ def main():
                             st.rerun()
 
             st.markdown("---")
-
-            if total_alertas > 0:
-                st.markdown(
-                    textwrap.dedent(f"""<div class="fu-card" style="
-  border: 1px solid rgba(245,158,11,0.35);
-  background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(255,255,255,0.04));
-">
-  <div style="display:flex; align-items:center; justify-content:space-between;">
-    <div style="font-weight:900;">Alertas</div>
-    <div style="
-      background: rgba(239,68,68,0.95);
-      color: white;
-      padding: 2px 10px;
-      border-radius: 999px;
-      font-weight: 900;
-      font-size: 12px;
-    ">{total_alertas}</div>
-  </div>
-  <div style="margin-top:6px; font-size: 12px; opacity: .82;">
-    Revise atrasos, vencimentos e fornecedores.
-  </div>
-</div>
-"""),
-                    unsafe_allow_html=True,
-                )
 
             usuario = st.session_state.get("usuario") or {}
             perfil = (usuario.get("perfil") or "").lower()

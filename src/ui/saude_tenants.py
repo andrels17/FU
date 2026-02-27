@@ -3,6 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 from src.services import observabilidade as obs
 from src.services.saas_metrics import (
     build_tenant_health_row,
@@ -25,13 +27,13 @@ def exibir_saude_tenants(supabase_admin):
             st.cache_data.clear()
             st.rerun()
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(max_entries=256, ttl=300)
     def _load_tenants():
         return list_tenants(supabase_admin)
 
     tenants = _load_tenants()
     if not tenants:
-        st.warning("Não foi possível listar tenants (verifique a tabela `tenants` e permissões do SERVICE ROLE).")
+        ux.warn("Não foi possível listar tenants (verifique a tabela `tenants` e permissões do SERVICE ROLE).")
         return
 
     # filtrar
@@ -53,7 +55,7 @@ def exibir_saude_tenants(supabase_admin):
 
     df = pd.DataFrame(rows)
     if df.empty:
-        st.info("Sem dados para exibir.")
+        ux.info("Sem dados para exibir.")
         return
 
     # ordenar por volume de pedidos (desc)

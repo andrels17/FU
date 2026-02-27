@@ -38,7 +38,7 @@ def _safe_numeric(df: pd.DataFrame, col: str) -> pd.Series:
     return pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(max_entries=256, ttl=60, show_spinner=False)
 def carregar_links_departamento_gestor(_supabase, tenant_id: str) -> pd.DataFrame:
     """Carrega vínculos departamento -> gestor_user_id (tabela gestor_departamentos)."""
     try:
@@ -60,7 +60,7 @@ def carregar_links_departamento_gestor(_supabase, tenant_id: str) -> pd.DataFram
     return df
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(max_entries=256, ttl=60, show_spinner=False)
 def carregar_mapa_usuarios_tenant(_supabase, tenant_id: str) -> pd.DataFrame:
     """Retorna user_id, nome, email, whatsapp para membros do tenant.
 

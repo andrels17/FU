@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pandas as pd
+from src.core.pedidos_rules import calc_pendente, is_entregue
 import streamlit as st
 
 from src.services import backup_auditoria as ba
@@ -16,7 +17,7 @@ try:
 except Exception:  # pragma: no cover
     obs = None  # type: ignore
 
-@st.cache_data(ttl=60)
+@st.cache_data(max_entries=256, ttl=60)
 def carregar_pedidos(_supabase, tenant_id: str | None = None, almoxarifado: str | None = None):
     """
     Carrega todos os pedidos com informações do fornecedor
@@ -36,6 +37,22 @@ def carregar_pedidos(_supabase, tenant_id: str | None = None, almoxarifado: str 
             resultado = q.execute()
         if resultado.data:
             df = pd.DataFrame(resultado.data)
+
+            # ===== Regra única de verdade (pendente/entregue) =====
+            if "qtde_solicitada" in df.columns and "qtde_entregue" in df.columns:
+                df["qtde_solicitada"] = pd.to_numeric(df["qtde_solicitada"], errors="coerce").fillna(0.0)
+                df["qtde_entregue"] = pd.to_numeric(df["qtde_entregue"], errors="coerce").fillna(0.0)
+                df["pendente_calc"] = (df["qtde_solicitada"] - df["qtde_entregue"]).clip(lower=0.0)
+
+                # entregue_calc = 100% entregue
+                df["entregue_calc"] = (df["qtde_solicitada"] > 0) & (df["qtde_entregue"] >= df["qtde_solicitada"])
+
+                # Normaliza status apenas para exibição (não é fonte de verdade)
+                if "status" in df.columns:
+                    df["status"] = df["status"].astype(str).fillna("")
+                    df.loc[df["entregue_calc"] == True, "status"] = "Entregue"
+                    df.loc[df["entregue_calc"] == False, "status"] = df.loc[df["entregue_calc"] == False, "status"].replace({"nan": ""})
+
 
             # ===== Filtro global por Almoxarifado =====
             if almoxarifado and almoxarifado != "Todos":
@@ -163,7 +180,7 @@ def carregar_pedidos(_supabase, tenant_id: str | None = None, almoxarifado: str 
         st.code(traceback.format_exc())
         return pd.DataFrame()
 
-@st.cache_data(ttl=300)
+@st.cache_data(max_entries=256, ttl=300)
 def carregar_fornecedores(_supabase, tenant_id: str | None = None):
     """Carrega lista de fornecedores (compat)."""
     try:
@@ -182,7 +199,7 @@ def carregar_fornecedores(_supabase, tenant_id: str | None = None):
         st.error(f"Erro ao carregar fornecedores: {e}")
         return pd.DataFrame()
 
-@st.cache_data(ttl=60)
+@st.cache_data(max_entries=256, ttl=60)
 def carregar_estatisticas_departamento(_supabase):
     """Carrega estatísticas por departamento"""
     try:
@@ -233,6 +250,7 @@ def registrar_entrega(pedido_id, qtde_entregue, data_entrega, observacoes="", _s
         _supabase.table('pedidos').update({
             'qtde_entregue': nova_qtde_entregue,
             'data_entrega_real': data_entrega if nova_qtde_entregue >= pedido_atual['qtde_solicitada'] else None,
+            'status': 'Entregue' if nova_qtde_entregue >= pedido_atual['qtde_solicitada'] else pedido_atual.get('status'),
             'atualizado_por': st.session_state.usuario['id']
         }).eq('id', pedido_id).execute()
         
@@ -240,7 +258,7 @@ def registrar_entrega(pedido_id, qtde_entregue, data_entrega, observacoes="", _s
         _supabase.table('historico_entregas').insert({
             'pedido_id': pedido_id,
             'qtde_entregue': qtde_entregue,
-            'data_entrega': data_entrega,
+            'data_entrega_real': data_entrega,
             'observacoes': observacoes,
             'usuario_id': st.session_state.usuario['id'],
             'tenant_id': pedido_atual.get('tenant_id')

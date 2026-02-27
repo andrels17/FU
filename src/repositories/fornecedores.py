@@ -7,7 +7,7 @@ try:
 except Exception:  # pragma: no cover
     obs = None  # type: ignore
 
-@st.cache_data(ttl=300)
+@st.cache_data(max_entries=256, ttl=300)
 def carregar_fornecedores(_supabase, tenant_id: str | None = None, incluir_inativos: bool = True) -> pd.DataFrame:
     """
     Carrega lista de fornecedores.

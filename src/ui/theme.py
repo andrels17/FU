@@ -60,6 +60,47 @@ def apply_theme() -> None:
 
           /* Reduce visual noise */
           .stMetric{ background: transparent !important; }
+
+          /* =========================
+             Mobile responsiveness
+             ========================= */
+          @media (max-width: 768px){
+            .block-container{ padding-left: 0.65rem !important; padding-right: 0.65rem !important; }
+            html, body{ font-size: 14px !important; }
+            h1{ font-size: 1.35rem !important; }
+            h2{ font-size: 1.15rem !important; }
+            h3{ font-size: 1.02rem !important; }
+            .stButton > button{ min-height: 44px; }
+            [data-testid="stHorizontalBlock"]{ flex-wrap: wrap !important; gap: 0.65rem !important; }
+            [data-testid="stColumn"]{ min-width: 280px !important; flex: 1 1 280px !important; }
+            [data-testid="stMetricLabel"]{ font-size: 0.78rem !important; }
+            [data-testid="stMetricValue"]{ font-size: 1.05rem !important; }
+            .js-plotly-plot, .plotly{ width: 100% !important; }
+          }
+
+          @media (max-width: 768px){
+            [data-testid="stDialog"] h1 { font-size: 1.1rem !important; }
+            [data-testid="stDialog"] button { min-height: 44px; }
+          }
+
+          /* Dialog (modal) - compacto e mobile-friendly */
+          @media (max-width: 768px){
+            [data-testid="stDialog"]{ width: 96vw !important; max-width: 96vw !important; }
+            [data-testid="stDialog"] [data-testid="stVerticalBlock"]{ gap: 0.6rem !important; }
+            [data-testid="stDialog"] label{ font-size: 0.80rem !important; }
+            [data-testid="stDialog"] input,
+            [data-testid="stDialog"] textarea{ font-size: 0.95rem !important; padding-top: 0.55rem !important; padding-bottom: 0.55rem !important; }
+            [data-testid="stNumberInputStepUp"],
+            [data-testid="stNumberInputStepDown"]{ transform: scale(0.9); }
+          }
+
+          /* Modal polish: cards summary + discreet labels */
+          [data-testid="stDialog"] [data-testid="stContainer"]{ border-radius: 16px !important; }
+          [data-testid="stDialog"] [data-testid="stMetricLabel"]{ font-size: 0.78rem !important; }
+          [data-testid="stDialog"] [data-testid="stMetricValue"]{ font-size: 1.05rem !important; }
+          @media (max-width: 768px){
+            [data-testid="stDialog"] [data-testid="stVerticalBlock"]{ gap: 0.55rem !important; }
+          }
         </style>
         """,
         unsafe_allow_html=True,

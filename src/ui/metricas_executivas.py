@@ -4,6 +4,8 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 from src.services.saas_metrics import (
     count_rows,
     list_tenants,
@@ -22,11 +24,11 @@ def exibir_metricas_executivas(supabase_admin):
     period = st.selectbox("Período", ["Mês atual", "Últimos 7 dias", "Últimos 30 dias"], index=0)
     start, end = period_bounds(period)
 
-    st.info(f"Período considerado: {start} até {end} (datas ISO).")
+    ux.info(f"Período considerado: {start} até {end} (datas ISO).")
 
     tenants = list_tenants(supabase_admin)
     if not tenants:
-        st.warning("Não foi possível listar tenants.")
+        ux.warn("Não foi possível listar tenants.")
         return
 
     # permite escolher um tenant ou 'Todos'
@@ -118,7 +120,7 @@ def exibir_metricas_executivas(supabase_admin):
         data = res.data or []
         df = pd.DataFrame(data)
         if df.empty:
-            st.info("Sem dados no período.")
+            ux.info("Sem dados no período.")
         else:
             df["valor_total"] = pd.to_numeric(df.get("valor_total"), errors="coerce").fillna(0)
             g = df.groupby("departamento", dropna=False).agg(
@@ -143,7 +145,7 @@ def exibir_metricas_executivas(supabase_admin):
                 use_container_width=True,
             )
     except Exception as e:
-        st.warning(f"Não foi possível gerar agregação por departamento: {e}")
+        ux.warn(f"Não foi possível gerar agregação por departamento: {e}")
 
     st.markdown("---")
     st.subheader("Exportar pedidos (amostra)")
@@ -157,7 +159,7 @@ def exibir_metricas_executivas(supabase_admin):
         res = q.execute()
         dfp = pd.DataFrame(res.data or [])
         if dfp.empty:
-            st.info("Sem pedidos no período.")
+            ux.info("Sem pedidos no período.")
         else:
             st.dataframe(dfp.head(200), use_container_width=True, hide_index=True)
             st.download_button(
@@ -168,4 +170,4 @@ def exibir_metricas_executivas(supabase_admin):
                 use_container_width=True,
             )
     except Exception as e:
-        st.warning(f"Não foi possível exportar pedidos: {e}")
+        ux.warn(f"Não foi possível exportar pedidos: {e}")

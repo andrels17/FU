@@ -4,6 +4,9 @@ Visualização de fornecedores em mapa real do Brasil com mapas coropléticos
 """
 
 import streamlit as st
+from src.ui.plotly_style import style_plotly
+from src.ui import ux
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -264,7 +267,7 @@ def criar_mapa_fornecedores(df_pedidos):
     df_map = df_pedidos[df_pedidos['fornecedor_nome'].notna()].copy()
     
     if df_map.empty:
-        st.warning("Nenhum pedido com fornecedor cadastrado")
+        ux.warn("Nenhum pedido com fornecedor cadastrado")
         return None, None
     
     df_fornecedores = df_map.groupby(['fornecedor_nome', 'fornecedor_cidade', 'fornecedor_uf']).agg({
@@ -284,7 +287,7 @@ def criar_mapa_fornecedores(df_pedidos):
     df_fornecedores = df_fornecedores[df_fornecedores['lat'].notna()]
     
     if df_fornecedores.empty:
-        st.warning("Não foi possível geocodificar os fornecedores")
+        ux.warn("Não foi possível geocodificar os fornecedores")
         return None, None
     
     df_fornecedores['hover_text'] = df_fornecedores.apply(
@@ -441,7 +444,8 @@ def criar_graficos_analise(df_estados):
             font=dict(color='white')
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        style_plotly(fig)
+    st.plotly_chart(fig, use_container_width=True)
     
     with col2:
         st.subheader("Distribuição de Pedidos")
@@ -478,7 +482,8 @@ def criar_graficos_analise(df_estados):
             legend=dict(bgcolor='rgba(0,0,0,0.5)', bordercolor='white', borderwidth=1, font=dict(color='white'))
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        style_plotly(fig)
+    st.plotly_chart(fig, use_container_width=True)
 
 def criar_tabela_detalhada(df_estados):
     """Cria tabela detalhada com todos os estados"""

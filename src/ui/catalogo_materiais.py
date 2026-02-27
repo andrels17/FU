@@ -21,6 +21,8 @@ import pandas as pd
 import streamlit as st
 
 
+from src.ui import ux
+
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -228,7 +230,7 @@ def _upsert_materiais(supabase, records: list[dict]) -> int:
     return total
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(max_entries=256, ttl=120)
 def _cached_list_materiais(_supabase, tenant_id: str) -> pd.DataFrame:
     try:
         res = (
@@ -292,7 +294,7 @@ def exibir_catalogo_materiais(supabase, tenant_id: str):
                         records, rep = _build_payload(df, tenant_id=tenant_id, origem=origem)
 
                     if rep.total_invalidos:
-                        st.warning(f"Foram encontrados {rep.total_invalidos} registros inválidos (mostrando amostra).")
+                        ux.warn(f"Foram encontrados {rep.total_invalidos} registros inválidos (mostrando amostra).")
                         if rep.invalid_samples is not None and len(rep.invalid_samples):
                             st.dataframe(rep.invalid_samples, use_container_width=True)
 
@@ -303,7 +305,7 @@ def exibir_catalogo_materiais(supabase, tenant_id: str):
                             total_upsert = _upsert_materiais(supabase, records)
                             rep.total_upsert = total_upsert
 
-                        st.success(
+                        ux.ok(
                             f"Importação concluída!\n\n"
                             f"- Lidos: {rep.total_lidos}\n"
                             f"- Válidos: {rep.total_validos}\n"
@@ -313,7 +315,7 @@ def exibir_catalogo_materiais(supabase, tenant_id: str):
 
                         _clear_cache()
 
-                        st.info("Agora você já pode testar o filtro global de Almoxarifado e relatórios por Família/Grupo.")
+                        ux.info("Agora você já pode testar o filtro global de Almoxarifado e relatórios por Família/Grupo.")
             except Exception as e:
                 st.error(f"Erro ao importar: {e}")
 
@@ -326,7 +328,7 @@ def exibir_catalogo_materiais(supabase, tenant_id: str):
         dfm = _cached_list_materiais(supabase, tenant_id)
 
         if dfm.empty:
-            st.info("Nenhum material cadastrado para esta empresa ainda.")
+            ux.info("Nenhum material cadastrado para esta empresa ainda.")
         else:
             # filtros
             c1, c2, c3, c4 = st.columns([2, 2, 2, 3])
@@ -370,7 +372,7 @@ def exibir_catalogo_materiais(supabase, tenant_id: str):
         dfm = _cached_list_materiais(supabase, tenant_id)
 
         if dfm.empty:
-            st.info("Importe um CSV para começar.")
+            ux.info("Importe um CSV para começar.")
         else:
             # Materiais incompletos
             incompletos = dfm.copy()
@@ -404,14 +406,14 @@ def exibir_catalogo_materiais(supabase, tenant_id: str):
                 )
                 dfp = pd.DataFrame(res.data or [])
                 if dfp.empty or "material_descricao" not in dfp.columns:
-                    st.info("A view ainda não expõe material_descricao ou não há pedidos.")
+                    ux.info("A view ainda não expõe material_descricao ou não há pedidos.")
                 else:
                     sem_cat = dfp[dfp["material_descricao"].isna() | (dfp["material_descricao"].astype(str).str.strip() == "")]
                     st.caption(f"Pedidos com material não encontrado no catálogo: {len(sem_cat)}")
                     if len(sem_cat):
                         st.dataframe(sem_cat.head(500), use_container_width=True)
             except Exception as e:
-                st.info(f"Não foi possível consultar pedidos para diagnóstico: {e}")
+                ux.info(f"Não foi possível consultar pedidos para diagnóstico: {e}")
 
     # Rodapé
     st.caption("Dica: após importar, atualize/recarregue as páginas para refletir as novas dimensões (almox, família, grupo).")

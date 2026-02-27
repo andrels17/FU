@@ -1,13 +1,11 @@
 """Tela: Gestão de pedidos."""
 from __future__ import annotations
-import html
 
 from datetime import datetime, timedelta
 
 import pandas as pd
 import math
 import streamlit as st
-from src.core.pedidos_rules import calc_pendente, is_entregue
 
 from src.ui import ux
 
@@ -24,35 +22,6 @@ from src.ui.theme import apply_theme, section_header
 # -------------------------------
 # Helpers de performance / UX
 # -------------------------------
-# --- helper: render descricao como título (clamp + tooltip) ---
-def _render_descricao_titulo(descricao: str, *, font_size: str = "1.05rem", margin_bottom_px: int = 8) -> None:
-    """Renderiza a descrição como título com cor de accent do tema, clamp 2 linhas e tooltip."""
-    desc = (descricao or "").strip()
-    esc = html.escape(desc) if desc else "—"
-    # cor do tema: tenta usar variável do Streamlit (fallback para herdar)
-    st.markdown(
-        f"""
-        <div
-          title="{esc}"
-          style="
-            font-size: {font_size};
-            font-weight: 650;
-            margin-bottom: {margin_bottom_px}px;
-            color: var(--primary-color, inherit);
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            line-height: 1.25;
-          "
-        >
-          {esc}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
 def _make_df_stamp(df: pd.DataFrame, col: str = "atualizado_em") -> tuple:
     if df is None or df.empty:
         return (0, "empty")
@@ -193,20 +162,6 @@ def _registrar_entrega_safe(
     _tid = str(tenant_id) if tenant_id else None
 
     # --- caminho padrão ---
-    # Alguns backends registram a entrega apenas no histórico e dependem de trigger para atualizar "pedidos".
-    # Para evitar "registrou mas não saiu dos pendentes", garantimos o update de qtde_entregue/status quando necessário.
-    pre_row = None
-    try:
-        q0 = _supabase.table("pedidos").select("id,qtde_solicitada,qtde_entregue,status,data_entrega_real").eq("id", pid)
-        if _tid:
-            q0 = q0.eq("tenant_id", _tid)
-        r0 = q0.limit(1).execute()
-        pre_rows = r0.data or []
-        if pre_rows:
-            pre_row = pre_rows[0]
-    except Exception:
-        pre_row = None
-
     if _repo_registrar_entrega is not None:
         try:
             ok, msg = _repo_registrar_entrega(
@@ -217,67 +172,13 @@ def _registrar_entrega_safe(
                 _supabase=_supabase,
             )
             if ok:
-                # Checa se qtde_entregue foi atualizada (trigger) — se não, faz update aqui.
-                try:
-                    q1 = _supabase.table("pedidos").select("id,qtde_solicitada,qtde_entregue,status,data_entrega_real").eq("id", pid)
-                    if _tid:
-                        q1 = q1.eq("tenant_id", _tid)
-                    r1 = q1.limit(1).execute()
-                    rows1 = r1.data or []
-                    if rows1 and pre_row:
-                        qs0 = float(pre_row.get("qtde_solicitada") or 0)
-                        qe0 = float(pre_row.get("qtde_entregue") or 0)
-                        qe1 = float(rows1[0].get("qtde_entregue") or 0)
-
-                        # Se completou 100% e o status ainda não refletiu, sincroniza (alguns fluxos atualizam apenas qtde/data).
-                        try:
-                            status1 = str(rows1[0].get("status") or "")
-                            qs1 = float(rows1[0].get("qtde_solicitada") or qs0)
-                            if qs1 > 0 and qe1 >= qs1 and status1 != "Entregue":
-                                payload2 = {"status": "Entregue"}
-                                try:
-                                    if _table_supports_column(_supabase, "pedidos", "data_entrega_real"):
-                                        payload2["data_entrega_real"] = str(data_entrega)
-                                except Exception:
-                                    pass
-                                uq2 = _supabase.table("pedidos").update(payload2).eq("id", pid)
-                                if _tid:
-                                    uq2 = uq2.eq("tenant_id", _tid)
-                                uq2.execute()
-                        except Exception:
-                            pass
-
-
-                        # Se não mudou (ou mudou muito pouco), aplicamos update compatível.
-                        if qe1 <= qe0 + 1e-9:
-                            novo_qe = max(0.0, qe0 + float(qtde))
-                            if qs0 > 0:
-                                novo_qe = min(novo_qe, qs0)
-
-                            payload = {"qtde_entregue": float(novo_qe)}
-                            pendente = max(0.0, qs0 - novo_qe)
-                            if auto_status_entregue and qs0 > 0 and pendente <= 0:
-                                payload["status"] = "Entregue"
-                                try:
-                                    if _table_supports_column(_supabase, "pedidos", "data_entrega_real"):
-                                        payload["data_entrega_real"] = str(data_entrega)
-                                except Exception:
-                                    pass
-
-                            uq = _supabase.table("pedidos").update(payload).eq("id", pid)
-                            if _tid:
-                                uq = uq.eq("tenant_id", _tid)
-                            uq.execute()
-                except Exception:
-                    pass
-
                 return True, (msg or "Entrega registrada.")
         except Exception:
             pass
 
     # --- fallback: update direto na tabela pedidos ---
     try:
-        q = _supabase.table("pedidos").select("id,qtde_solicitada,qtde_entregue,status,data_entrega_real").eq("id", pid)
+        q = _supabase.table("pedidos").select("id,qtde_solicitada,qtde_entregue,status,data_entrega").eq("id", pid)
         if _tid:
             q = q.eq("tenant_id", _tid)
         res = q.limit(1).execute()
@@ -298,8 +199,8 @@ def _registrar_entrega_safe(
             payload["status"] = "Entregue"
             # data_entrega é opcional (pode não existir no schema)
             try:
-                if _table_supports_column(_supabase, "pedidos", "data_entrega_real"):
-                    payload["data_entrega_real"] = str(data_entrega)
+                if _table_supports_column(_supabase, "pedidos", "data_entrega"):
+                    payload["data_entrega"] = str(data_entrega)
             except Exception:
                 pass
 
@@ -760,19 +661,8 @@ def exibir_gestao_pedidos(_supabase):
         tenant_id = st.session_state.get("tenant_id")
         df_pedidos = carregar_pedidos(_supabase, tenant_id)
 
-        # Colunas de apoio para filtros (regra única)
-        if df_pedidos is not None and not df_pedidos.empty:
-            if "pendente_calc" in df_pedidos.columns:
-                df_pedidos["pendente_ui"] = pd.to_numeric(df_pedidos["pendente_calc"], errors="coerce").fillna(0.0)
-                df_pedidos["entregue_ui"] = df_pedidos.get("entregue_calc", False)
-            else:
-                qs = pd.to_numeric(df_pedidos.get("qtde_solicitada", 0), errors="coerce").fillna(0.0)
-                qe = pd.to_numeric(df_pedidos.get("qtde_entregue", 0), errors="coerce").fillna(0.0)
-                df_pedidos["pendente_ui"] = (qs - qe).clip(lower=0.0)
-                df_pedidos["entregue_ui"] = (qs > 0) & (qe >= qs)
-
         if df_pedidos is None or df_pedidos.empty:
-            st.info("📭 Nenhum pedido cadastrado ainda.")
+            ux.info("📭 Nenhum pedido cadastrado ainda.")
         else:
             # 1) BUSCA (primeiro)
             busca = st.text_input(
@@ -781,30 +671,16 @@ def exibir_gestao_pedidos(_supabase):
                 key="entrega_busca",
             )
 
-            # 2) FILTROS (rápidos + avançados)
-            f1, f2, f3, f4 = st.columns([1.25, 1.15, 1.35, 0.95])
+            # 2) FILTROS
+            f1, f2, f3, f4 = st.columns([1.2, 1.2, 1.1, 0.9])
             with f1:
                 depto = st.selectbox("Departamento", ["Todos"] + DEPARTAMENTOS_VALIDOS, index=0, key="entrega_depto")
             with f2:
-                # Filtro rápido estilo SaaS (se disponível)
-                if hasattr(st, "segmented_control"):
-                    quick = st.segmented_control(
-                        "Filtro rápido",
-                        options=["Pendentes", "Todos", "Entregues"],
-                        default="Pendentes",
-                        key="entrega_quick",
-                    )
-                else:
-                    quick = st.selectbox("Filtro rápido", ["Pendentes", "Todos", "Entregues"], index=0, key="entrega_quick")
+                status_f = st.selectbox("Status", ["Todos"] + STATUS_VALIDOS, index=0, key="entrega_status")
             with f3:
-                with st.expander("Filtros avançados", expanded=False):
-                    status_f = st.selectbox("Status", ["Todos"] + STATUS_VALIDOS, index=0, key="entrega_status")
+                somente_pendentes = st.checkbox("Somente pendentes", value=True, key="entrega_pendentes")
             with f4:
-                limite = st.selectbox("Itens/página", [20, 40, 60, 80, 100, 200, 300, 500], index=4, key="entrega_limite")
-
-            # Deriva pendência pelo filtro rápido
-            somente_pendentes = (quick == "Pendentes")
-            somente_entregues = (quick == "Entregues")
+                limite = st.selectbox("Itens por página", [20, 40, 60, 80, 100, 200, 300, 500], index=4, key="entrega_limite")
 
             df = df_pedidos.copy()
 
@@ -819,8 +695,6 @@ def exibir_gestao_pedidos(_supabase):
                 df = df[df["status"] == status_f]
             if somente_pendentes:
                 df = df[(df["qtde_solicitada"] - df["qtde_entregue"]) > 0]
-            elif somente_entregues:
-                df = df[(df["qtde_solicitada"] - df["qtde_entregue"]) <= 0]
 
             # busca
             q = (busca or "").strip().lower()
@@ -885,7 +759,7 @@ def exibir_gestao_pedidos(_supabase):
 
 
             if df.empty:
-                st.warning("Nenhum pedido encontrado com os filtros atuais.")
+                ux.warn("Nenhum pedido encontrado com os filtros atuais.")
             else:
                 st.caption(f"Resultados: **{len(df)}**")
 
@@ -907,9 +781,15 @@ def exibir_gestao_pedidos(_supabase):
                     return base
 
                 rows = df.to_dict("records")
+
+                if "entrega_selected_id" not in st.session_state:
+                    st.session_state["entrega_selected_id"] = None
+
                 st.caption("⬇️ Selecione um pedido abaixo para registrar a entrega.")
 
                 cols = st.columns(2, gap="large")
+                selected = st.session_state.get("entrega_selected_id")
+
                 for i, r in enumerate(rows):
                     pid = str(r.get("id"))
                     try:
@@ -926,184 +806,182 @@ def exibir_gestao_pedidos(_supabase):
                             a1.metric("Solic.", f"{qs:g}")
                             a2.metric("Entr.", f"{qe:g}")
                             a3.metric("Pend.", f"{pend:g}")
-                            btn_label = "Registrar entrega"
 
-                            def _render_dialog_entrega(pid_modal: str) -> None:
-                                pedido_modal = df_pedidos[df_pedidos["id"].astype(str) == str(pid_modal)]
-                                if pedido_modal.empty:
-                                    st.error("Pedido não encontrado.")
-                                    return
-                                pedido_m = pedido_modal.iloc[0].to_dict()
+                            is_sel = (str(selected) == pid)
+                            btn_label = "✅ Selecionado" if is_sel else "Selecionar"
+                            if st.button(btn_label, key=f"pick_{pid}", use_container_width=True, disabled=is_sel):
+                                st.session_state["entrega_selected_id"] = pid
+                                st.session_state["entrega_modal_id"] = pid
+                                st.rerun()
 
-                                
-                                st.markdown("### 📋 Resumo do pedido")
+                # fallback se nada selecionado ainda
+                if not st.session_state.get("entrega_selected_id") and rows:
+                    st.session_state["entrega_selected_id"] = str(rows[0].get("id"))
 
-                                # Cards alinhados (mobile-first)
-                                def _kpi_card(label: str, value: str):
-                                    with st.container(border=True):
-                                        st.caption(label)
-                                        st.markdown(f"**{value}**")
+                pedido_id = str(st.session_state.get("entrega_selected_id"))
+                pedido = df[df["id"].astype(str) == str(pedido_id)].iloc[0].to_dict()
 
-                                r1 = st.columns(2, gap="small")
-                                with r1[0]:
-                                    _kpi_card("OC", str(pedido_m.get("nr_oc") or "—"))
-                                with r1[1]:
-                                    _kpi_card("Solicitação", str(pedido_m.get("nr_solicitacao") or "—"))
+                st.markdown("---")
+                st.markdown("### 📋 Resumo do pedido")
 
-                                r2 = st.columns(2, gap="small")
-                                with r2[0]:
-                                    _kpi_card("Depto", str(pedido_m.get("departamento") or "—"))
-                                with r2[1]:
-                                    _kpi_card("Status", str(pedido_m.get("status") or "—"))
+                # Identificação
+                i1, i2, i3, i4 = st.columns([1.1, 1.1, 1.1, 1.4])
+                i1.metric("OC", str(pedido.get("nr_oc") or "—"))
+                i2.metric("Solicitação", str(pedido.get("nr_solicitacao") or "—"))
+                i3.metric("Depto", str(pedido.get("departamento") or "—"))
+                i4.metric("Status", str(pedido.get("status") or "—"))
 
-                                solicitada_m = float(pedido_m.get("qtde_solicitada") or 0)
-                                entregue_m = float(pedido_m.get("qtde_entregue") or 0)
-                                pendente_m = max(0.0, solicitada_m - entregue_m)
+                # Descrição + códigos
+                st.caption(str(pedido.get("descricao") or "").strip() or "—")
+                t1, t2, t3 = st.columns(3)
+                t1.metric("Cód. Material", str(pedido.get("cod_material") or "—"))
+                t2.metric("Cód. Equipamento", str(pedido.get("cod_equipamento") or "—"))
+                try:
+                    vt = float(pedido.get("valor_total") or 0)
+                except Exception:
+                    vt = 0.0
+                t3.metric("Valor Total (R$)", f"{vt:.2f}")
 
-                                r3 = st.columns(2, gap="small")
-                                with r3[0]:
-                                    with st.container(border=True):
-                                        st.caption("Quantidades")
-                                        a, b, c = st.columns(3, gap="small")
-                                        a.metric("Solic.", f"{solicitada_m:g}")
-                                        b.metric("Entr.", f"{entregue_m:g}")
-                                        c.metric("Pend.", f"{pendente_m:g}")
-                                with r3[1]:
-                                    with st.container(border=True):
-                                        st.caption("Progresso")
-                                        frac_m = 0.0 if solicitada_m <= 0 else max(0.0, min(1.0, entregue_m / solicitada_m))
-                                        st.progress(frac_m)
+                solicitada = float(pedido.get("qtde_solicitada") or 0)
+                entregue = float(pedido.get("qtde_entregue") or 0)
+                pendente = max(0.0, solicitada - entregue)
 
-                                st.markdown("---")
-                                st.markdown("### ✅ Registrar entrega")
-                                _render_descricao_titulo(pedido_m.get("descricao"), font_size="1.00rem", margin_bottom_px=10)
+                c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+                c1.metric("Solicitada", f"{solicitada:g}")
+                c2.metric("Entregue", f"{entregue:g}")
+                c3.metric("Pendente", f"{pendente:g}")
+                frac = 0.0 if solicitada <= 0 else max(0.0, min(1.0, entregue / solicitada))
+                c4.progress(frac)
 
-                                if pendente_m <= 0:
-                                    ux.info("✅ Pedido já está totalmente entregue.")
-                                    return
-
-                                st.toggle("Layout compacto", value=True, key="ui_compact_modal", help="No mobile, mantém o modal mais enxuto.")
-
-                                with st.form(f"form_entrega_dialog_{pid_modal}"):
-                                    
-                                    compact_modal = bool(st.session_state.get("ui_compact_modal", True)) or bool(st.session_state.get("ui_cards_first", True))
-
-                                    st.caption("Quantidade a entregar")
-                                    if compact_modal:
-                                        qtde = st.number_input(
-                                            "",
-                                            min_value=0.0,
-                                            max_value=float(pendente_m),
-                                            step=1.0,
-                                            label_visibility="collapsed",
-                                        )
-
-                                        st.caption("Data da entrega")
-                                        data_entrega = st.date_input(
-                                            "",
-                                            value=datetime.now().date(),
-                                            label_visibility="collapsed",
-                                        )
-                                    else:
-                                        e1, e2 = st.columns(2, gap="small")
-                                        with e1:
-                                            qtde = st.number_input(
-                                                "",
-                                                min_value=0.0,
-                                                max_value=float(pendente_m),
-                                                step=1.0,
-                                                label_visibility="collapsed",
-                                            )
-                                        with e2:
-                                            st.caption("Data da entrega")
-                                            data_entrega = st.date_input(
-                                                "",
-                                                value=datetime.now().date(),
-                                                label_visibility="collapsed",
-                                            )
-
-                                    st.caption("Observação (opcional)")
-                                    obs = st.text_input("", value="", label_visibility="collapsed")
-                                    auto_entregue = st.checkbox(
-                                        "Marcar como **Entregue** ao zerar pendência",
-                                        value=True,
-                                        help="Se completar 100%, ajusta status automaticamente.",
-                                    )
-                                    enviar = st.form_submit_button("✅ Registrar entrega", use_container_width=True)
-
-                                if enviar:
-                                    if qtde <= 0:
-                                        ux.warn("Informe uma quantidade maior que zero.")
-                                        return
-                                    if qtde > pendente_m:
-                                        st.error("A quantidade informada é maior que a pendente.")
-                                        return
-
-                                    ok, msg = _registrar_entrega_safe(
-                                        _supabase=_supabase,
-                                        pedido_id=str(pid_modal),
-                                        tenant_id=str(tenant_id) if tenant_id else None,
-                                        qtde=float(qtde),
-                                        data_entrega=str(data_entrega),
-                                        observacao=obs,
-                                        usuario_id=(st.session_state.get("usuario") or {}).get("id"),
-                                        usuario_email=(st.session_state.get("usuario") or {}).get("email"),
-                                        auto_status_entregue=bool(auto_entregue),
-                                    )
-                                    if ok:
-                                        try:
-                                            ba.registrar_acao(
-                                                _supabase,
-                                                st.session_state.usuario.get("email"),
-                                                "registrar_entrega",
-                                                {"id": str(pid_modal), "qtde": float(qtde), "data": str(data_entrega)},
-                                            )
-                                        except Exception:
-                                            pass
-
-                                        st.toast(msg) if hasattr(st, 'toast') else ux.ok(msg)
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error(msg)
-
-                            if st.button(btn_label, key=f"pick_{pid}", use_container_width=True):
-                                # ✅ abre o dialog no mesmo clique (mais confiável do que via session_state + rerun)
-                                if hasattr(st, "dialog"):
-                                    @st.dialog("📦 Registrar Entrega")
-                                    def _dlg(pid_open=pid):
-                                        # --- Ajuste fino de tipografia do dialog (compacto) ---
-                                        st.markdown(
-                                            """
-                                            <style>
-                                              [data-testid="stDialog"] * { font-size: 0.90rem; }
-                                              [data-testid="stDialog"] h1 { font-size: 1.15rem; margin: 0.05rem 0 0.35rem 0; }
-                                              [data-testid="stDialog"] h2 { font-size: 1.00rem; margin: 0.15rem 0 0.30rem 0; }
-                                              [data-testid="stDialog"] h3 { font-size: 0.95rem; margin: 0.15rem 0 0.25rem 0; }
-                                              [data-testid="stDialog"] [data-testid="stMetricLabel"] { font-size: 0.78rem; }
-                                              [data-testid="stDialog"] [data-testid="stMetricValue"] { font-size: 1.15rem; line-height: 1.05; }
-                                              [data-testid="stDialog"] input,
-                                              [data-testid="stDialog"] textarea { font-size: 0.90rem; }
-                                              [data-testid="stDialog"] button { font-size: 0.90rem; padding-top: 0.30rem; padding-bottom: 0.30rem; }
-                                              [data-testid="stDialog"] hr { margin: 0.55rem 0; }
-                                            </style>
-                                            """,
-                                            unsafe_allow_html=True,
-                                        )
-
-                                        _render_dialog_entrega(pid_open)
-                                    _dlg()
-                                elif hasattr(st, "experimental_dialog"):
-                                    @st.experimental_dialog("📦 Registrar Entrega")
-                                    def _dlg2(pid_open=pid):
-                                        _render_dialog_entrega(pid_open)
-                                    _dlg2()
-                                else:
-                                    # fallback: usa o fluxo existente (session_state + rerun)
-                                    st.session_state["entrega_modal_id"] = pid
-                                    st.rerun()
+# ==================================================
+# Modal: Registrar Entrega (abre ao clicar Selecionar)
+# ==================================================
+if "entrega_modal_id" not in st.session_state:
+    st.session_state["entrega_modal_id"] = None
 
 
+if st.session_state.get("entrega_modal_id"):
+    # Streamlit: prefer st.dialog (mais compatível). Fallback para st.modal.
+    def _render_entrega_dialog():
+        pid_modal = str(st.session_state.get("entrega_modal_id"))
+        pedido_modal = df_pedidos[df_pedidos["id"].astype(str) == pid_modal]
+
+        if pedido_modal.empty:
+            st.error("Pedido não encontrado.")
+            return
+
+        pedido_m = pedido_modal.iloc[0].to_dict()
+
+        st.markdown("### 📋 Resumo")
+        i1, i2, i3, i4 = st.columns(4)
+        i1.metric("OC", str(pedido_m.get("nr_oc") or "—"))
+        i2.metric("Solicitação", str(pedido_m.get("nr_solicitacao") or "—"))
+        i3.metric("Depto", str(pedido_m.get("departamento") or "—"))
+        i4.metric("Status", str(pedido_m.get("status") or "—"))
+        st.caption(str(pedido_m.get("descricao") or "").strip() or "—")
+
+        solicitada_m = float(pedido_m.get("qtde_solicitada") or 0)
+        entregue_m = float(pedido_m.get("qtde_entregue") or 0)
+        pendente_m = max(0.0, solicitada_m - entregue_m)
+
+        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+        c1.metric("Solicitada", f"{solicitada_m:g}")
+        c2.metric("Entregue", f"{entregue_m:g}")
+        c3.metric("Pendente", f"{pendente_m:g}")
+        frac_m = 0.0 if solicitada_m <= 0 else max(0.0, min(1.0, entregue_m / solicitada_m))
+        c4.progress(frac_m)
+
+        st.markdown("---")
+        st.markdown("### ✅ Registrar entrega")
+
+        if pendente_m <= 0:
+            ux.ok("✅ Pedido já está totalmente entregue.")
+        else:
+            with st.form("form_entrega_modal"):
+                e1, e2 = st.columns(2)
+                with e1:
+                    qtde = st.number_input(
+                        f"Quantidade a entregar (máx: {pendente_m:g})",
+                        min_value=0.0,
+                        max_value=float(pendente_m),
+                        step=1.0,
+                        key="entrega_modal_qtde",
+                    )
+                with e2:
+                    data_entrega = st.date_input(
+                        "Data da entrega",
+                        value=datetime.now().date(),
+                        key="entrega_modal_data",
+                    )
+
+                obs = st.text_input("Observação (opcional)", key="entrega_modal_obs")
+                auto_entregue = st.checkbox(
+                    "Marcar como **Entregue** ao zerar pendência",
+                    value=True,
+                    help="Se completar 100%, ajusta status automaticamente.",
+                    key="entrega_modal_auto",
+                )
+
+                enviar = st.form_submit_button("✅ Registrar entrega", use_container_width=True)
+
+            if enviar:
+                if qtde <= 0:
+                    ux.warn("Informe uma quantidade maior que zero.")
+                elif qtde > pendente_m:
+                    st.error("A quantidade informada é maior que a pendente.")
+                else:
+                    ok, msg = _registrar_entrega_safe(
+                        _supabase=_supabase,
+                        pedido_id=str(pid_modal),
+                        tenant_id=str(tenant_id) if tenant_id else None,
+                        qtde=float(qtde),
+                        data_entrega=str(data_entrega),
+                        observacao=obs,
+                        usuario_id=(st.session_state.get("usuario") or {}).get("id"),
+                        usuario_email=(st.session_state.get("usuario") or {}).get("email"),
+                        auto_status_entregue=bool(auto_entregue),
+                    )
+                    if ok:
+                        try:
+                            ba.registrar_acao(
+                                _supabase,
+                                st.session_state.usuario.get("email"),
+                                "registrar_entrega",
+                                {"id": str(pid_modal), "qtde": float(qtde), "data": str(data_entrega)},
+                            )
+                        except Exception:
+                            pass
+
+                        ux.ok(msg)
+
+                        # Fecha automaticamente (preferência A)
+                        st.session_state["entrega_modal_id"] = None
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+        if st.button("Fechar", use_container_width=True):
+            st.session_state["entrega_modal_id"] = None
+            st.rerun()
+
+    # Prefer st.dialog (decorator). Se não existir, tenta st.modal. Se nada existir, usa expander.
+    if hasattr(st, "dialog"):
+        @st.dialog("📦 Registrar Entrega")
+        def _open_dialog():
+            _render_entrega_dialog()
+        _open_dialog()
+    elif hasattr(st, "experimental_dialog"):
+        @st.experimental_dialog("📦 Registrar Entrega")
+        def _open_dialog2():
+            _render_entrega_dialog()
+        _open_dialog2()
+    elif hasattr(st, "modal"):
+        with st.modal("📦 Registrar Entrega"):
+            _render_entrega_dialog()
+    else:
+        with st.expander("📦 Registrar Entrega (abrir)", expanded=True):
+            _render_entrega_dialog()
     with tab_novo:
         st.subheader("Cadastrar Novo Pedido")
 
@@ -1261,7 +1139,7 @@ def exibir_gestao_pedidos(_supabase):
                         except Exception:
                             pass
 
-                        st.toast(mensagem) if hasattr(st, 'toast') else ux.ok(mensagem)
+                        ux.ok(mensagem)
                         st.rerun()
                     else:
                         st.error(mensagem)
@@ -1293,7 +1171,7 @@ def exibir_gestao_pedidos(_supabase):
                 pass
 
         if df_pedidos.empty:
-            st.info("📭 Nenhum pedido cadastrado ainda")
+            ux.info("📭 Nenhum pedido cadastrado ainda")
             st.stop()
 
         # --------------------------------------------
@@ -1341,7 +1219,7 @@ def exibir_gestao_pedidos(_supabase):
         labels, ids = _build_pedido_labels(_make_df_stamp(df_lista), df_lista)
 
         if not ids:
-            st.warning("Nenhum pedido encontrado com os filtros atuais.")
+            ux.warn("Nenhum pedido encontrado com os filtros atuais.")
             st.stop()
 
         idx_escolhido = st.selectbox(
@@ -1399,34 +1277,13 @@ def exibir_gestao_pedidos(_supabase):
             forn_label_default = fornecedor_id_to_label[forn_id_atual]
 
         # --------------------------------------------
-        # Regras de bloqueio por entrega real (evita inconsistências de "status")
+        # Regras de bloqueio por status
         # --------------------------------------------
         status_atual = str(pedido_atual.get("status") or "")
-
-        try:
-            qs_real = float(pedido_atual.get("qtde_solicitada") or 0)
-            qe_real = float(pedido_atual.get("qtde_entregue") or 0)
-        except Exception:
-            qs_real, qe_real = 0.0, 0.0
-
-        pendente_real = max(0.0, qs_real - qe_real)
-        entregue_real = (qs_real > 0 and qe_real >= qs_real)
-
-        # Bloqueia edição apenas se estiver 100% entregue (regra única de verdade).
-        bloqueado = bool(entregue_real)
-
+        bloqueado = (status_atual == "Entregue")
         st.caption("💡 Dica: use a busca acima para localizar rápido por OC/descrição/equipamento.")
-
-        # Se o status estiver "Entregue" mas ainda houver pendência real, não bloqueia —
-        # apenas alerta para correção (evita pop-up indevido).
-        if (status_atual == "Entregue") and (not entregue_real) and (pendente_real > 0):
-            try:
-                st.warning(f"⚠️ Status está **Entregue**, mas ainda há pendência calculada ({pendente_real:g}). Revise o pedido.")
-            except Exception:
-                st.warning("⚠️ Status está Entregue, mas ainda há pendência calculada. Revise o pedido.")
-
         if bloqueado:
-            st.info("🔒 Este pedido está **Entregue** (100%). Por padrão, a edição é bloqueada para evitar inconsistências.")
+            ux.info("🔒 Este pedido está **Entregue**. Por padrão, a edição é bloqueada para evitar inconsistências.")
 
         override_edicao = False
         if bloqueado:
@@ -1488,7 +1345,7 @@ def exibir_gestao_pedidos(_supabase):
 
             st.markdown("### 🏭 Fornecedor")
             if df_fornecedores is None or df_fornecedores.empty:
-                st.warning("⚠️ Nenhum fornecedor cadastrado.")
+                ux.warn("⚠️ Nenhum fornecedor cadastrado.")
                 fornecedor_sel = ""
             else:
                 try:
@@ -1673,8 +1530,8 @@ def exibir_gestao_pedidos(_supabase):
                 # registra data_entrega se ainda não existir
             # data_entrega é opcional (pode não existir no schema)
             try:
-                if _table_supports_column(_supabase, 'pedidos', 'data_entrega_real'):
-                        if not (pedido_atual.get('data_entrega_real') or pedido_atualizado.get('data_entrega_real')):
+                if _table_supports_column(_supabase, 'pedidos', 'data_entrega'):
+                        if not (pedido_atual.get('data_entrega') or pedido_atualizado.get('data_entrega')):
                             pedido_atualizado['data_entrega'] = datetime.now().date().isoformat()
             except Exception:
                 pass
@@ -1740,7 +1597,7 @@ def exibir_gestao_pedidos(_supabase):
                 except Exception:
                     pass
 
-                st.toast(mensagem) if hasattr(st, 'toast') else ux.ok(mensagem)
+                ux.ok(mensagem)
                 st.cache_data.clear()
                 st.rerun()
             else:
@@ -1816,7 +1673,7 @@ def exibir_gestao_pedidos(_supabase):
                 )
                 rows = qh.data or []
                 if not rows:
-                    st.info("Nenhuma alteração registrada ainda.")
+                    ux.info("Nenhuma alteração registrada ainda.")
                 else:
                     dfh = pd.DataFrame(rows)
 

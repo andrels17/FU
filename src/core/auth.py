@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 import streamlit as st
+from src.ui import ux
+
 import hashlib
 import src.services.backup_auditoria as ba
 from src.core.db import get_supabase_user_client
@@ -157,12 +159,12 @@ def exibir_login(supabase_anon):
         if email and senha:
             usuario = fazer_login(email, senha, supabase_anon)
             if usuario:
-                st.success("Login realizado com sucesso!")
+                ux.ok("Login realizado com sucesso!")
                 st.rerun()
             else:
                 st.error("Email ou senha incorretos.")
         else:
-            st.warning("Preencha todos os campos")
+            ux.warn("Preencha todos os campos")
 
 
 def criar_senha_hash(senha: str) -> str:

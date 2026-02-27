@@ -10,6 +10,8 @@ import streamlit as st
 
 
 
+from src.ui import ux
+
 # =========================
 # Helpers UI / Formatting
 # =========================
@@ -419,7 +421,7 @@ def exibir_perfil(supabase_db):
         with col_h3:
             if st.button(" Sair", key="perfil_logout_btn_header", use_container_width=True):
                 _logout_clear_session()
-                st.success("Você saiu da conta.")
+                ux.ok("Você saiu da conta.")
                 st.rerun()
 
     # KPIs (se conseguir)
@@ -440,12 +442,12 @@ def exibir_perfil(supabase_db):
 
         cA, cB, cC = st.columns([1, 1, 1])
         with cA:
-            st.info(" Dica: personalize seu nome e avatar para aparecerem na sidebar.")
+            ux.info(" Dica: personalize seu nome e avatar para aparecerem na sidebar.")
         with cB:
-            st.success(" Sessão ativa")
+            ux.ok(" Sessão ativa")
             st.caption(f"User ID: `{user_id}`")
         with cC:
-            st.warning(" Empresa")
+            ux.warn(" Empresa")
             st.caption(empresa or "Nenhuma selecionada (se aplicável).")
 
         st.divider()
@@ -549,13 +551,13 @@ def exibir_perfil(supabase_db):
         if salvar_nome:
             nn = (novo_nome or "").strip()
             if not nn:
-                st.warning("Informe um nome válido.")
+                ux.warn("Informe um nome válido.")
             else:
                 try:
                     supabase_db.table("user_profiles").update({"nome": nn}).eq("user_id", user_id).execute()
                     if isinstance(st.session_state.get("usuario"), dict):
                         st.session_state.usuario["nome"] = nn
-                    st.success(" Perfil atualizado!")
+                    ux.ok(" Perfil atualizado!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Falha ao salvar: {e}")
@@ -625,7 +627,7 @@ def exibir_perfil(supabase_db):
                 st.session_state.usuario["avatar_path"] = object_path
 
             st.session_state.avatar_uploader_key += 1
-            st.success(" Avatar atualizado!")
+            ux.ok(" Avatar atualizado!")
             st.rerun()
 
         if remover_avatar:
@@ -645,7 +647,7 @@ def exibir_perfil(supabase_db):
             if isinstance(st.session_state.get("usuario"), dict):
                 st.session_state.usuario["avatar_path"] = None
 
-            st.success(" Avatar removido!")
+            ux.ok(" Avatar removido!")
             st.rerun()
 
     # =========================
@@ -672,7 +674,7 @@ def exibir_perfil(supabase_db):
                 else:
                     try:
                         _change_password(nova)
-                        st.success(" Senha atualizada!")
+                        ux.ok(" Senha atualizada!")
                         st.caption("Se você usa regras de senha no Supabase, elas podem exigir complexidade.")
                     except Exception as e:
                         st.error(f"Falha ao trocar senha: {e}")
@@ -680,7 +682,7 @@ def exibir_perfil(supabase_db):
         with col_btn2:
             if st.button(" Sair", use_container_width=True, key="perfil_logout_btn_security"):
                 _logout_clear_session()
-                st.success("Você saiu da conta.")
+                ux.ok("Você saiu da conta.")
                 st.rerun()
 
         st.divider()
@@ -689,7 +691,7 @@ def exibir_perfil(supabase_db):
         if st.button(" Enviar link de redefinição", use_container_width=True, key="perfil_recover_btn"):
             try:
                 _send_password_recovery(email)
-                st.success(" Link enviado! Verifique seu email.")
+                ux.ok(" Link enviado! Verifique seu email.")
                 st.caption("Se não chegar, verifique Spam e as Redirect URLs no Supabase Auth.")
             except Exception as e:
                 st.error(f"Falha ao enviar: {e}")

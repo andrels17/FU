@@ -67,6 +67,9 @@ def _actions_bar(df_base: pd.DataFrame, dt_ini: date, dt_fim: date, prefix: str)
 
 import pandas as pd
 import streamlit as st
+from src.ui.plotly_style import style_plotly
+
+from src.ui import ux
 
 from src.core.db import init_supabase_admin
 from src.repositories.pedidos import carregar_pedidos
@@ -259,6 +262,7 @@ def _plot_hbar_with_labels(df: pd.DataFrame, y_col: str, x_col: str, title: str,
             yaxis_title="",
             xaxis_title="",
         )
+        style_plotly(fig, kind="bar", height=height)
         st.plotly_chart(fig, use_container_width=True)
     except Exception:
         st.bar_chart(dfp.set_index("_y_disp")[[x_col]], height=min(300, height))
@@ -624,7 +628,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         df_pedidos = carregar_pedidos(_supabase, tenant_id=tenant_id)
 
     if df_pedidos is None or df_pedidos.empty:
-        st.info("Nenhum pedido encontrado para este tenant.")
+        ux.info("Nenhum pedido encontrado para este tenant.")
         st.stop()
 
     # opções para filtros
@@ -737,7 +741,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
     df_base = filtrar_pedidos_base(df_pedidos, filtros=filtros)
 
     if df_base is None or df_base.empty:
-        st.warning("Nenhum pedido no filtro atual. Ajuste o período/filtros.")
+        ux.warn("Nenhum pedido no filtro atual. Ajuste o período/filtros.")
         st.stop()
 
     total_geral = _as_float(df_base.get("valor_total", pd.Series(dtype=float)).fillna(0).sum())
@@ -915,7 +919,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         df_g = _safe_gastos_por_gestor(df_base, links_df, user_df)
 
         if df_g.empty:
-            st.info("Sem dados por Coordenador. Verifique se há vínculos em gestor_departamentos para os departamentos filtrados.")
+            ux.info("Sem dados por Coordenador. Verifique se há vínculos em gestor_departamentos para os departamentos filtrados.")
             st.stop()
 
         # adiciona role via user_df
@@ -940,7 +944,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             ]
 
         if df_g.empty:
-            st.warning("Nenhum coordenador após filtros de pessoas (roles/busca).")
+            ux.warn("Nenhum coordenador após filtros de pessoas (roles/busca).")
             st.stop()
 
         # comparação
@@ -1042,7 +1046,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             # ===== Insight automático =====
             try:
                 top = df_g.iloc[0]
-                st.info(
+                ux.info(
                     f"No período aplicado, **{top.get('gestor_nome','(Sem nome)')}** foi o coordenador com maior impacto, "
                     f"respondendo por **{_as_float(top.get('participacao_pct')):.1f}%** do gasto total."
                 )
@@ -1061,7 +1065,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
         df_f = gastos_por_frota(df_base)
         if df_f.empty:
-            st.info("Sem dados para o agrupamento por Frota (cod_equipamento).")
+            ux.info("Sem dados para o agrupamento por Frota (cod_equipamento).")
             st.stop()
 
         if comparar:
@@ -1151,7 +1155,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
         df_d = gastos_por_departamento(df_base)
         if df_d.empty:
-            st.info("Sem dados para o agrupamento por Departamento.")
+            ux.info("Sem dados para o agrupamento por Departamento.")
             st.stop()
 
         if comparar:
@@ -1194,7 +1198,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         st.subheader("Gastos por Família e Grupo de Material")
 
         if ("familia_descricao" not in df_base.columns) and ("grupo_descricao" not in df_base.columns):
-            st.info("Ainda não há colunas de Família/Grupo na base. Verifique se a view de pedidos já traz esses campos do catálogo de materiais.")
+            ux.info("Ainda não há colunas de Família/Grupo na base. Verifique se a view de pedidos já traz esses campos do catálogo de materiais.")
         else:
             df_scope = df_base.copy()
 
@@ -1269,7 +1273,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
             df_fg = _gastos_por_familia_grupo(df_scope)
             if df_fg.empty:
-                st.info("Sem dados para Família/Grupo no filtro atual.")
+                ux.info("Sem dados para Família/Grupo no filtro atual.")
             else:
                 c1, c2, c3 = st.columns([2, 2, 1])
                 with c1:

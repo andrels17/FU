@@ -8,6 +8,8 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 from src.repositories.fornecedores import upsert_fornecedores
 from src.ui.theme import section_header
 
@@ -204,7 +206,7 @@ def exibir_importador_fornecedores(supabase, tenant_id: str | None = None):
         pill="Enterprise",
     )
 
-    st.info(
+    ux.info(
         "Preencha o arquivo com **cod_fornecedor** e **nome**. Os demais campos são opcionais.\n\n"
         "Você pode enviar CSV (\";\" ou \",\") ou Excel (.xlsx).\n"
         "Esta tela também tenta evitar duplicidade por **CNPJ** (quando disponível)."
@@ -347,7 +349,24 @@ def exibir_importador_fornecedores(supabase, tenant_id: str | None = None):
 
     # Preview
     st.subheader("Pré-visualização")
-    st.dataframe(df.head(30), use_container_width=True, height=320)
+    # Preview (editor read-only, com tipagem/formatos)
+    preview = df.head(30).copy()
+    if hasattr(st, "data_editor"):
+        st.data_editor(
+            preview,
+            use_container_width=True,
+            hide_index=True,
+            disabled=True,
+            column_config={
+                "cod_fornecedor": st.column_config.NumberColumn("Cód. Fornecedor", step=1),
+                "nome": st.column_config.TextColumn("Nome", help="Nome do fornecedor"),
+                "cnpj": st.column_config.TextColumn("CNPJ"),
+                "uf": st.column_config.TextColumn("UF", width="small"),
+                "cidade": st.column_config.TextColumn("Cidade"),
+            },
+        )
+    else:
+        st.dataframe(preview, use_container_width=True, height=320)
 
     # Controles
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -363,7 +382,7 @@ def exibir_importador_fornecedores(supabase, tenant_id: str | None = None):
 
     if st.button("Importar (Upsert)", type="primary", use_container_width=True, key="imp_forn__run"):
         if dry_run:
-            st.info("Simulação ativa: nada foi gravado.\n\n" + f"Linhas que seriam processadas: {len(df)}")
+            ux.info("Simulação ativa: nada foi gravado.\n\n" + f"Linhas que seriam processadas: {len(df)}")
             return
 
         with st.spinner("Enviando para o banco..."):
@@ -371,12 +390,12 @@ def exibir_importador_fornecedores(supabase, tenant_id: str | None = None):
 
         # Pós-resultado
         if errors:
-            st.warning(f"Importação concluída com erros em {len(errors)} linha(s).")
+            ux.warn(f"Importação concluída com erros em {len(errors)} linha(s).")
             st.dataframe(pd.DataFrame(errors), use_container_width=True, height=280)
         if ok:
-            st.success(f"Concluído! Inseridos: {inserted} | Atualizados: {updated}")
+            (st.toast(f"Concluído! Inseridos: {inserted} | Atualizados: {updated}") if hasattr(st,'toast') else ux.ok(f"Concluído! Inseridos: {inserted} | Atualizados: {updated}"))
             if not conflitos_cnpj.empty:
-                st.info(
+                ux.info(
                     "Anti-duplicidade por CNPJ: algumas linhas tiveram o **cod_fornecedor** ajustado para o código existente no BD.\n"
                     "Veja o expander de conflitos para auditoria."
                 )

@@ -23,6 +23,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 from src.ui.theme import section_header
 
 
@@ -486,7 +488,7 @@ def exibir_importacao_pedidos(
         return
 
     if df.empty:
-        st.warning("Arquivo vazio.")
+        ux.warn("Arquivo vazio.")
         return
 
     # Normalizar colunas (mapeia variações)
@@ -526,7 +528,7 @@ def exibir_importacao_pedidos(
     # Campos mínimos para chave
     if (not c_nr_oc and not c_nr_sol) or (not c_cod_mat) or (not c_cod_eq):
         st.error("❌ O arquivo precisa conter: cod_material, cod_equipamento e (nr_oc/OC ou nr_solicitacao).")
-        st.info(
+        ux.info(
             f"Encontrado: nr_oc={bool(c_nr_oc)}, nr_solicitacao={bool(c_nr_sol)}, cod_material={bool(c_cod_mat)}, cod_equipamento={bool(c_cod_eq)}"
         )
         return
@@ -570,7 +572,7 @@ def exibir_importacao_pedidos(
 
     df2 = pd.DataFrame(out_rows)
     if df2.empty:
-        st.warning("Nenhuma linha válida encontrada (chave incompleta)." )
+        ux.warn("Nenhuma linha válida encontrada (chave incompleta)." )
         return
 
     # Dedup no excel
@@ -581,9 +583,23 @@ def exibir_importacao_pedidos(
             with st.expander(f"⚠️ Duplicidades detectadas no arquivo ({len(duplicadas_df)})", expanded=False):
                 st.dataframe(duplicadas_df.head(200), use_container_width=True)
 
-    st.success(f"Arquivo carregado: {len(df2)} registros válidos")
+    (st.toast(f"Arquivo carregado: {len(df2)} registros válidos") if hasattr(st,"toast") else ux.ok(f"Arquivo carregado: {len(df2)} registros válidos"))
 
-    st.dataframe(df2.head(50), use_container_width=True, height=260)
+    # Pré-visualização (editor read-only com tipagem/formatos)
+    preview = df2.head(50).copy()
+    cfg = {}
+    if "data_oc" in preview.columns: cfg["data_oc"] = st.column_config.DateColumn("Data OC")
+    if "nr_oc" in preview.columns: cfg["nr_oc"] = st.column_config.TextColumn("N° OC")
+    if "departamento" in preview.columns: cfg["departamento"] = st.column_config.TextColumn("Departamento")
+    if "fornecedor" in preview.columns: cfg["fornecedor"] = st.column_config.TextColumn("Fornecedor")
+    if "uf" in preview.columns: cfg["uf"] = st.column_config.TextColumn("UF", width="small")
+    if "descricao" in preview.columns: cfg["descricao"] = st.column_config.TextColumn("Descrição", help="Descrição do material")
+    if "qtde_solicitada" in preview.columns: cfg["qtde_solicitada"] = st.column_config.NumberColumn("Qtde. Solicitada")
+    if "preco" in preview.columns: cfg["preco"] = st.column_config.NumberColumn("Preço", format="R$ %.2f")
+    if hasattr(st, "data_editor"):
+        st.data_editor(preview, use_container_width=True, hide_index=True, disabled=True, column_config=cfg)
+    else:
+        st.dataframe(preview, use_container_width=True, height=260)
 
 
     # Resolver fornecedor_id (opcional): cria fornecedor se não existir (por tenant_id + cod_fornecedor)
@@ -745,7 +761,7 @@ def exibir_importacao_pedidos(
         bulk_upsert_enabled = True  # desabilita automaticamente se o BD não tiver UNIQUE/INDEX p/ ON CONFLICT
         total = len(upsert_rows)
         if total == 0:
-            st.info("Nada para importar (sem mudanças)." )
+            ux.info("Nada para importar (sem mudanças)." )
             return
         # Batches (com OC / sem OC)
         oc_rows = [r for r in upsert_rows if r.get("nr_oc")]
@@ -878,9 +894,9 @@ def exibir_importacao_pedidos(
         _process_batches(sem_oc_rows, "tenant_id,nr_solicitacao,cod_material,cod_equipamento", "sem OC")
 
         if errors == 0:
-            st.success(f"✅ Importação concluída — Inseridos: {inserted} | Atualizados: {updated} | Erros: {errors}")
+            ux.ok(f"✅ Importação concluída — Inseridos: {inserted} | Atualizados: {updated} | Erros: {errors}")
         else:
-            st.warning(f"⚠️ Importação finalizada com erros — Inseridos: {inserted} | Atualizados: {updated} | Erros: {errors}")
+            ux.warn(f"⚠️ Importação finalizada com erros — Inseridos: {inserted} | Atualizados: {updated} | Erros: {errors}")
 
 
         # Detalhamento do que foi atualizado (campo a campo)

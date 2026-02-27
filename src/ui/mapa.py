@@ -8,6 +8,9 @@ from typing import Optional, Tuple
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from src.ui.plotly_style import style_plotly
+
+from src.ui import ux
 
 from src.repositories.pedidos import carregar_pedidos
 from src.repositories.fornecedores import carregar_fornecedores
@@ -238,7 +241,7 @@ def exibir_mapa(supabase) -> None:
 
     df_pedidos, df_fornecedores = _load_data_cached(supabase, str(tenant_id))
     if df_pedidos.empty:
-        st.info("Sem pedidos para exibir.")
+        ux.info("Sem pedidos para exibir.")
         return
 
     filtros = _filters_form(df_pedidos)
@@ -284,11 +287,11 @@ def exibir_mapa(supabase) -> None:
         base = base[(base["data_solicitacao"].dt.date >= filtros["dt_ini"]) & (base["data_solicitacao"].dt.date <= filtros["dt_fim"])].copy()
 
     if base.empty:
-        st.warning("Após filtros, não há pedidos suficientes para gerar os mapas.")
+        ux.warn("Após filtros, não há pedidos suficientes para gerar os mapas.")
         return
 
     if df_fornecedores.empty:
-        st.warning("Não há fornecedores cadastrados para este tenant.")
+        ux.warn("Não há fornecedores cadastrados para este tenant.")
         return
 
     forn = df_fornecedores.copy()
@@ -333,7 +336,7 @@ def exibir_mapa(supabase) -> None:
     st.caption(f"Valor total (após filtros): **{fmt_moeda(valor_total)}**")
 
     if com_uf == 0:
-        st.warning("Nenhum pedido com UF válida (fornecedor sem UF ou sem vínculo).")
+        ux.warn("Nenhum pedido com UF válida (fornecedor sem UF ou sem vínculo).")
         return
 
     tab_est, tab_pts, tab_heat, tab_rank, tab_export = st.tabs(
@@ -382,6 +385,7 @@ def exibir_mapa(supabase) -> None:
         )
         fig.update_traces(customdata=agg[["hover"]].values, hovertemplate="%{customdata[0]}<extra></extra>")
         fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=720)
+        style_plotly(fig, kind="map")
         st.plotly_chart(fig, use_container_width=True)
 
         t = agg.sort_values(color_col, ascending=False).copy()
@@ -438,6 +442,7 @@ def exibir_mapa(supabase) -> None:
         )
         fig2.update_traces(customdata=agg_f[["hover"]].values, hovertemplate="%{customdata[0]}<extra></extra>")
         fig2.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=720)
+        style_plotly(fig2, kind="map")
         st.plotly_chart(fig2, use_container_width=True)
 
         t = agg_f.copy()
@@ -468,6 +473,7 @@ def exibir_mapa(supabase) -> None:
             mapbox_style="carto-darkmatter",
         )
         fig3.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=720)
+        style_plotly(fig3, kind="map")
         st.plotly_chart(fig3, use_container_width=True)
         st.caption("Heatmap ponderado por **valor_total**.")
 

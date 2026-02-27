@@ -7,6 +7,8 @@ from typing import Any, Dict
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 from src.ui.theme import section_header
 
 
@@ -88,7 +90,7 @@ def exibir_ranking_tenants(supabase_admin) -> None:
             rows = []
 
     if not rows:
-        st.info(
+        ux.info(
             "Não encontrei dados em **app_logs** para esse período. "
             "Se você acabou de ativar a observabilidade, gere um evento de teste em Observabilidade "
             "e navegue entre páginas para registrar métricas de performance."
@@ -97,7 +99,7 @@ def exibir_ranking_tenants(supabase_admin) -> None:
 
     df = pd.DataFrame(rows)
     if "tenant_id" not in df.columns:
-        st.warning(
+        ux.warn(
             "Sua tabela **app_logs** não possui a coluna **tenant_id**. "
             "Para ranking por tenant, execute o SQL de upgrade (database_setup.sql) "
             "ou adicione as colunas tenant_id/user_id/page."

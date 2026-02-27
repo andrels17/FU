@@ -14,6 +14,8 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
+from src.ui import ux
+
 from src.ui.theme import apply_theme, section_header, card_open, card_close
 from src.services import observabilidade as obs
 
@@ -52,19 +54,19 @@ def exibir_observabilidade(*, supabase_admin=None, supabase_user=None) -> None:
                 # ping simples: listar 1 linha (best-effort)
                 supabase_admin.table("tenants").select("id").limit(1).execute()
                 ok_admin = True
-                st.success("Supabase ADMIN: OK")
+                ux.ok("Supabase ADMIN: OK")
             except Exception as e:
                 st.error(f"Supabase ADMIN: erro ({e})")
 
     with col2:
         if supabase_user is None:
-            st.info("Supabase USER: n/a")
+            ux.info("Supabase USER: n/a")
         else:
             try:
                 supabase_user.table("tenants").select("id").limit(1).execute()
-                st.success("Supabase USER: OK")
+                ux.ok("Supabase USER: OK")
             except Exception as e:
-                st.warning(f"Supabase USER: erro ({e})")
+                ux.warn(f"Supabase USER: erro ({e})")
 
     with col3:
         st.caption("Registro de evento")
@@ -75,7 +77,7 @@ def exibir_observabilidade(*, supabase_admin=None, supabase_user=None) -> None:
                 context={"source": "observabilidade_ui"},
                 supabase_admin=supabase_admin,
             )
-            st.success("Evento registrado (log local + best-effort no banco).")
+            ux.ok("Evento registrado (log local + best-effort no banco).")
     card_close()
 
     st.divider()
@@ -94,7 +96,7 @@ def exibir_observabilidade(*, supabase_admin=None, supabase_user=None) -> None:
             hide_index=True,
         )
     else:
-        st.info("Sem métricas ainda. Navegue pelo app para coletar tempos de página/consultas.")
+        ux.info("Sem métricas ainda. Navegue pelo app para coletar tempos de página/consultas.")
     card_close()
 
     st.divider()
@@ -113,7 +115,7 @@ def exibir_observabilidade(*, supabase_admin=None, supabase_user=None) -> None:
         card_open()
         st.subheader("Últimos eventos em app_logs")
         if supabase_admin is None:
-            st.warning("Supabase ADMIN não disponível. Configure SERVICE_ROLE no Streamlit Cloud secrets.")
+            ux.warn("Supabase ADMIN não disponível. Configure SERVICE_ROLE no Streamlit Cloud secrets.")
         else:
             try:
                 r = (
@@ -125,7 +127,7 @@ def exibir_observabilidade(*, supabase_admin=None, supabase_user=None) -> None:
                 )
                 df = pd.DataFrame(r.data or [])
                 if df.empty:
-                    st.info("Sem registros ainda (ou tabela não criada).")
+                    ux.info("Sem registros ainda (ou tabela não criada).")
                 else:
                     st.dataframe(df, use_container_width=True, hide_index=True)
             except Exception as e:

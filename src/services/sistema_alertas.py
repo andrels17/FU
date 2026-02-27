@@ -1,5 +1,8 @@
 import streamlit as st
 
+from src.ui import ux
+from src.ui.responsive import rcols, is_mobile
+
 import pandas as pd
 import re
 import html
@@ -458,7 +461,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
         dept = safe_text(pedido.get("departamento", "N/A"))
         
         with st.container():
-            csel, cbox, cbtn1, cbtn2 = st.columns([2.4, 9.6, 2, 2])
+            csel, cbox, cbtn1, cbtn2 = rcols([2.4, 9.6, 2, 2])
             with cbox:
                 st.markdown(
                 f"""
@@ -508,7 +511,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
                     try:
                         st.toast("OC copiada.", icon="📋")
                     except Exception:
-                        st.info("OC copiada.")
+                        ux.info("OC copiada.")
 
     
     elif tipo == "vencendo":
@@ -516,7 +519,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
         prev = safe_text(pedido.get("previsao", "N/A"))
         
         with st.container():
-            csel, cbox, cbtn1, cbtn2 = st.columns([2.4, 9.6, 2, 2])
+            csel, cbox, cbtn1, cbtn2 = rcols([2.4, 9.6, 2, 2])
             with cbox:
                 st.markdown(
                 f"""
@@ -545,7 +548,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
                     try:
                         st.toast("OC copiada.", icon="📋")
                     except Exception:
-                        st.info("OC copiada.")
+                        ux.info("OC copiada.")
 
     
     elif tipo == "critico":
@@ -553,7 +556,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
         dept = safe_text(pedido.get("departamento", "N/A"))
         
         with st.container():
-            csel, cbox, cbtn1, cbtn2 = st.columns([2.4, 9.6, 2, 2])
+            csel, cbox, cbtn1, cbtn2 = rcols([2.4, 9.6, 2, 2])
             with cbox:
                 st.markdown(
                 f"""
@@ -582,7 +585,7 @@ def criar_card_pedido(pedido: dict, tipo: str, formatar_moeda_br, idx: int = 0, 
                     try:
                         st.toast("OC copiada.", icon="📋")
                     except Exception:
-                        st.info("OC copiada.")
+                        ux.info("OC copiada.")
 
 
 
@@ -655,7 +658,7 @@ def _ir_para_ficha_material_do_alerta(pedido: dict) -> None:
         st.session_state["_force_menu_sync"] = True
         return
     except Exception as e:
-        st.warning(f"Não foi possível abrir a ficha do material: {e}")
+        ux.warn(f"Não foi possível abrir a ficha do material: {e}")
 
 def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
@@ -708,10 +711,10 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         page = max(1, min(total_pages, page))
 
         # Barra compacta
-        nav_l, nav_m, nav_r = st.columns([2, 6, 2])
+        nav_l, nav_m, nav_r = rcols([2, 6, 2])
 
         with nav_l:
-            c1, c2 = st.columns([1, 1])
+            c1, c2 = rcols([1, 1])
             with c1:
                 if st.button("◀", key=f"{key_prefix}_prev", disabled=(page <= 1), use_container_width=True):
                     page -= 1
@@ -921,7 +924,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
         st.session_state["alertas_global_valor_min_txt"] = ""
         st.session_state["alertas_global_valor_max_txt"] = ""
 
-    colg1, colg2, colg3, colg4 = st.columns([4,4,3.5,1.5])
+    colg1, colg2, colg3, colg4 = rcols([4,4,3.5,1.5])
     with colg1:
         st.markdown("<div style='font-size:12px;opacity:.75;margin-bottom:2px;'>Departamento</div>", unsafe_allow_html=True)
         dept_global = st.multiselect(
@@ -964,7 +967,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                 except Exception:
                     return 0.0
 
-            cmin, cmax = st.columns([1, 1])
+            cmin, cmax = rcols([1, 1])
             with cmin:
                 raw_min = st.text_input(
                     "",
@@ -991,7 +994,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             faixa_valor = (lo, hi)
         else:
             faixa_valor = (0.0, 0.0)
-            st.info("Sem dados de valor para filtrar.")
+            ux.info("Sem dados de valor para filtrar.")
 
 
         with colg4:
@@ -1056,7 +1059,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
     c = len(alertas.get("pedidos_criticos", []))
     f = len(alertas.get("fornecedores_baixa_performance", []))
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4 = rcols(4)
 
     with col1:
         st.markdown(
@@ -1111,18 +1114,24 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
 
     
 
-    # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs(
-        [
-            f"Atrasados ({len(alertas['pedidos_atrasados'])})",
-            f"Vencendo ({len(alertas['pedidos_vencendo'])})",
-            f"Críticos ({len(alertas['pedidos_criticos'])})",
-            f"Fornecedores ({len(alertas['fornecedores_baixa_performance'])})",
-        ]
-    )
+    # Tabs (com foco vindo da sidebar / atalhos)
+    focus = (st.session_state.pop("alerts_focus", None) or "").strip().lower()
+    tab_order = ["atrasados", "vencendo", "criticos", "fornecedores"]
+    if focus in tab_order:
+        tab_order = [focus] + [t for t in tab_order if t != focus]
+
+    tab_labels = {
+        "atrasados": f"Atrasados ({len(alertas['pedidos_atrasados'])})",
+        "vencendo": f"Vencendo ({len(alertas['pedidos_vencendo'])})",
+        "criticos": f"Críticos ({len(alertas['pedidos_criticos'])})",
+        "fornecedores": f"Fornecedores ({len(alertas['fornecedores_baixa_performance'])})",
+    }
+
+    _tabs = st.tabs([tab_labels[k] for k in tab_order])
+    tab_by_key = {k: _tabs[i] for i, k in enumerate(tab_order)}
 
     # TAB 1: Pedidos Atrasados
-    with tab1:
+    with tab_by_key["atrasados"]:
         st.subheader("Pedidos Atrasados")
 
         pedidos_base = _apply_global_pedidos(alertas.get("pedidos_atrasados", []))
@@ -1144,7 +1153,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                         st.dataframe(rank, use_container_width=True, hide_index=True)
             except Exception:
                 pass
-            col_filtro1, col_filtro2 = st.columns([3, 5])
+            col_filtro1, col_filtro2 = rcols([3, 5])
             with col_filtro1:
                 ordem = st.selectbox(
                     "Ordenar",
@@ -1180,7 +1189,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             st.caption(f"Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos atrasados")
 
                         # Toolbar (paginação + lote) — compacto
-            t1, t2, t3, t4, t5, t6 = st.columns([2, 1.1, 1.4, 1.1, 2.3, 6.1])
+            t1, t2, t3, t4, t5, t6 = rcols([2, 1.1, 1.4, 1.1, 2.3, 6.1])
             with t1:
                 per_page = st.selectbox("Por pág.", [10, 20, 30, 50], index=0, key="tab_atrasados_pp", label_visibility="collapsed")
             with t2:
@@ -1195,7 +1204,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             with t5:
                 bulk_status = st.selectbox("Status", ["Novo", "Em andamento", "Resolvido"], key="tab_atrasados_bulk_status", label_visibility="collapsed")
             with t6:
-                cA, cB, cC = st.columns([2.6, 1.6, 1.8])
+                cA, cB, cC = rcols([2.6, 1.6, 1.8])
                 with cA:
                     marcar_pagina = st.button("Sel. pág.", key="tab_atrasados_sel_page", use_container_width=True)
                 with cB:
@@ -1237,24 +1246,24 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                         set_alert_status(_aid, bulk_status)
 
             if pagina_itens:
-                st.warning("Pedidos de alto valor com previsão de entrega próxima")
+                ux.warn("Pedidos de alto valor com previsão de entrega próxima")
                 
                 for i, pedido in enumerate(pagina_itens):
                     aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
                     pedido['id'] = aid
                     criar_card_pedido(pedido, "critico", formatar_moeda_br, idx=i, status=get_alert_status(aid), scope="tab1_critico")
             else:
-                st.info("Nenhum pedido crítico corresponde aos filtros selecionados")
+                ux.info("Nenhum pedido crítico corresponde aos filtros selecionados")
         else:
-            st.success("Nenhum pedido crítico no momento")
+            ux.ok("Nenhum pedido crítico no momento")
 
-    with tab2:
+    with tab_by_key["vencendo"]:
         st.subheader("Pedidos Vencendo nos Próximos 3 Dias")
 
         pedidos_base = _apply_global_pedidos(alertas.get("pedidos_vencendo", []))
 
         if pedidos_base:
-            col_filtro1, col_filtro2 = st.columns([3, 5])
+            col_filtro1, col_filtro2 = rcols([3, 5])
 
             with col_filtro1:
                 ordem_venc = st.selectbox(
@@ -1293,7 +1302,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             st.caption(f"Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos vencendo")
 
                         # Toolbar (paginação + lote) — compacto
-            t1, t2, t3, t4, t5, t6 = st.columns([2, 2, 2, 2, 3, 5])
+            t1, t2, t3, t4, t5, t6 = rcols([2, 2, 2, 2, 3, 5])
             with t1:
                 per_page = st.selectbox("Por pág.", [10, 20, 30, 50], index=0, key="tab_vencendo_pp", label_visibility="collapsed")
             with t2:
@@ -1305,7 +1314,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             with t5:
                 bulk_status = st.selectbox("Status", ["Novo", "Em andamento", "Resolvido"], key="tab_vencendo_bulk_status", label_visibility="collapsed")
             with t6:
-                cA, cB, cC = st.columns([2,2,3])
+                cA, cB, cC = rcols([2,2,3])
                 with cA:
                     marcar_pagina = st.button("Selecionar pág.", key="tab_vencendo_sel_page", use_container_width=True)
                 with cB:
@@ -1352,18 +1361,18 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                     pedido['id'] = aid
                     criar_card_pedido(pedido, "vencendo", formatar_moeda_br, idx=i, status=get_alert_status(aid), scope="tab2_vencendo")
             else:
-                st.info("Nenhum pedido vencendo corresponde aos filtros selecionados")
+                ux.info("Nenhum pedido vencendo corresponde aos filtros selecionados")
         else:
-            st.info("Nenhum pedido vencendo nos próximos 3 dias")
+            ux.info("Nenhum pedido vencendo nos próximos 3 dias")
 
-    with tab3:
+    with tab_by_key["criticos"]:
         st.subheader("Pedidos Críticos (Alto Valor + Urgente)")
 
         pedidos_base = _apply_global_pedidos(alertas.get('pedidos_criticos', []))
 
         if pedidos_base:
             # Controles (sem filtros repetidos: dept/forn já estão no filtro global)
-            col_filtro1, col_filtro2 = st.columns([3, 5])
+            col_filtro1, col_filtro2 = rcols([3, 5])
 
             with col_filtro1:
                 ordem_crit = st.selectbox(
@@ -1398,7 +1407,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             st.caption(f"Mostrando {len(pedidos_filtrados)} de {len(pedidos_base)} (após filtro global) pedidos críticos")
 
                         # Toolbar (paginação + lote) — compacto
-            t1, t2, t3, t4, t5, t6 = st.columns([2, 2, 2, 2, 3, 5])
+            t1, t2, t3, t4, t5, t6 = rcols([2, 2, 2, 2, 3, 5])
             with t1:
                 per_page = st.selectbox("Por pág.", [10, 20, 30, 50], index=0, key="tab_criticos_pp", label_visibility="collapsed")
             with t2:
@@ -1410,7 +1419,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             with t5:
                 bulk_status = st.selectbox("Status", ["Novo", "Em andamento", "Resolvido"], key="tab_criticos_bulk_status", label_visibility="collapsed")
             with t6:
-                cA, cB, cC = st.columns([2,2,3])
+                cA, cB, cC = rcols([2,2,3])
                 with cA:
                     marcar_pagina = st.button("Selecionar pág.", key="tab_criticos_sel_page", use_container_width=True)
                 with cB:
@@ -1452,18 +1461,18 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
                         set_alert_status(_aid, bulk_status)
 
             if pagina_itens:
-                st.warning("Pedidos de alto valor com previsão de entrega próxima")
+                ux.warn("Pedidos de alto valor com previsão de entrega próxima")
                 
                 for i, pedido in enumerate(pagina_itens):
                     aid = str(pedido.get('id') or pedido.get('nr_oc') or f'row{i}')
                     pedido['id'] = aid
                     criar_card_pedido(pedido, "critico", formatar_moeda_br, idx=i, status=get_alert_status(aid), scope="tab3_critico")
             else:
-                st.info("Nenhum pedido crítico corresponde aos filtros selecionados")
+                ux.info("Nenhum pedido crítico corresponde aos filtros selecionados")
         else:
-            st.success("Nenhum pedido crítico no momento")
+            ux.ok("Nenhum pedido crítico no momento")
 
-    with tab4:
+    with tab_by_key["fornecedores"]:
         st.subheader("Fornecedores com Baixa Performance")
 
         fornecedores_base = _apply_global_fornecedores(alertas.get('fornecedores_baixa_performance', []))
@@ -1475,7 +1484,7 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             )))
             
             # Filtros
-            col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
+            col_filtro1, col_filtro2, col_filtro3 = rcols(3)
             
             with col_filtro1:
                 ordem_forn = st.selectbox(
@@ -1537,11 +1546,11 @@ def exibir_alertas_completo(alertas: dict, formatar_moeda_br):
             st.caption(f"Mostrando {len(fornecedores_filtrados)} de {len(fornecedores_base)} (após filtro global) fornecedores")
             
             if fornecedores_filtrados:
-                st.warning("Fornecedores com taxa de sucesso abaixo de 70%")
+                ux.warn("Fornecedores com taxa de sucesso abaixo de 70%")
                 
                 for fornecedor in fornecedores_filtrados:
                     criar_card_fornecedor(fornecedor, formatar_moeda_br)
             else:
-                st.info("Nenhum fornecedor corresponde aos filtros selecionados")
+                ux.info("Nenhum fornecedor corresponde aos filtros selecionados")
         else:
-            st.success("Todos os fornecedores com boa performance!")
+            ux.ok("Todos os fornecedores com boa performance!")
