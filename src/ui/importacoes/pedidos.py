@@ -503,13 +503,20 @@ def exibir_importacao_pedidos(
 
     with st.container(border=True):
         st.caption("Dica: para melhor performance, mantenha OC, cod_material e cod_equipamento preenchidos.")
-        c1, c2, c3 = st.columns([1, 1, 1])
+        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
         with c1:
             dedup_on = st.checkbox("Detectar e deduplicar duplicadas", value=True, key="imp_ped_dedup_on")
         with c2:
             keep_opt = st.selectbox("Ao deduplicar, manter", options=["last", "first"], index=0, key="imp_ped_keep")
         with c3:
-            batch_size = st.number_input("Tamanho do lote (UPSERT)", min_value=50, max_value=1000, value=250, step=50, key="imp_ped_batch")
+            batch_size = st.number_input("Tamanho do lote (UPSERT)", min_value=25, max_value=1000, value=100, step=25, key="imp_ped_batch")
+        with c4:
+            safe_mode = st.checkbox(
+                "Modo seguro (linha-a-linha)",
+                value=False,
+                help="Use se o Streamlit ficar apenas em 'Running' ao importar. É mais lento, mas evita travas por chamadas grandes.",
+                key="imp_ped_safe_mode",
+            )
 
     up = st.file_uploader("Selecione o arquivo Excel (.xlsx) ou CSV", type=["xlsx", "xls", "csv"], key="imp_ped_file")
     if not up:
@@ -833,7 +840,7 @@ def exibir_importacao_pedidos(
         updated = 0
         errors = 0
 
-        bulk_upsert_enabled = True  # desabilita automaticamente se o BD não tiver UNIQUE/INDEX p/ ON CONFLICT
+        bulk_upsert_enabled = (not bool(safe_mode))  # pode ser desabilitado manualmente e também automaticamente no fallback
         total = len(upsert_rows)
         if total == 0:
             ux.info("Nada para importar (sem mudanças)." )
