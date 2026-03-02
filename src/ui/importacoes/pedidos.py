@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
+import concurrent.futures
 
 import pandas as pd
 import streamlit as st
@@ -509,7 +510,16 @@ def exibir_importacao_pedidos(
         with c2:
             keep_opt = st.selectbox("Ao deduplicar, manter", options=["last", "first"], index=0, key="imp_ped_keep")
         with c3:
-            batch_size = st.number_input("Tamanho do lote (UPSERT)", min_value=25, max_value=1000, value=100, step=25, key="imp_ped_batch")
+            # Lote pequeno gera muitas requisições (lento). 300–600 costuma ser o melhor equilíbrio no Supabase Cloud.
+            batch_size = st.number_input(
+                "Tamanho do lote (UPSERT)",
+                min_value=25,
+                max_value=1000,
+                value=500,
+                step=25,
+                key="imp_ped_batch",
+                help="Sugestão: 300–600 para acelerar. Se der timeout/travar, reduza."
+            )
         with c4:
             safe_mode = st.checkbox(
                 "Modo seguro (linha-a-linha)",
@@ -517,6 +527,16 @@ def exibir_importacao_pedidos(
                 help="Use se o Streamlit ficar apenas em 'Running' ao importar. É mais lento, mas evita travas por chamadas grandes.",
                 key="imp_ped_safe_mode",
             )
+
+        req_timeout_s = st.number_input(
+            "Timeout por lote (segundos)",
+            min_value=15,
+            max_value=300,
+            value=90,
+            step=5,
+            key="imp_ped_timeout",
+            help="Se um lote travar, a importação cai para modo seguro nesse lote e continua."
+        )
 
     up = st.file_uploader("Selecione o arquivo Excel (.xlsx) ou CSV", type=["xlsx", "xls", "csv"], key="imp_ped_file")
     if not up:
@@ -850,6 +870,17 @@ def exibir_importacao_pedidos(
         sem_oc_rows = [r for r in upsert_rows if not r.get("nr_oc")]
 
         done = 0
+
+        def _call_with_timeout(fn, timeout_s: int):
+            """Executa uma chamada potencialmente travada (HTTP) com timeout.
+
+            Streamlit pode ficar "parado" se uma requisição do Supabase demorar demais.
+            Aqui forçamos timeout e, se estourar, caímos para modo seguro naquele lote.
+            """
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(fn)
+                return fut.result(timeout=timeout_s)
+
         def _process_batches(rows: List[Dict[str, Any]], on_conflict: str, label: str):
             nonlocal inserted, updated, errors, done, bulk_upsert_enabled
 
@@ -929,10 +960,15 @@ def exibir_importacao_pedidos(
                 # 1) Tenta UPSERT em lote (se habilitado)
                 if bulk_upsert_enabled:
                     try:
-                        _supabase.table("pedidos").upsert(
-                            batch,
-                            on_conflict=on_conflict,
-                        ).execute()
+                        # Executa com timeout para evitar travar o app em um lote específico.
+                        def _do_upsert():
+                            return (
+                                _supabase.table("pedidos")
+                                .upsert(batch, on_conflict=on_conflict)
+                                .execute()
+                            )
+
+                        _call_with_timeout(_do_upsert, int(req_timeout_s))
 
                         # contabiliza e atualiza cache local "existing"
                         for row in batch:
@@ -948,6 +984,61 @@ def exibir_importacao_pedidos(
                             else:
                                 inserted += 1
                                 existing[k] = row
+
+                    except concurrent.futures.TimeoutError:
+                        status.warning(
+                            f"⏱️ Lote travou/timeout ({label}) {j//int(batch_size)+1}. "
+                            "Processando esse lote em modo seguro (linha-a-linha)…"
+                        )
+                        # Processa linha-a-linha (mais resiliente) e segue
+                        for row in batch:
+                            try:
+                                k = _make_key(
+                                    row.get("nr_oc"),
+                                    row.get("nr_solicitacao"),
+                                    row.get("cod_material"),
+                                    row.get("cod_equipamento"),
+                                )
+                                has_oc = bool(row.get("nr_oc"))
+                                match = {
+                                    "tenant_id": row.get("tenant_id"),
+                                    "cod_material": row.get("cod_material"),
+                                    "cod_equipamento": row.get("cod_equipamento"),
+                                }
+                                sol_k = None
+                                if row.get("nr_solicitacao"):
+                                    sol_k = _make_sol_key(
+                                        row.get("nr_solicitacao"),
+                                        row.get("cod_material"),
+                                        row.get("cod_equipamento"),
+                                    )
+                                if sol_k and (sol_k in existing_by_sol):
+                                    match["nr_solicitacao"] = row.get("nr_solicitacao")
+                                elif has_oc:
+                                    match["nr_oc"] = row.get("nr_oc")
+                                else:
+                                    match["nr_solicitacao"] = row.get("nr_solicitacao")
+
+                                if k in existing:
+                                    _supabase.table("pedidos").update(row).match(match).execute()
+                                    updated += 1
+                                    existing[k] = {**existing.get(k, {}), **row}
+                                    if sol_k:
+                                        existing_by_sol[sol_k] = {**existing_by_sol.get(sol_k, {}), **row}
+                                else:
+                                    _supabase.table("pedidos").insert(row).execute()
+                                    inserted += 1
+                                    existing[k] = row
+                                    if sol_k:
+                                        existing_by_sol[sol_k] = row
+                            except Exception as ee:
+                                errors += 1
+                                status.error(f"❌ Erro na linha ({label}): {ee}")
+
+                        done += len(batch)
+                        prog.progress(min(1.0, done / total))
+                        status.info(f"Processando {done}/{total}...")
+                        continue
 
                     except Exception as e:
                         status.error(f"❌ Erro no lote ({label}) {j//int(batch_size)+1}: {e}")
