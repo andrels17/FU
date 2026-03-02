@@ -590,14 +590,30 @@ def exibir_importacao_pedidos(
 
 
     # O Streamlit Data Editor valida compatibilidade entre o tipo configurado
-    # (ex.: DateColumn) e o tipo real do dataframe. Como nosso pipeline de
-    # import normaliza datas como string ISO (YYYY-MM-DD) para o payload do BD,
-    # convertemos somente a *prévia* para `datetime.date` para permitir
-    # renderização com DateColumn sem quebrar a importação.
+    # (ex.: DateColumn) e o tipo real do dataframe (inferido via Arrow).
+    # Em alguns cenários (principalmente quando a coluna vem como "object" com
+    # strings misturadas), o schema pode ser inferido como STRING mesmo após uma
+    # conversão simples.
+    #
+    # Como essa tabela é apenas uma prévia (read-only), fazemos uma conversão
+    # mais "forçada" para garantir que **nenhum valor string** permaneça.
     if "data_oc" in preview.columns:
-        preview["data_oc"] = pd.to_datetime(preview["data_oc"], errors="coerce").dt.date
+        _dt = pd.to_datetime(preview["data_oc"], errors="coerce")
+        preview["data_oc"] = _dt.dt.date
+        # Se ainda restou algum string (dtype object com mistura), força datetime.
+        try:
+            if preview["data_oc"].map(lambda x: isinstance(x, str)).any():
+                preview["data_oc"] = _dt
+        except Exception:
+            pass
     cfg = {}
-    if "data_oc" in preview.columns: cfg["data_oc"] = st.column_config.DateColumn("Data OC")
+    if "data_oc" in preview.columns:
+        # Se por algum motivo o Streamlit ainda inferir STRING, ele vai quebrar.
+        # Então, fazemos um fallback seguro para TextColumn.
+        try:
+            cfg["data_oc"] = st.column_config.DateColumn("Data OC")
+        except Exception:
+            cfg["data_oc"] = st.column_config.TextColumn("Data OC")
     if "nr_oc" in preview.columns: cfg["nr_oc"] = st.column_config.TextColumn("N° OC")
     if "departamento" in preview.columns: cfg["departamento"] = st.column_config.TextColumn("Departamento")
     if "fornecedor" in preview.columns: cfg["fornecedor"] = st.column_config.TextColumn("Fornecedor")
@@ -779,6 +795,76 @@ def exibir_importacao_pedidos(
         done = 0
         def _process_batches(rows: List[Dict[str, Any]], on_conflict: str, label: str):
             nonlocal inserted, updated, errors, done, bulk_upsert_enabled
+
+            # ------------------------------------------------------------
+            # IMPORTANT: Alguns bancos têm também um UNIQUE por "SOL" (nr_solicitacao)
+            # que pode colidir quando chega um item "com OC" mas já existe um registro
+            # "sem OC" com a mesma solicitação/material/equipamento.
+            #
+            # Nesses casos, um UPSERT em lote mirando o índice "com OC" falha com 23505
+            # (duplicate key) em "pedidos_uq_sol_full".
+            #
+            # Estratégia:
+            # - Detecta esses casos usando o cache `existing` (carregado antes)
+            # - Faz UPDATE linha-a-linha usando match por nr_solicitacao
+            # - Remove do lote "com OC" para não derrubar o batch
+            # ------------------------------------------------------------
+            if label == "com OC":
+                promote_updates: List[Dict[str, Any]] = []
+                remaining: List[Dict[str, Any]] = []
+
+                for r in rows:
+                    nr_sol = r.get("nr_solicitacao")
+                    if nr_sol:
+                        alt_k = _make_key(
+                            None,
+                            nr_sol,
+                            r.get("cod_material"),
+                            r.get("cod_equipamento"),
+                        )
+                        oc_k = _make_key(
+                            r.get("nr_oc"),
+                            nr_sol,
+                            r.get("cod_material"),
+                            r.get("cod_equipamento"),
+                        )
+                        if (alt_k in existing) and (oc_k not in existing):
+                            promote_updates.append(r)
+                            continue
+                    remaining.append(r)
+
+                # Executa os updates promovidos (por SOL) antes do lote
+                for r in promote_updates:
+                    try:
+                        match = {
+                            "tenant_id": r.get("tenant_id"),
+                            "nr_solicitacao": r.get("nr_solicitacao"),
+                            "cod_material": r.get("cod_material"),
+                            "cod_equipamento": r.get("cod_equipamento"),
+                        }
+                        _supabase.table("pedidos").update(r).match(match).execute()
+                        updated += 1
+
+                        # Atualiza cache local: SOL-key -> OC-key
+                        alt_k = _make_key(
+                            None,
+                            r.get("nr_solicitacao"),
+                            r.get("cod_material"),
+                            r.get("cod_equipamento"),
+                        )
+                        oc_k = _make_key(
+                            r.get("nr_oc"),
+                            r.get("nr_solicitacao"),
+                            r.get("cod_material"),
+                            r.get("cod_equipamento"),
+                        )
+                        prev = existing.pop(alt_k, {})
+                        existing[oc_k] = {**prev, **r}
+                    except Exception as ee:
+                        errors += 1
+                        status.error(f"❌ Erro ao promover update (com OC via SOL): {ee}")
+
+                rows = remaining
 
             t = len(rows)
             if t == 0:
