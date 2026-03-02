@@ -228,6 +228,44 @@ def _fetch_existing(_supabase, tenant_id: str, keys: List[str]) -> Dict[str, Dic
         return {}
 
 
+def _make_sol_key(nr_solicitacao: Any, cod_material: Any, cod_equipamento: Any) -> str:
+    """Chave por Solicitação (ignora nr_oc)."""
+    sol = _norm_nr_oc(nr_solicitacao) or str(nr_solicitacao or "").strip()
+    return f"{sol}|{str(cod_material or '').strip()}|{str(cod_equipamento or '').strip()}"
+
+
+def _fetch_existing_by_sol(_supabase, tenant_id: str, sol_keys: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Busca registros existentes por chave de Solicitação (tenant + nr_solicitacao + material + equipamento).
+
+    Necessário quando há UNIQUE que ignora nr_oc (ex.: pedidos_uq_sol_full),
+    pois um item "com OC" pode colidir com um registro existente "sem OC".
+    """
+    if not sol_keys:
+        return {}
+    try:
+        res = (
+            _supabase.table("pedidos")
+            .select(
+                "id,tenant_id,nr_oc,nr_solicitacao,cod_material,cod_equipamento,departamento,descricao,qtde_solicitada,qtde_entregue,qtde_pendente,entregue,previsao_entrega,data_oc,data_solicitacao,status,valor_ultima_compra,valor_total,criado_por"
+            )
+            .eq("tenant_id", tenant_id)
+            .limit(20000)
+            .execute()
+        )
+        rows = res.data or []
+        wanted = set(sol_keys)
+        out: Dict[str, Dict[str, Any]] = {}
+        for r in rows:
+            if not r.get("nr_solicitacao"):
+                continue
+            sk = _make_sol_key(r.get("nr_solicitacao"), r.get("cod_material"), r.get("cod_equipamento"))
+            if sk in wanted:
+                out[sk] = r
+        return out
+    except Exception:
+        return {}
+
+
 
 def _fetch_fornecedores(_supabase, tenant_id: str, cods: List[int]) -> Dict[int, Dict[str, Any]]:
     """Busca fornecedores existentes do tenant por cod_fornecedor."""
@@ -655,6 +693,18 @@ def exibir_importacao_pedidos(
     keys = [_make_key(r["nr_oc"], r.get("nr_solicitacao"), r["cod_material"], r["cod_equipamento"]) for _, r in df2.iterrows()]
     existing = _fetch_existing(_supabase, tenant_id=tenant_id, keys=keys)
 
+    # Alguns ambientes possuem UNIQUE por Solicitação (ignora nr_oc):
+    # (tenant_id, nr_solicitacao, cod_material, cod_equipamento)
+    # Para evitar 23505 em lotes "com OC", carregamos também o cache por SOL.
+    sol_keys = []
+    try:
+        for _, r in df2.iterrows():
+            if r.get("nr_solicitacao"):
+                sol_keys.append(_make_sol_key(r.get("nr_solicitacao"), r.get("cod_material"), r.get("cod_equipamento")))
+    except Exception:
+        sol_keys = []
+    existing_by_sol = _fetch_existing_by_sol(_supabase, tenant_id=tenant_id, sol_keys=list(set(sol_keys)))
+
     # Contadores
     will_insert = 0
     will_update = 0
@@ -816,19 +866,15 @@ def exibir_importacao_pedidos(
                 for r in rows:
                     nr_sol = r.get("nr_solicitacao")
                     if nr_sol:
-                        alt_k = _make_key(
-                            None,
+                        sol_k = _make_sol_key(
                             nr_sol,
                             r.get("cod_material"),
                             r.get("cod_equipamento"),
                         )
-                        oc_k = _make_key(
-                            r.get("nr_oc"),
-                            nr_sol,
-                            r.get("cod_material"),
-                            r.get("cod_equipamento"),
-                        )
-                        if (alt_k in existing) and (oc_k not in existing):
+                        # Se já existe um registro com a mesma SOL+material+equipamento,
+                        # o lote "com OC" pode quebrar no UNIQUE pedidos_uq_sol_full.
+                        # Nesses casos, fazemos update por SOL e tiramos do batch.
+                        if sol_k in existing_by_sol:
                             promote_updates.append(r)
                             continue
                     remaining.append(r)
@@ -845,21 +891,21 @@ def exibir_importacao_pedidos(
                         _supabase.table("pedidos").update(r).match(match).execute()
                         updated += 1
 
-                        # Atualiza cache local: SOL-key -> OC-key
-                        alt_k = _make_key(
-                            None,
+                        # Atualiza cache local (SOL e chave principal)
+                        sol_k = _make_sol_key(
                             r.get("nr_solicitacao"),
                             r.get("cod_material"),
                             r.get("cod_equipamento"),
                         )
-                        oc_k = _make_key(
+                        existing_by_sol[sol_k] = {**existing_by_sol.get(sol_k, {}), **r}
+
+                        k = _make_key(
                             r.get("nr_oc"),
                             r.get("nr_solicitacao"),
                             r.get("cod_material"),
                             r.get("cod_equipamento"),
                         )
-                        prev = existing.pop(alt_k, {})
-                        existing[oc_k] = {**prev, **r}
+                        existing[k] = {**existing.get(k, {}), **r}
                     except Exception as ee:
                         errors += 1
                         status.error(f"❌ Erro ao promover update (com OC via SOL): {ee}")
@@ -925,7 +971,18 @@ def exibir_importacao_pedidos(
                                     "cod_material": row.get("cod_material"),
                                     "cod_equipamento": row.get("cod_equipamento"),
                                 }
-                                if has_oc:
+                                # Se existir UNIQUE por SOL, pode haver registro com outra OC.
+                                # Preferimos casar por SOL quando possível.
+                                sol_k = None
+                                if row.get("nr_solicitacao"):
+                                    sol_k = _make_sol_key(
+                                        row.get("nr_solicitacao"),
+                                        row.get("cod_material"),
+                                        row.get("cod_equipamento"),
+                                    )
+                                if sol_k and (sol_k in existing_by_sol):
+                                    match["nr_solicitacao"] = row.get("nr_solicitacao")
+                                elif has_oc:
                                     match["nr_oc"] = row.get("nr_oc")
                                 else:
                                     match["nr_solicitacao"] = row.get("nr_solicitacao")
@@ -934,10 +991,14 @@ def exibir_importacao_pedidos(
                                     _supabase.table("pedidos").update(row).match(match).execute()
                                     updated += 1
                                     existing[k] = {**existing.get(k, {}), **row}
+                                    if sol_k:
+                                        existing_by_sol[sol_k] = {**existing_by_sol.get(sol_k, {}), **row}
                                 else:
                                     _supabase.table("pedidos").insert(row).execute()
                                     inserted += 1
                                     existing[k] = row
+                                    if sol_k:
+                                        existing_by_sol[sol_k] = row
 
                             except Exception as ee:
                                 errors += 1
