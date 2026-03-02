@@ -587,6 +587,15 @@ def exibir_importacao_pedidos(
 
     # Pré-visualização (editor read-only com tipagem/formatos)
     preview = df2.head(50).copy()
+
+
+    # O Streamlit Data Editor valida compatibilidade entre o tipo configurado
+    # (ex.: DateColumn) e o tipo real do dataframe. Como nosso pipeline de
+    # import normaliza datas como string ISO (YYYY-MM-DD) para o payload do BD,
+    # convertemos somente a *prévia* para `datetime.date` para permitir
+    # renderização com DateColumn sem quebrar a importação.
+    if "data_oc" in preview.columns:
+        preview["data_oc"] = pd.to_datetime(preview["data_oc"], errors="coerce").dt.date
     cfg = {}
     if "data_oc" in preview.columns: cfg["data_oc"] = st.column_config.DateColumn("Data OC")
     if "nr_oc" in preview.columns: cfg["nr_oc"] = st.column_config.TextColumn("N° OC")
