@@ -19,7 +19,6 @@ from __future__ import annotations
 import io
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
-import concurrent.futures
 
 import pandas as pd
 import streamlit as st
@@ -224,44 +223,6 @@ def _fetch_existing(_supabase, tenant_id: str, keys: List[str]) -> Dict[str, Dic
             k = _make_key(r.get("nr_oc"), r.get("nr_solicitacao"), r.get("cod_material"), r.get("cod_equipamento"))
             if k in wanted:
                 out[k] = r
-        return out
-    except Exception:
-        return {}
-
-
-def _make_sol_key(nr_solicitacao: Any, cod_material: Any, cod_equipamento: Any) -> str:
-    """Chave por Solicitação (ignora nr_oc)."""
-    sol = _norm_nr_oc(nr_solicitacao) or str(nr_solicitacao or "").strip()
-    return f"{sol}|{str(cod_material or '').strip()}|{str(cod_equipamento or '').strip()}"
-
-
-def _fetch_existing_by_sol(_supabase, tenant_id: str, sol_keys: List[str]) -> Dict[str, Dict[str, Any]]:
-    """Busca registros existentes por chave de Solicitação (tenant + nr_solicitacao + material + equipamento).
-
-    Necessário quando há UNIQUE que ignora nr_oc (ex.: pedidos_uq_sol_full),
-    pois um item "com OC" pode colidir com um registro existente "sem OC".
-    """
-    if not sol_keys:
-        return {}
-    try:
-        res = (
-            _supabase.table("pedidos")
-            .select(
-                "id,tenant_id,nr_oc,nr_solicitacao,cod_material,cod_equipamento,departamento,descricao,qtde_solicitada,qtde_entregue,qtde_pendente,entregue,previsao_entrega,data_oc,data_solicitacao,status,valor_ultima_compra,valor_total,criado_por"
-            )
-            .eq("tenant_id", tenant_id)
-            .limit(20000)
-            .execute()
-        )
-        rows = res.data or []
-        wanted = set(sol_keys)
-        out: Dict[str, Dict[str, Any]] = {}
-        for r in rows:
-            if not r.get("nr_solicitacao"):
-                continue
-            sk = _make_sol_key(r.get("nr_solicitacao"), r.get("cod_material"), r.get("cod_equipamento"))
-            if sk in wanted:
-                out[sk] = r
         return out
     except Exception:
         return {}
@@ -504,39 +465,13 @@ def exibir_importacao_pedidos(
 
     with st.container(border=True):
         st.caption("Dica: para melhor performance, mantenha OC, cod_material e cod_equipamento preenchidos.")
-        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+        c1, c2, c3 = st.columns([1, 1, 1])
         with c1:
             dedup_on = st.checkbox("Detectar e deduplicar duplicadas", value=True, key="imp_ped_dedup_on")
         with c2:
             keep_opt = st.selectbox("Ao deduplicar, manter", options=["last", "first"], index=0, key="imp_ped_keep")
         with c3:
-            # Lote pequeno gera muitas requisições (lento). 300–600 costuma ser o melhor equilíbrio no Supabase Cloud.
-            batch_size = st.number_input(
-                "Tamanho do lote (UPSERT)",
-                min_value=25,
-                max_value=1000,
-                value=500,
-                step=25,
-                key="imp_ped_batch",
-                help="Sugestão: 300–600 para acelerar. Se der timeout/travar, reduza."
-            )
-        with c4:
-            safe_mode = st.checkbox(
-                "Modo seguro (linha-a-linha)",
-                value=False,
-                help="Use se o Streamlit ficar apenas em 'Running' ao importar. É mais lento, mas evita travas por chamadas grandes.",
-                key="imp_ped_safe_mode",
-            )
-
-        req_timeout_s = st.number_input(
-            "Timeout por lote (segundos)",
-            min_value=15,
-            max_value=300,
-            value=90,
-            step=5,
-            key="imp_ped_timeout",
-            help="Se um lote travar, a importação cai para modo seguro nesse lote e continua."
-        )
+            batch_size = st.number_input("Tamanho do lote (UPSERT)", min_value=50, max_value=1000, value=250, step=50, key="imp_ped_batch")
 
     up = st.file_uploader("Selecione o arquivo Excel (.xlsx) ou CSV", type=["xlsx", "xls", "csv"], key="imp_ped_file")
     if not up:
@@ -652,33 +587,8 @@ def exibir_importacao_pedidos(
 
     # Pré-visualização (editor read-only com tipagem/formatos)
     preview = df2.head(50).copy()
-
-
-    # O Streamlit Data Editor valida compatibilidade entre o tipo configurado
-    # (ex.: DateColumn) e o tipo real do dataframe (inferido via Arrow).
-    # Em alguns cenários (principalmente quando a coluna vem como "object" com
-    # strings misturadas), o schema pode ser inferido como STRING mesmo após uma
-    # conversão simples.
-    #
-    # Como essa tabela é apenas uma prévia (read-only), fazemos uma conversão
-    # mais "forçada" para garantir que **nenhum valor string** permaneça.
-    if "data_oc" in preview.columns:
-        _dt = pd.to_datetime(preview["data_oc"], errors="coerce")
-        preview["data_oc"] = _dt.dt.date
-        # Se ainda restou algum string (dtype object com mistura), força datetime.
-        try:
-            if preview["data_oc"].map(lambda x: isinstance(x, str)).any():
-                preview["data_oc"] = _dt
-        except Exception:
-            pass
     cfg = {}
-    if "data_oc" in preview.columns:
-        # Se por algum motivo o Streamlit ainda inferir STRING, ele vai quebrar.
-        # Então, fazemos um fallback seguro para TextColumn.
-        try:
-            cfg["data_oc"] = st.column_config.DateColumn("Data OC")
-        except Exception:
-            cfg["data_oc"] = st.column_config.TextColumn("Data OC")
+    if "data_oc" in preview.columns: cfg["data_oc"] = st.column_config.DateColumn("Data OC")
     if "nr_oc" in preview.columns: cfg["nr_oc"] = st.column_config.TextColumn("N° OC")
     if "departamento" in preview.columns: cfg["departamento"] = st.column_config.TextColumn("Departamento")
     if "fornecedor" in preview.columns: cfg["fornecedor"] = st.column_config.TextColumn("Fornecedor")
@@ -719,18 +629,6 @@ def exibir_importacao_pedidos(
     # Preparar chaves e buscar existentes
     keys = [_make_key(r["nr_oc"], r.get("nr_solicitacao"), r["cod_material"], r["cod_equipamento"]) for _, r in df2.iterrows()]
     existing = _fetch_existing(_supabase, tenant_id=tenant_id, keys=keys)
-
-    # Alguns ambientes possuem UNIQUE por Solicitação (ignora nr_oc):
-    # (tenant_id, nr_solicitacao, cod_material, cod_equipamento)
-    # Para evitar 23505 em lotes "com OC", carregamos também o cache por SOL.
-    sol_keys = []
-    try:
-        for _, r in df2.iterrows():
-            if r.get("nr_solicitacao"):
-                sol_keys.append(_make_sol_key(r.get("nr_solicitacao"), r.get("cod_material"), r.get("cod_equipamento")))
-    except Exception:
-        sol_keys = []
-    existing_by_sol = _fetch_existing_by_sol(_supabase, tenant_id=tenant_id, sol_keys=list(set(sol_keys)))
 
     # Contadores
     will_insert = 0
@@ -852,305 +750,130 @@ def exibir_importacao_pedidos(
                 key="imp_ped_prev_csv",
             )
 
-    if st.button("🚀 Importar (UPSERT em lote)", type="primary", use_container_width=True, key="imp_ped_run"):
+    st.caption("💡 Para evitar travamentos e duplicidades (23505), use o modo **Staging + Merge** (RPC). Rode o SQL em `sql/merge_import_pedidos.sql` no Supabase uma vez.")
+
+    # Tamanho do lote para staging costuma aguentar maior (sem UNIQUE). 500-2000 é um bom intervalo.
+    staging_batch = st.number_input("Tamanho do lote (staging)", min_value=100, max_value=5000, value=max(1000, int(batch_size)), step=100)
+    merge_timeout_hint = st.number_input("Timeout por lote (segundos)", min_value=15, max_value=240, value=90, step=5)
+
+    if st.button("🚀 Importar (Staging + Merge)", type="primary", use_container_width=True, key="imp_ped_run"):
+        import uuid
+        import time
+
+        if len(df2) == 0:
+            ux.info("Nada para importar." )
+            return
+
         prog = st.progress(0.0)
         status = st.empty()
 
-        inserted = 0
-        updated = 0
-        errors = 0
+        batch_id = str(uuid.uuid4())
+        status.info(f"Enviando para staging… (batch_id={batch_id[:8]}…)")
 
-        bulk_upsert_enabled = (not bool(safe_mode))  # pode ser desabilitado manualmente e também automaticamente no fallback
-        total = len(upsert_rows)
-        if total == 0:
-            ux.info("Nada para importar (sem mudanças)." )
-            return
-        # Batches (com OC / sem OC)
-        oc_rows = [r for r in upsert_rows if r.get("nr_oc")]
-        sem_oc_rows = [r for r in upsert_rows if not r.get("nr_oc")]
+        # Monta payload de staging (não depende de UNIQUE; é rápido e resiliente)
+        stage_cols = {
+            "tenant_id", "batch_id", "user_id",
+            "nr_oc", "nr_solicitacao", "departamento",
+            "cod_equipamento", "cod_material", "descricao",
+            "qtde_solicitada", "qtde_entregue", "qtde_pendente",
+            "entregue", "data_oc", "previsao_entrega", "data_solicitacao",
+            "status", "valor_total", "valor_ultima_compra", "fornecedor_id",
+            "raw",
+        }
 
-        done = 0
+        def _to_stage_row(r: Dict[str, Any]) -> Dict[str, Any]:
+            rr = {k: r.get(k) for k in stage_cols if k in r}
+            rr.update({
+                "tenant_id": tenant_id,
+                "batch_id": batch_id,
+                "user_id": user_id,
+                "raw": r,
+            })
+            return rr
 
-        def _call_with_timeout(fn, timeout_s: int):
-            """Executa uma chamada potencialmente travada (HTTP) com timeout.
+        stage_rows = [_to_stage_row(rec) for rec in df2.to_dict("records")]
 
-            Streamlit pode ficar "parado" se uma requisição do Supabase demorar demais.
-            Aqui forçamos timeout e, se estourar, caímos para modo seguro naquele lote.
-            """
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                fut = ex.submit(fn)
-                return fut.result(timeout=timeout_s)
+        # Inserção resiliente: se um lote falhar/travar, divide até passar.
+        def _insert_chunk(rows: List[Dict[str, Any]], depth: int = 0) -> int:
+            if not rows:
+                return 0
+            try:
+                _supabase.table("pedidos_import_staging").insert(rows).execute()
+                return len(rows)
+            except Exception as e:
+                # Se já está pequeno, propaga erro.
+                if len(rows) <= 25 or depth >= 6:
+                    raise
+                mid = len(rows) // 2
+                return _insert_chunk(rows[:mid], depth + 1) + _insert_chunk(rows[mid:], depth + 1)
 
-        def _process_batches(rows: List[Dict[str, Any]], on_conflict: str, label: str):
-            nonlocal inserted, updated, errors, done, bulk_upsert_enabled
-
-            # ------------------------------------------------------------
-            # IMPORTANT: Alguns bancos têm também um UNIQUE por "SOL" (nr_solicitacao)
-            # que pode colidir quando chega um item "com OC" mas já existe um registro
-            # "sem OC" com a mesma solicitação/material/equipamento.
-            #
-            # Nesses casos, um UPSERT em lote mirando o índice "com OC" falha com 23505
-            # (duplicate key) em "pedidos_uq_sol_full".
-            #
-            # Estratégia:
-            # - Detecta esses casos usando o cache `existing` (carregado antes)
-            # - Faz UPDATE linha-a-linha usando match por nr_solicitacao
-            # - Remove do lote "com OC" para não derrubar o batch
-            # ------------------------------------------------------------
-            if label == "com OC":
-                promote_updates: List[Dict[str, Any]] = []
-                remaining: List[Dict[str, Any]] = []
-
-                for r in rows:
-                    nr_sol = r.get("nr_solicitacao")
-                    if nr_sol:
-                        sol_k = _make_sol_key(
-                            nr_sol,
-                            r.get("cod_material"),
-                            r.get("cod_equipamento"),
-                        )
-                        # Se já existe um registro com a mesma SOL+material+equipamento,
-                        # o lote "com OC" pode quebrar no UNIQUE pedidos_uq_sol_full.
-                        # Nesses casos, fazemos update por SOL e tiramos do batch.
-                        if sol_k in existing_by_sol:
-                            promote_updates.append(r)
-                            continue
-                    remaining.append(r)
-
-                # Executa os updates promovidos (por SOL) antes do lote
-                for r in promote_updates:
-                    try:
-                        match = {
-                            "tenant_id": r.get("tenant_id"),
-                            "nr_solicitacao": r.get("nr_solicitacao"),
-                            "cod_material": r.get("cod_material"),
-                            "cod_equipamento": r.get("cod_equipamento"),
-                        }
-                        _supabase.table("pedidos").update(r).match(match).execute()
-                        updated += 1
-
-                        # Atualiza cache local (SOL e chave principal)
-                        sol_k = _make_sol_key(
-                            r.get("nr_solicitacao"),
-                            r.get("cod_material"),
-                            r.get("cod_equipamento"),
-                        )
-                        existing_by_sol[sol_k] = {**existing_by_sol.get(sol_k, {}), **r}
-
-                        k = _make_key(
-                            r.get("nr_oc"),
-                            r.get("nr_solicitacao"),
-                            r.get("cod_material"),
-                            r.get("cod_equipamento"),
-                        )
-                        existing[k] = {**existing.get(k, {}), **r}
-                    except Exception as ee:
-                        errors += 1
-                        status.error(f"❌ Erro ao promover update (com OC via SOL): {ee}")
-
-                rows = remaining
-
-            t = len(rows)
-            if t == 0:
+        sent = 0
+        total = len(stage_rows)
+        t0 = time.time()
+        for i in range(0, total, int(staging_batch)):
+            chunk = stage_rows[i:i+int(staging_batch)]
+            try:
+                sent += _insert_chunk(chunk)
+            except Exception as e:
+                status.error(f"❌ Falha ao inserir no staging (chunk {i//int(staging_batch)+1}): {e}")
+                ux.warn("Importação interrompida. Veja o erro acima.")
                 return
+            prog.progress(min(1.0, sent / max(1, total)))
+            status.info(f"Staging: {sent}/{total} linhas…")
 
-            for j in range(0, t, int(batch_size)):
-                batch = rows[j : j + int(batch_size)]
+        status.success(f"✅ Staging concluído: {sent} linhas em {int(time.time()-t0)}s. Executando merge no banco…")
 
-                # 1) Tenta UPSERT em lote (se habilitado)
-                if bulk_upsert_enabled:
-                    try:
-                        # Executa com timeout para evitar travar o app em um lote específico.
-                        def _do_upsert():
-                            return (
-                                _supabase.table("pedidos")
-                                .upsert(batch, on_conflict=on_conflict)
-                                .execute()
-                            )
+        # Chama RPC (1 chamada) — evita travar em N/774
+        try:
+            resp = _supabase.rpc(
+                "merge_pedidos_import",
+                {"p_tenant_id": tenant_id, "p_batch_id": batch_id, "p_user_id": user_id},
+            ).execute()
+        except Exception as e:
+            status.error(
+                "❌ Não foi possível executar o merge (RPC). "
+                "Confirme se você rodou o SQL `sql/merge_import_pedidos.sql` no Supabase e se a função existe.\n\n"
+                f"Detalhe: {e}"
+            )
+            return
 
-                        _call_with_timeout(_do_upsert, int(req_timeout_s))
+        # Supabase retorna lista/obj; normaliza
+        data = getattr(resp, "data", None)
+        summary = None
+        if isinstance(data, list) and data:
+            summary = data[0]
+        elif isinstance(data, dict):
+            summary = data
 
-                        # contabiliza e atualiza cache local "existing"
-                        for row in batch:
-                            k = _make_key(
-                                row.get("nr_oc"),
-                                row.get("nr_solicitacao"),
-                                row.get("cod_material"),
-                                row.get("cod_equipamento"),
-                            )
-                            if k in existing:
-                                updated += 1
-                                existing[k] = {**existing.get(k, {}), **row}
-                            else:
-                                inserted += 1
-                                existing[k] = row
-
-                    except concurrent.futures.TimeoutError:
-                        status.warning(
-                            f"⏱️ Lote travou/timeout ({label}) {j//int(batch_size)+1}. "
-                            "Processando esse lote em modo seguro (linha-a-linha)…"
-                        )
-                        # Processa linha-a-linha (mais resiliente) e segue
-                        for row in batch:
-                            try:
-                                k = _make_key(
-                                    row.get("nr_oc"),
-                                    row.get("nr_solicitacao"),
-                                    row.get("cod_material"),
-                                    row.get("cod_equipamento"),
-                                )
-                                has_oc = bool(row.get("nr_oc"))
-                                match = {
-                                    "tenant_id": row.get("tenant_id"),
-                                    "cod_material": row.get("cod_material"),
-                                    "cod_equipamento": row.get("cod_equipamento"),
-                                }
-                                sol_k = None
-                                if row.get("nr_solicitacao"):
-                                    sol_k = _make_sol_key(
-                                        row.get("nr_solicitacao"),
-                                        row.get("cod_material"),
-                                        row.get("cod_equipamento"),
-                                    )
-                                if sol_k and (sol_k in existing_by_sol):
-                                    match["nr_solicitacao"] = row.get("nr_solicitacao")
-                                elif has_oc:
-                                    match["nr_oc"] = row.get("nr_oc")
-                                else:
-                                    match["nr_solicitacao"] = row.get("nr_solicitacao")
-
-                                if k in existing:
-                                    _supabase.table("pedidos").update(row).match(match).execute()
-                                    updated += 1
-                                    existing[k] = {**existing.get(k, {}), **row}
-                                    if sol_k:
-                                        existing_by_sol[sol_k] = {**existing_by_sol.get(sol_k, {}), **row}
-                                else:
-                                    _supabase.table("pedidos").insert(row).execute()
-                                    inserted += 1
-                                    existing[k] = row
-                                    if sol_k:
-                                        existing_by_sol[sol_k] = row
-                            except Exception as ee:
-                                errors += 1
-                                status.error(f"❌ Erro na linha ({label}): {ee}")
-
-                        done += len(batch)
-                        prog.progress(min(1.0, done / total))
-                        status.info(f"Processando {done}/{total}...")
-                        continue
-
-                    except Exception as e:
-                        status.error(f"❌ Erro no lote ({label}) {j//int(batch_size)+1}: {e}")
-
-                        err_txt = str(e)
-                        # Caso clássico: ON CONFLICT sem UNIQUE/EXCLUSION constraint no BD
-                        if ("42P10" in err_txt) or ("no unique or exclusion constraint" in err_txt.lower()):
-                            if bulk_upsert_enabled:
-                                bulk_upsert_enabled = False
-                                status.warning(
-                                    "⚠️ Seu banco não possui um índice/constraint UNIQUE compatível com ON CONFLICT. "
-                                    "Continuando em modo seguro (linha-a-linha). "
-                                    "Recomendação: crie UNIQUE INDEX parcial para habilitar UPSERT em lote."
-                                )
-
-                        # Fallback: processa linha-a-linha usando match pela chave lógica
-                        for row in batch:
-                            try:
-                                k = _make_key(
-                                    row.get("nr_oc"),
-                                    row.get("nr_solicitacao"),
-                                    row.get("cod_material"),
-                                    row.get("cod_equipamento"),
-                                )
-                                has_oc = bool(row.get("nr_oc"))
-                                match = {
-                                    "tenant_id": row.get("tenant_id"),
-                                    "cod_material": row.get("cod_material"),
-                                    "cod_equipamento": row.get("cod_equipamento"),
-                                }
-                                # Se existir UNIQUE por SOL, pode haver registro com outra OC.
-                                # Preferimos casar por SOL quando possível.
-                                sol_k = None
-                                if row.get("nr_solicitacao"):
-                                    sol_k = _make_sol_key(
-                                        row.get("nr_solicitacao"),
-                                        row.get("cod_material"),
-                                        row.get("cod_equipamento"),
-                                    )
-                                if sol_k and (sol_k in existing_by_sol):
-                                    match["nr_solicitacao"] = row.get("nr_solicitacao")
-                                elif has_oc:
-                                    match["nr_oc"] = row.get("nr_oc")
-                                else:
-                                    match["nr_solicitacao"] = row.get("nr_solicitacao")
-
-                                if k in existing:
-                                    _supabase.table("pedidos").update(row).match(match).execute()
-                                    updated += 1
-                                    existing[k] = {**existing.get(k, {}), **row}
-                                    if sol_k:
-                                        existing_by_sol[sol_k] = {**existing_by_sol.get(sol_k, {}), **row}
-                                else:
-                                    _supabase.table("pedidos").insert(row).execute()
-                                    inserted += 1
-                                    existing[k] = row
-                                    if sol_k:
-                                        existing_by_sol[sol_k] = row
-
-                            except Exception as ee:
-                                errors += 1
-                                status.error(f"❌ Erro na linha ({label}): {ee}")
-
-                        done += len(batch)
-                        prog.progress(min(1.0, done / total))
-                        status.info(f"Processando {done}/{total}...")
-                        continue
-
-                # 2) Se bulk estiver desabilitado, vai direto em modo seguro
-                else:
-                    for row in batch:
-                        try:
-                            k = _make_key(
-                                row.get("nr_oc"),
-                                row.get("nr_solicitacao"),
-                                row.get("cod_material"),
-                                row.get("cod_equipamento"),
-                            )
-                            has_oc = bool(row.get("nr_oc"))
-                            match = {
-                                "tenant_id": row.get("tenant_id"),
-                                "cod_material": row.get("cod_material"),
-                                "cod_equipamento": row.get("cod_equipamento"),
-                            }
-                            if has_oc:
-                                match["nr_oc"] = row.get("nr_oc")
-                            else:
-                                match["nr_solicitacao"] = row.get("nr_solicitacao")
-
-                            if k in existing:
-                                _supabase.table("pedidos").update(row).match(match).execute()
-                                updated += 1
-                                existing[k] = {**existing.get(k, {}), **row}
-                            else:
-                                _supabase.table("pedidos").insert(row).execute()
-                                inserted += 1
-                                existing[k] = row
-
-                        except Exception as ee:
-                            errors += 1
-                            status.error(f"❌ Erro na linha ({label}): {ee}")
-
-                done += len(batch)
-                prog.progress(min(1.0, done / total))
-                status.info(f"Processando {done}/{total}...")
-        _process_batches(oc_rows, "tenant_id,nr_oc,cod_material,cod_equipamento", "com OC")
-        _process_batches(sem_oc_rows, "tenant_id,nr_solicitacao,cod_material,cod_equipamento", "sem OC")
-
-        if errors == 0:
-            ux.ok(f"✅ Importação concluída — Inseridos: {inserted} | Atualizados: {updated} | Erros: {errors}")
+        if not summary:
+            status.warning("Merge executado, mas sem retorno de resumo.")
         else:
-            ux.warn(f"⚠️ Importação finalizada com erros — Inseridos: {inserted} | Atualizados: {updated} | Erros: {errors}")
+            ins = int(summary.get("inserted_count") or 0)
+            upd = int(summary.get("updated_count") or 0)
+            rej = int(summary.get("rejected_count") or 0)
+            if rej:
+                ux.warn(f"⚠️ Merge concluído — Inseridos: {ins} | Atualizados: {upd} | Rejeitados: {rej}")
+            else:
+                ux.ok(f"✅ Merge concluído — Inseridos: {ins} | Atualizados: {upd} | Rejeitados: {rej}")
+
+        # Mostrar rejeitados (se houver)
+        try:
+            rej_rows = _supabase.table("pedidos_import_rejects").select("reason,row,inserted_at").eq("tenant_id", tenant_id).eq("batch_id", batch_id).execute()
+            rej_data = getattr(rej_rows, "data", None) or []
+            if rej_data:
+                with st.expander(f"❌ Linhas rejeitadas ({len(rej_data)})", expanded=False):
+                    rej_df = pd.DataFrame(rej_data)
+                    st.dataframe(rej_df.head(200), use_container_width=True)
+                    st.download_button(
+                        "⬇️ Baixar rejeitados (CSV)",
+                        data=rej_df.to_csv(index=False).encode("utf-8-sig"),
+                        file_name="pedidos_rejeitados.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+        except Exception:
+            # Silencioso: rejeitados é opcional
+            pass
 
 
         # Detalhamento do que foi atualizado (campo a campo)

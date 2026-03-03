@@ -2,35 +2,24 @@ import os
 import streamlit as st
 from supabase import create_client
 
-# ------------------------------------------------------------
-# Supabase/HTTP timeouts (Streamlit Cloud)
-#
-# Em importações em lote, uma chamada PostgREST pode demorar e o app
-# aparenta ficar "Running" indefinidamente caso o cliente fique sem timeout.
-# A biblioteca supabase-py suporta ClientOptions em algumas versões.
-# Mantemos compatibilidade com versões onde ClientOptions não existe.
-# ------------------------------------------------------------
-try:
-    # supabase-py >= 1.x
-    from supabase.lib.client_options import ClientOptions  # type: ignore
-except Exception:  # pragma: no cover
+
+def _create_client_safe(url: str, key: str):
+    """Cria client Supabase com timeout maior quando suportado pela lib."""
     try:
-        from supabase.client import ClientOptions  # type: ignore
-    except Exception:  # pragma: no cover
-        ClientOptions = None  # type: ignore
+        # supabase-py mais novo
+        from supabase.lib.client_options import ClientOptions  # type: ignore
 
-
-def _create_client(url: str, key: str):
-    """Cria client Supabase com timeout maior para evitar travas em Cloud."""
-    if ClientOptions is None:
-        return create_client(url, key)
-
-    # Aumenta timeout do PostgREST (UPSERT/UPDATE em lote)
-    # Nota: nome do parâmetro pode variar por versão; mantemos fallback.
-    try:
-        opts = ClientOptions(postgrest_client_timeout=120)
-        return create_client(url, key, options=opts)
+        return create_client(
+            url,
+            key,
+            options=ClientOptions(
+                postgrest_client_timeout=120,
+                storage_client_timeout=120,
+                realtime_timeout=120,
+            ),
+        )
     except Exception:
+        # fallback: versões antigas
         return create_client(url, key)
 
 
@@ -52,7 +41,7 @@ def init_supabase_admin():
     if not key:
         raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY não configurado (obrigatória para convites).")
 
-    return _create_client(url, key)
+    return _create_client_safe(url, key)
 
 
 @st.cache_resource
@@ -66,7 +55,7 @@ def init_supabase_anon():
     if not key:
         raise RuntimeError("SUPABASE_ANON_KEY não configurado.")
 
-    return _create_client(url, key)
+    return _create_client_safe(url, key)
 
 
 def get_supabase_user_client(access_token: str):
