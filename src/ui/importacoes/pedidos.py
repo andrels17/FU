@@ -724,6 +724,10 @@ def exibir_importacao_pedidos(
     c2.metric("Novos", will_insert)
     c3.metric("Atualizações", will_update)
 
+    # Em alguns fluxos (ex.: staging + RPC) não existe a variável `updated`
+    # definida mais abaixo. Padronizamos aqui para evitar NameError.
+    updated: bool = bool(will_update)
+
     if will_skip:
         st.caption(f"Sem alterações: {will_skip}")
 
