@@ -241,10 +241,17 @@ def _fetch_existing(_supabase, tenant_id: str, keys: List[str]) -> Dict[str, Dic
         out: Dict[str, Dict[str, Any]] = {}
         wanted = set(keys)
         for r in rows:
-            k = _make_key(r.get("nr_oc"), r.get("nr_solicitacao"), r.get("cod_material"), r.get("cod_equipamento"))
+            k = _make_key(
+                r.get("nr_oc"),
+                r.get("nr_solicitacao"),
+                r.get("cod_material"),
+                r.get("cod_equipamento"),
+            )
             if k in wanted:
                 out[k] = r
         return out
+    except Exception:
+        return {}
 
 
 def _arrow_safe_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -294,8 +301,6 @@ def _arrow_safe_df(df: pd.DataFrame) -> pd.DataFrame:
     # uniformiza nulos
     out = out.fillna("")
     return out
-    except Exception:
-        return {}
 
 
 
