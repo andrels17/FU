@@ -85,6 +85,41 @@ from src.services.relatorios_gastos import (
 )
 
 
+# -----------------------------
+# Cache (performance)
+# -----------------------------
+@st.cache_data(ttl=120, show_spinner=False)
+def _cached_carregar_pedidos(tenant_id: str) -> pd.DataFrame:
+    """Carrega pedidos com cache por tenant (usa client admin)."""
+    try:
+        sup = init_supabase_admin()
+        df = carregar_pedidos(sup, tenant_id=tenant_id)
+        return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_links_departamento_gestor(tenant_id: str) -> pd.DataFrame:
+    try:
+        sup = init_supabase_admin()
+        df = carregar_links_departamento_gestor(sup, tenant_id=tenant_id)
+        return _links_to_dept_map_df(df)
+    except Exception:
+        return pd.DataFrame(columns=["departamento", "gestor_user_id", "gestor_nome"])
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_mapa_usuarios_tenant(tenant_id: str) -> pd.DataFrame:
+    try:
+        sup = init_supabase_admin()
+        df = carregar_mapa_usuarios_tenant(sup, tenant_id=tenant_id)
+        return _ensure_user_map_df(df)
+    except Exception:
+        return pd.DataFrame(columns=["user_id", "nome", "email", "whatsapp", "role"])
+
+
+
 def _rg_css_responsive() -> None:
     """Ajustes leves de responsividade/legibilidade (sem depender do app.py)."""
     st.markdown(
@@ -299,13 +334,18 @@ def _build_filtros_from_state() -> Tuple[FiltrosGastos, date, date]:
     elif entregue_opt == "Pendentes":
         entregue = False
 
+    deps = list(st.session_state.get("rg_depts") or [])
+    deps = deps or None
+    frotas = list(st.session_state.get("rg_frotas") or [])
+    frotas = frotas or None
+
     filtros = FiltrosGastos(
         dt_ini=dt_ini,
         dt_fim=dt_fim,
         date_field=date_field,
         entregue=entregue,
-        departamentos=list(st.session_state.get("rg_depts") or []),
-        cod_equipamentos=list(st.session_state.get("rg_frotas") or []),
+        departamentos=deps,
+        cod_equipamentos=frotas,
     )
     return filtros, dt_ini, dt_fim
 
@@ -611,6 +651,27 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         st.error("Tenant não identificado.")
         st.stop()
 
+    # ===== KPI Executivo (topo) =====
+    try:
+        total_ped = int(len(df_base))
+        valor_total = float(df_base["valor_total"].fillna(0).sum()) if "valor_total" in df_base.columns else 0.0
+        ticket_medio = (valor_total / total_ped) if total_ped else 0.0
+        if "entregue" in df_base.columns:
+            entregues = int(df_base["entregue"].fillna(False).astype(bool).sum())
+            pct_entregue = (entregues / total_ped * 100.0) if total_ped else 0.0
+        else:
+            pct_entregue = 0.0
+
+        with st.container(border=True):
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Pedidos", f"{total_ped}")
+            c2.metric("Valor total", formatar_moeda_br(valor_total))
+            c3.metric("Ticket médio", formatar_moeda_br(ticket_medio))
+            c4.metric("% entregues", f"{pct_entregue:.0f}%")
+    except Exception:
+        pass
+
+
     _init_filter_state()
     _pill_style()
 
@@ -625,7 +686,10 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     # ===== Carregar pedidos =====
     with st.spinner("Carregando pedidos..."):
-        df_pedidos = carregar_pedidos(_supabase, tenant_id=tenant_id)
+        if supabase_admin is not None:
+            df_pedidos = _cached_carregar_pedidos(tenant_id)
+        else:
+            df_pedidos = carregar_pedidos(_supabase, tenant_id=tenant_id)
 
     if df_pedidos is None or df_pedidos.empty:
         ux.info("Nenhum pedido encontrado para este tenant.")
@@ -644,11 +708,12 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     # ===== links + user_map (DataFrames, como o serviço espera) =====
     with st.spinner("Carregando vínculos e usuários..."):
-        links_df = carregar_links_departamento_gestor(supabase_admin or _supabase, tenant_id=tenant_id)
-        user_df = carregar_mapa_usuarios_tenant(supabase_admin or _supabase, tenant_id=tenant_id)
-
-    links_df = _links_to_dept_map_df(links_df)
-    user_df = _ensure_user_map_df(user_df)
+        if supabase_admin is not None:
+            links_df = _cached_links_departamento_gestor(tenant_id)
+            user_df = _cached_mapa_usuarios_tenant(tenant_id)
+        else:
+            links_df = _links_to_dept_map_df(carregar_links_departamento_gestor(_supabase, tenant_id=tenant_id))
+            user_df = _ensure_user_map_df(carregar_mapa_usuarios_tenant(_supabase, tenant_id=tenant_id))
 
     # dict dept->gestor para drilldown (rápido)
     dept_map: Dict[str, str] = {}
@@ -680,6 +745,12 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
             hoje = date.today()
             st.session_state["rg_dt_ini"] = hoje.replace(day=1)
             st.session_state["rg_dt_fim"] = hoje
+
+        # Ação rápida: limpar filtros
+        if st.button("🧹 Limpar filtros", use_container_width=True):
+            _reset_rg_filters()
+            st.rerun()
+
 
         st.date_input("Data inicial", key="rg_dt_ini")
         st.date_input("Data final", key="rg_dt_fim")
