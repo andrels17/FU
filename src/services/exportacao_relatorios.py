@@ -402,7 +402,7 @@ def filtrar_por_periodo(df, data_inicio=None, data_fim=None, coluna_data='data_o
     if coluna_data not in df.columns:
         return df
 
-    s = pd.to_datetime(df[coluna_data], errors='coerce')
+    s = pd.to_datetime(df[coluna_data], errors='coerce', dayfirst=True)
     out = df.copy()
     out['_dt_filter'] = s
 
@@ -458,7 +458,7 @@ def ui_filtro_periodo(
         opcoes = [nomes_colunas.get(c, c) for c in colunas_existentes]
         nome_escolhido = st.selectbox("Base de data", opcoes, index=0, disabled=not usar, key=f"col_{label}")
         coluna_escolhida = colunas_existentes[opcoes.index(nome_escolhido)]
-    s_dt = pd.to_datetime(df[coluna_escolhida], errors='coerce').dropna()
+    s_dt = pd.to_datetime(df[coluna_escolhida], errors='coerce', dayfirst=True).dropna()
     if s_dt.empty:
         return df, "", coluna_escolhida
 
@@ -476,7 +476,7 @@ def ui_filtro_periodo(
     if dt_ini and dt_fim and dt_ini > dt_fim:
         dt_ini, dt_fim = dt_fim, dt_ini
 
-    s_all = pd.to_datetime(df[coluna_escolhida], errors='coerce')
+    s_all = pd.to_datetime(df[coluna_escolhida], errors='coerce', dayfirst=True)
     mask = (s_all.dt.date >= dt_ini) & (s_all.dt.date <= dt_fim)
     df_filtrado = df.loc[mask].copy()
 
@@ -501,7 +501,7 @@ def _normalize_bool_series(s: pd.Series) -> pd.Series:
 def _dt_series(df: pd.DataFrame, col: str) -> pd.Series:
     if df is None or df.empty or col not in df.columns:
         return pd.Series([pd.NaT] * (len(df) if df is not None else 0))
-    return pd.to_datetime(df[col], errors="coerce")
+    return pd.to_datetime(df[col], errors="coerce", dayfirst=True)
 
 def _month_label(p: pd.Period) -> str:
     try:
@@ -550,6 +550,28 @@ def ui_filtros_exportacao_estilo_dashboard(
                 ),
                 key=f"{prefix}_periodo",
             )
+
+            # Base de data (coluna usada para filtrar o período)
+            base_candidates = [c for c in ["data_solicitacao", "criado_em", "data_oc", "previsao_entrega", "data_entrega_real"] if c in df.columns]
+            if base_candidates:
+                base_labels = {
+                    "data_solicitacao": "Solicitação",
+                    "criado_em": "Criação",
+                    "data_oc": "OC",
+                    "previsao_entrega": "Previsão",
+                    "data_entrega_real": "Entrega real",
+                }
+                base_opts = [base_labels.get(c, c) for c in base_candidates]
+                default_col = (st.session_state.get(f"{prefix}_base_dt_col") or base_dt_col or base_candidates[0])
+                if default_col not in base_candidates:
+                    default_col = base_candidates[0]
+                base_label = base_labels.get(default_col, default_col)
+                chosen_label = st.selectbox("Base de data", base_opts, index=base_opts.index(base_label), key=f"{prefix}_base_dt_label")
+                inv = {base_labels.get(c, c): c for c in base_candidates}
+                base_dt_col = inv.get(chosen_label, default_col)
+                st.session_state[f"{prefix}_base_dt_col"] = base_dt_col
+
+
 
         # Departamento
         with c2:
@@ -672,7 +694,12 @@ def gerar_botoes_exportacao(df_pedidos, formatar_moeda_br):
     
 
     # Filtros completos (mesmo padrão do Dashboard) + opção Por mês
-    df_pedidos, filtros = ui_filtros_exportacao_estilo_dashboard(df_pedidos, prefix="exp")
+    df_pedidos, filtros = ui_filtros_exportacao_estilo_dashboard(
+        df_pedidos,
+        prefix="exp",
+        default_only_pending=False,
+        base_data_default="data_solicitacao",
+    )
     col1, col2, col3 = st.columns(3)
     
     df_export = preparar_dados_exportacao(df_pedidos)
@@ -745,7 +772,12 @@ def criar_relatorio_executivo(df_pedidos, formatar_moeda_br):
     
 
     # Filtros completos (mesmo padrão do Dashboard) + opção Por mês
-    df_pedidos, filtros = ui_filtros_exportacao_estilo_dashboard(df_pedidos, prefix="exp")
+    df_pedidos, filtros = ui_filtros_exportacao_estilo_dashboard(
+        df_pedidos,
+        prefix="exp",
+        default_only_pending=False,
+        base_data_default="data_solicitacao",
+    )
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
