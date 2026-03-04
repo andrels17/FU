@@ -145,9 +145,9 @@ def filtrar_pedidos_base(df_pedidos: pd.DataFrame, filtros: FiltrosGastos) -> pd
         date_field = "criado_em" if "criado_em" in df.columns else filtros.date_field
 
     if date_field in df.columns:
-        df[date_field] = pd.to_datetime(df[date_field], errors="coerce")
-        dt_ini = pd.to_datetime(filtros.dt_ini)
-        dt_fim = pd.to_datetime(filtros.dt_fim) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        df[date_field] = pd.to_datetime(df[date_field], errors="coerce", dayfirst=True)
+        dt_ini = pd.to_datetime(filtros.dt_ini, dayfirst=True)
+        dt_fim = pd.to_datetime(filtros.dt_fim, dayfirst=True) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
         df = df[(df[date_field].notna()) & (df[date_field] >= dt_ini) & (df[date_field] <= dt_fim)].copy()
 
     # Entregue

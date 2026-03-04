@@ -366,7 +366,7 @@ def _apply_filters_df(df: pd.DataFrame, filtros: FiltrosGastos) -> pd.DataFrame:
     out = df.copy()
 
     # Normaliza coluna de data para comparação
-    s = pd.to_datetime(out[date_field], errors="coerce", dayfirst=True)
+    s = pd.to_datetime(out[date_field], errors="coerce")
 
     # Se a coluna tiver horário (timestamp), compara em janela de datetime
     if pd.api.types.is_datetime64_any_dtype(s):
@@ -375,7 +375,7 @@ def _apply_filters_df(df: pd.DataFrame, filtros: FiltrosGastos) -> pd.DataFrame:
         mask = (s >= dt_ini) & (s <= dt_fim)
     else:
         # Fallback: compara como date (inclusivo)
-        sd = pd.to_datetime(s, errors="coerce", dayfirst=True).dt.date
+        sd = pd.to_datetime(s, errors="coerce").dt.date
         mask = (sd >= filtros.dt_ini) & (sd <= filtros.dt_fim)
 
     out = out.loc[mask].copy()

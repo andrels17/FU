@@ -407,10 +407,10 @@ def filtrar_por_periodo(df, data_inicio=None, data_fim=None, coluna_data='data_o
     out['_dt_filter'] = s
 
     if data_inicio is not None:
-        di = pd.to_datetime(data_inicio)
+        di = pd.to_datetime(data_inicio, dayfirst=True)
         out = out[out['_dt_filter'] >= di]
     if data_fim is not None:
-        dfim = pd.to_datetime(data_fim) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        dfim = pd.to_datetime(data_fim, dayfirst=True) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
         out = out[out['_dt_filter'] <= dfim]
 
     return out.drop(columns=['_dt_filter'])
@@ -551,28 +551,6 @@ def ui_filtros_exportacao_estilo_dashboard(
                 key=f"{prefix}_periodo",
             )
 
-            # Base de data (coluna usada para filtrar o período)
-            base_candidates = [c for c in ["data_solicitacao", "criado_em", "data_oc", "previsao_entrega", "data_entrega_real"] if c in df.columns]
-            if base_candidates:
-                base_labels = {
-                    "data_solicitacao": "Solicitação",
-                    "criado_em": "Criação",
-                    "data_oc": "OC",
-                    "previsao_entrega": "Previsão",
-                    "data_entrega_real": "Entrega real",
-                }
-                base_opts = [base_labels.get(c, c) for c in base_candidates]
-                default_col = (st.session_state.get(f"{prefix}_base_dt_col") or base_dt_col or base_candidates[0])
-                if default_col not in base_candidates:
-                    default_col = base_candidates[0]
-                base_label = base_labels.get(default_col, default_col)
-                chosen_label = st.selectbox("Base de data", base_opts, index=base_opts.index(base_label), key=f"{prefix}_base_dt_label")
-                inv = {base_labels.get(c, c): c for c in base_candidates}
-                base_dt_col = inv.get(chosen_label, default_col)
-                st.session_state[f"{prefix}_base_dt_col"] = base_dt_col
-
-
-
         # Departamento
         with c2:
             deptos = (
@@ -694,12 +672,7 @@ def gerar_botoes_exportacao(df_pedidos, formatar_moeda_br):
     
 
     # Filtros completos (mesmo padrão do Dashboard) + opção Por mês
-    df_pedidos, filtros = ui_filtros_exportacao_estilo_dashboard(
-        df_pedidos,
-        prefix="exp",
-        default_only_pending=False,
-        base_data_default="data_solicitacao",
-    )
+    df_pedidos, filtros = ui_filtros_exportacao_estilo_dashboard(df_pedidos, prefix="exp")
     col1, col2, col3 = st.columns(3)
     
     df_export = preparar_dados_exportacao(df_pedidos)
@@ -772,12 +745,7 @@ def criar_relatorio_executivo(df_pedidos, formatar_moeda_br):
     
 
     # Filtros completos (mesmo padrão do Dashboard) + opção Por mês
-    df_pedidos, filtros = ui_filtros_exportacao_estilo_dashboard(
-        df_pedidos,
-        prefix="exp",
-        default_only_pending=False,
-        base_data_default="data_solicitacao",
-    )
+    df_pedidos, filtros = ui_filtros_exportacao_estilo_dashboard(df_pedidos, prefix="exp")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -1173,9 +1141,9 @@ def _safe_date(v):
             s = v.strip()
             if not s:
                 return "-"
-            dt = pd.to_datetime(s, errors='coerce')
+            dt = pd.to_datetime(s, errors='coerce', dayfirst=True)
         else:
-            dt = pd.to_datetime(v, errors='coerce')
+            dt = pd.to_datetime(v, errors='coerce', dayfirst=True)
         if pd.isna(dt):
             return "-"
         return dt.strftime('%d/%m/%Y')
