@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from typing import Any, Dict, List, Tuple
 
 
@@ -348,6 +348,56 @@ def _build_filtros_from_state() -> Tuple[FiltrosGastos, date, date]:
         cod_equipamentos=frotas,
     )
     return filtros, dt_ini, dt_fim
+
+
+def _apply_filters_df(df: pd.DataFrame, filtros: FiltrosGastos) -> pd.DataFrame:
+    """Aplica filtros diretamente no dataframe (evita divergências de tipo/coluna).
+
+    - Multiselect vazio (None) => não filtra
+    - dt_fim é inclusivo (fim do dia quando coluna é timestamp)
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    date_field = getattr(filtros, "date_field", None) or "data_solicitacao"
+    if date_field not in df.columns:
+        return pd.DataFrame()
+
+    out = df.copy()
+
+    # Normaliza coluna de data para comparação
+    s = pd.to_datetime(out[date_field], errors="coerce")
+
+    # Se a coluna tiver horário (timestamp), compara em janela de datetime
+    if pd.api.types.is_datetime64_any_dtype(s):
+        dt_ini = datetime.combine(filtros.dt_ini, datetime.min.time())
+        dt_fim = datetime.combine(filtros.dt_fim, datetime.max.time())
+        mask = (s >= dt_ini) & (s <= dt_fim)
+    else:
+        # Fallback: compara como date (inclusivo)
+        sd = pd.to_datetime(s, errors="coerce").dt.date
+        mask = (sd >= filtros.dt_ini) & (sd <= filtros.dt_fim)
+
+    out = out.loc[mask].copy()
+
+    # Entregue
+    if getattr(filtros, "entregue", None) is True:
+        out = out.loc[out.get("entregue") == True].copy()
+    elif getattr(filtros, "entregue", None) is False:
+        out = out.loc[out.get("entregue") == False].copy()
+
+    # Departamentos
+    deps = getattr(filtros, "departamentos", None)
+    if deps:
+        out = out.loc[out.get("departamento").astype(str).isin([str(x) for x in deps])].copy()
+
+    # Frotas / cod_equipamento
+    frotas = getattr(filtros, "cod_equipamentos", None)
+    if frotas:
+        out = out.loc[out.get("cod_equipamento").astype(str).isin([str(x) for x in frotas])].copy()
+
+    return out
+
 
 
 def _periodo_anterior(dt_ini: date, dt_fim: date) -> Tuple[date, date]:
@@ -809,7 +859,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
 
     # ===== Aplicar filtros =====
     filtros, dt_ini, dt_fim = _build_filtros_from_state()
-    df_base = filtrar_pedidos_base(df_pedidos, filtros=filtros)
+    df_base = _apply_filters_df(df_pedidos, filtros)
 
     if df_base is None or df_base.empty:
         ux.warn("Nenhum pedido no filtro atual. Ajuste o período/filtros.")
@@ -829,7 +879,7 @@ def render_relatorios_gerenciais(_supabase, tenant_id: str) -> None:
         departamentos=filtros.departamentos,
         cod_equipamentos=filtros.cod_equipamentos,
     )
-    df_prev = filtrar_pedidos_base(df_pedidos, filtros=filtros_prev)
+    df_prev = _apply_filters_df(df_pedidos, filtros_prev)
     total_prev = _as_float(df_prev.get("valor_total", pd.Series(dtype=float)).fillna(0).sum()) if df_prev is not None and not df_prev.empty else 0.0
     delta_pct = ((total_geral - total_prev) / total_prev * 100.0) if total_prev else 0.0
 
