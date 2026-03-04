@@ -192,11 +192,29 @@ def _norm_nr_oc(v: Any) -> Optional[str]:
 
     return s
 
+def _norm_nr_sol(v: Any) -> Optional[str]:
+    s = str(v or "").strip()
+    sl = s.lower()
+    if (not s) or sl in ("0", "0.0", "nan", "none", "null"):
+        return None
+    m = re.match(r"^([0-9]+)\.0+$", s)
+    if m:
+        return m.group(1)
+    return s
+
 def _make_key(nr_oc: Any, nr_solicitacao: Any, cod_material: Any, cod_equipamento: Any) -> str:
-    """Chave lógica do item (com OC ou sem OC)."""
+    """Chave lógica IGUAL ao merge no banco:
+    - Se houver nr_solicitacao => chave por SOL
+    - Senão => chave por OC
+    """
+    sol = _norm_nr_sol(nr_solicitacao)
+    mat = str(cod_material or "").strip()
+    eqp = str(cod_equipamento or "").strip()
+    if sol:
+        return f"SOL:{sol}|{mat}|{eqp}"
     oc = _norm_nr_oc(nr_oc)
-    base = oc or str(nr_solicitacao or "").strip()
-    return f"{base}|{str(cod_material or '').strip()}|{str(cod_equipamento or '').strip()}"
+    return f"OC:{oc or ''}|{mat}|{eqp}"
+
 
 
 
@@ -660,7 +678,7 @@ def exibir_importacao_pedidos(
     if c_vu or c_vuc: provided_fields.append("valor_ultima_compra")
     if c_vt: provided_fields.append("valor_total")
 
-    compare_fields = provided_fields
+    compare_fields = [f for f in provided_fields if f != "nr_solicitacao"]  # não atualiza campo-chave
 
 
 
@@ -933,7 +951,11 @@ def exibir_importacao_pedidos(
             summary = data
 
         if not summary:
-            status.warning("Merge executado, mas sem retorno de resumo.")
+            # Fallback: mostra o que foi previsto pela prévia (agora alinhada às chaves do banco).
+            status.warning(
+                f"Merge executado, mas sem retorno de resumo. "
+                f"Previsto: Inseridos {will_insert} | Atualizados {will_update} | Sem alterações {will_skip}."
+            )
         else:
             ins = int(summary.get("inserted_count") or 0)
             upd = int(summary.get("updated_count") or 0)
@@ -963,7 +985,14 @@ def exibir_importacao_pedidos(
             pass
 
 
-        # Detalhamento do que foi atualizado (campo a campo)
+        
+        # Limpar staging desse batch (evita acumular e manter a importação rápida)
+        try:
+            _supabase.table("pedidos_import_staging").delete().eq("tenant_id", tenant_id).eq("batch_id", batch_id).execute()
+        except Exception:
+            pass
+
+# Detalhamento do que foi atualizado (campo a campo)
         if updated and update_changes:
             with st.expander("📌 O que foi atualizado (detalhado)", expanded=False):
                 df_det = pd.DataFrame(update_changes)
