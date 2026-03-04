@@ -17,13 +17,15 @@ Obs: usamos `supabase_user` (contexto de auth) para não quebrar triggers/coluna
 from __future__ import annotations
 
 import io
+import json
+import base64
+import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
-import uuid
-import re
+
 from src.ui import ux
 
 from src.ui.theme import section_header
@@ -243,6 +245,55 @@ def _fetch_existing(_supabase, tenant_id: str, keys: List[str]) -> Dict[str, Dic
             if k in wanted:
                 out[k] = r
         return out
+
+
+def _arrow_safe_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Torna um DataFrame seguro para renderização no Streamlit (Arrow).
+
+    Evita erros do tipo: "Expected bytes, got a 'float' object" em colunas object
+    com tipos misturados (ex.: str + NaN + dict + bytes).
+    """
+
+    def _safe_val(v: Any) -> Any:
+        if v is None:
+            return ""
+        try:
+            if pd.isna(v):
+                return ""
+        except Exception:
+            pass
+
+        # bytes/bytearray -> base64 (curto) para não quebrar Arrow
+        if isinstance(v, (bytes, bytearray)):
+            b = bytes(v)
+            return "b64:" + base64.b64encode(b).decode("ascii")
+
+        # dict/list -> json
+        if isinstance(v, (dict, list, tuple)):
+            try:
+                return json.dumps(v, ensure_ascii=False, default=str)
+            except Exception:
+                return str(v)
+
+        # datas
+        if isinstance(v, (datetime, date)):
+            try:
+                return v.isoformat()
+            except Exception:
+                return str(v)
+
+        return v
+
+    if df is None or df.empty:
+        return df
+
+    out = df.copy()
+    for col in out.columns:
+        if out[col].dtype == "object":
+            out[col] = out[col].map(_safe_val)
+    # uniformiza nulos
+    out = out.fillna("")
+    return out
     except Exception:
         return {}
 
@@ -600,7 +651,7 @@ def exibir_importacao_pedidos(
         df2, duplicadas_df = _dedup_df(df2, keep=keep_opt)
         if not duplicadas_df.empty:
             with st.expander(f"⚠️ Duplicidades detectadas no arquivo ({len(duplicadas_df)})", expanded=False):
-                st.dataframe(duplicadas_df.head(200), use_container_width=True)
+                st.dataframe(_arrow_safe_df(duplicadas_df.head(200)), use_container_width=True)
 
     (st.toast(f"Arquivo carregado: {len(df2)} registros válidos") if hasattr(st,"toast") else ux.ok(f"Arquivo carregado: {len(df2)} registros válidos"))
 
@@ -758,7 +809,7 @@ def exibir_importacao_pedidos(
             expanded=False,
         ):
             df_prev = pd.DataFrame(update_rows_preview)
-            st.dataframe(df_prev.head(300), use_container_width=True, height=260)
+            st.dataframe(_arrow_safe_df(df_prev.head(300)), use_container_width=True, height=260)
 
             df_det = pd.DataFrame(update_changes)
             # Resumo por campo
@@ -769,7 +820,7 @@ def exibir_importacao_pedidos(
                 .sort_values("qtd_alteracoes", ascending=False)
             )
             st.caption("Resumo por campo alterado:")
-            st.dataframe(resumo, use_container_width=True, height=220)
+            st.dataframe(_arrow_safe_df(resumo), use_container_width=True, height=220)
 
             csv_bytes = df_det.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
@@ -927,7 +978,10 @@ def exibir_importacao_pedidos(
             prog.progress(min(1.0, sent / max(1, total)))
             status.info(f"Staging: {sent}/{total} linhas…")
 
-        status.success(f"✅ Staging concluído: {sent} linhas em {int(time.time()-t0)}s. Executando merge no banco…")
+        status.success(
+            f"✅ Staging concluído: {sent} linhas em {int(time.time()-t0)}s. "
+            f"Batch: {batch_id}. Executando merge no banco…"
+        )
 
         # Chama RPC (1 chamada) — evita travar em N/774
         try:
@@ -973,7 +1027,7 @@ def exibir_importacao_pedidos(
             if rej_data:
                 with st.expander(f"❌ Linhas rejeitadas ({len(rej_data)})", expanded=False):
                     rej_df = pd.DataFrame(rej_data)
-                    st.dataframe(rej_df.head(200), use_container_width=True)
+                    st.dataframe(_arrow_safe_df(rej_df.head(200)), use_container_width=True)
                     st.download_button(
                         "⬇️ Baixar rejeitados (CSV)",
                         data=rej_df.to_csv(index=False).encode("utf-8-sig"),
@@ -1006,10 +1060,10 @@ def exibir_importacao_pedidos(
                     .sort_values("qtd_alteracoes", ascending=False)
                 )
                 st.caption("Resumo por campo alterado:")
-                st.dataframe(resumo, use_container_width=True, height=240)
+                st.dataframe(_arrow_safe_df(resumo), use_container_width=True, height=240)
 
                 st.caption("Detalhamento (antes → depois):")
-                st.dataframe(df_det.head(500), use_container_width=True, height=320)
+                st.dataframe(_arrow_safe_df(df_det.head(500)), use_container_width=True, height=320)
 
                 csv_bytes = df_det.to_csv(index=False).encode("utf-8-sig")
                 st.download_button(
