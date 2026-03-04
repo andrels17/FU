@@ -587,8 +587,16 @@ def exibir_importacao_pedidos(
 
     # Pré-visualização (editor read-only com tipagem/formatos)
     preview = df2.head(50).copy()
+    # Streamlit valida compatibilidade de tipos mesmo com disabled=True.
+    # Então garantimos que data_oc seja datetime (ou fazemos fallback para texto).
+    if "data_oc" in preview.columns:
+        preview["data_oc"] = pd.to_datetime(preview["data_oc"], errors="coerce", dayfirst=True)
     cfg = {}
-    if "data_oc" in preview.columns: cfg["data_oc"] = st.column_config.DateColumn("Data OC")
+    if "data_oc" in preview.columns:
+        if pd.api.types.is_datetime64_any_dtype(preview["data_oc"]):
+            cfg["data_oc"] = st.column_config.DateColumn("Data OC", format="DD/MM/YYYY")
+        else:
+            cfg["data_oc"] = st.column_config.TextColumn("Data OC")
     if "nr_oc" in preview.columns: cfg["nr_oc"] = st.column_config.TextColumn("N° OC")
     if "departamento" in preview.columns: cfg["departamento"] = st.column_config.TextColumn("Departamento")
     if "fornecedor" in preview.columns: cfg["fornecedor"] = st.column_config.TextColumn("Fornecedor")
