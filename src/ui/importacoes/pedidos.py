@@ -789,15 +789,90 @@ def exibir_importacao_pedidos(
             "raw",
         }
 
+        # PostgREST/Supabase exige JSON válido. Pandas costuma trazer NaN, Timestamp,
+        # tipos numpy, date/datetime etc. que NÃO são serializáveis via json padrão.
+        # Vamos normalizar tudo para tipos "json-friendly" (None/str/int/float/bool/list/dict).
+        def _json_friendly(v: Any) -> Any:
+            try:
+                # NaN / NaT
+                if v is None:
+                    return None
+                if isinstance(v, float) and pd.isna(v):
+                    return None
+                if hasattr(pd, "isna") and pd.isna(v):
+                    return None
+            except Exception:
+                pass
+
+            # Datas
+            try:
+                import datetime as _dt
+                if isinstance(v, (_dt.datetime, _dt.date)):
+                    return v.isoformat()
+            except Exception:
+                pass
+
+            # Pandas Timestamp
+            try:
+                if isinstance(v, pd.Timestamp):
+                    if pd.isna(v):
+                        return None
+                    return v.to_pydatetime().isoformat()
+            except Exception:
+                pass
+
+            # Numpy scalars
+            try:
+                import numpy as _np
+                if isinstance(v, (_np.integer,)):
+                    return int(v)
+                if isinstance(v, (_np.floating,)):
+                    fv = float(v)
+                    return None if (isinstance(fv, float) and pd.isna(fv)) else fv
+                if isinstance(v, (_np.bool_,)):
+                    return bool(v)
+            except Exception:
+                pass
+
+            # Decimal
+            try:
+                from decimal import Decimal
+                if isinstance(v, Decimal):
+                    return float(v)
+            except Exception:
+                pass
+
+            # UUID
+            try:
+                import uuid as _uuid
+                if isinstance(v, _uuid.UUID):
+                    return str(v)
+            except Exception:
+                pass
+
+            # Containers
+            if isinstance(v, dict):
+                return {str(k): _json_friendly(val) for k, val in v.items()}
+            if isinstance(v, (list, tuple)):
+                return [_json_friendly(x) for x in v]
+
+            # Fallback seguro
+            if isinstance(v, (str, int, float, bool)):
+                return v
+            return str(v)
+
+        def _sanitize_stage_row(row: Dict[str, Any]) -> Dict[str, Any]:
+            return {k: _json_friendly(v) for k, v in row.items()}
+
         def _to_stage_row(r: Dict[str, Any]) -> Dict[str, Any]:
             rr = {k: r.get(k) for k in stage_cols if k in r}
             rr.update({
                 "tenant_id": tenant_id,
                 "batch_id": batch_id,
                 "user_id": user_id,
-                "raw": r,
+                "raw": _json_friendly(r),
             })
-            return rr
+            return _sanitize_stage_row(rr)
 
         stage_rows = [_to_stage_row(rec) for rec in df2.to_dict("records")]
 
