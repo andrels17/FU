@@ -365,18 +365,17 @@ def _apply_filters_df(df: pd.DataFrame, filtros: FiltrosGastos) -> pd.DataFrame:
 
     out = df.copy()
 
-    # Normaliza coluna de data para comparação
-    s = pd.to_datetime(out[date_field], errors="coerce")
+    # Normaliza coluna de data para comparação.
+    # IMPORTANTE: muitos arquivos/fluxos no Brasil trazem datas como dd/mm/aaaa.
+    # Sem dayfirst=True, o pandas pode interpretar errado (mm/dd) ou produzir NaT,
+    # fazendo o filtro "Solicitação" sumir com registros.
+    s = pd.to_datetime(out[date_field], errors="coerce", dayfirst=True)
 
-    # Se a coluna tiver horário (timestamp), compara em janela de datetime
-    if pd.api.types.is_datetime64_any_dtype(s):
-        dt_ini = datetime.combine(filtros.dt_ini, datetime.min.time())
-        dt_fim = datetime.combine(filtros.dt_fim, datetime.max.time())
-        mask = (s >= dt_ini) & (s <= dt_fim)
-    else:
-        # Fallback: compara como date (inclusivo)
-        sd = pd.to_datetime(s, errors="coerce").dt.date
-        mask = (sd >= filtros.dt_ini) & (sd <= filtros.dt_fim)
+    # Em pandas, o resultado já é uma série datetime64 quando possível.
+    # Comparamos numa janela inclusiva (fim do dia) para suportar timestamps.
+    dt_ini = datetime.combine(filtros.dt_ini, datetime.min.time())
+    dt_fim = datetime.combine(filtros.dt_fim, datetime.max.time())
+    mask = (s.notna()) & (s >= dt_ini) & (s <= dt_fim)
 
     out = out.loc[mask].copy()
 
